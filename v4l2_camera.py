@@ -134,8 +134,8 @@ class Camera:
         sonix_write_sensor(self.vd, 0x30b0, 0x1030) # analog gain
 
         #sonix_write_sensor(self.vd, 0x30ea, 0x8c00) #disable black level compensation
-        sonix_write_sensor(self.vd, 0x3044, 0x0000) #disable row noise compensation
-        sonix_write_sensor(self.vd, 0x3012, 0x3000) #exposure time coarse
+        #sonix_write_sensor(self.vd, 0x3044, 0x0000) #disable row noise compensation
+        sonix_write_sensor(self.vd, 0x3012, 0x2000) #exposure time coarse
 
 #######################################################################
 

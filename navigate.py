@@ -7,6 +7,7 @@
 # the Free Software Foundation; either version 2 of the License, or
 # (at your option) any later version.
 
+import math
 import numpy as np
 import cv2
 import logging
@@ -44,6 +45,7 @@ class Astrometry:
 		self.field_deg = None
 		self.scale = 3
 		self.state = 'init'
+		self.cmd = None
 
 	def start(self, img_show, img_df, sources_img = None, sources_list = None):
 		
@@ -72,7 +74,7 @@ class Astrometry:
 		if os.path.exists("field.solved"):
 			os.remove("field.solved")
 		
-		cmd_s = ['solve-field', '-O',  '--objs', '20', '--depth', '20', '-E', '2', '--no-plots', '--no-remove-lines', '--no-fits2fits']
+		cmd_s = ['solve-field', '-O',  '--objs', '20', '--depth', '20', '-E', '2', '--no-plots', '--no-remove-lines', '--no-fits2fits', '--crpix-center', '--no-tweak']
 		
 		if self.ra is not None:
 			cmd_s = cmd_s + ['--ra',  str(self.ra)]
@@ -99,12 +101,16 @@ class Astrometry:
 		return self.cmd.poll()
 
 	def terminate(self):
+		if self.cmd is None:
+			return
 		self.cmd.terminate()
 		subprocess.call(['killall', 'astrometry-engine'])
 		self.state = 'finished'
+		self.cmd = None
 		
 	
 	def finish(self):
+		self.cmd = None
 		self.state = 'finished'
 		if not os.path.exists("field.solved"):
 			return False
@@ -200,11 +206,15 @@ def darkframe(im, pts):
 	maxv = np.iinfo(mask.dtype).max
 	
 	for p in pts:
-		cv2.circle(fill, p, 20, (0), -1)
-		cv2.circle(mask, p, 20, (maxv), -1)
+		cv2.circle(fill, p, 10, (0), -1)
+		cv2.circle(mask, p, 10, (maxv), -1)
 		
 	inv_mask = cv2.bitwise_not(mask)
 	fill = cv2.blur(fill, (30,30))
+	fill = cv2.blur(fill, (30,30))
+	fill = cv2.blur(fill, (30,30))
+	inv_mask = cv2.blur(inv_mask, (30,30))
+	inv_mask = cv2.blur(inv_mask, (30,30))
 	inv_mask = cv2.blur(inv_mask, (30,30))
 	fill = cv2.divide(fill, inv_mask, scale=maxv)
 	idx = (mask==0)
@@ -213,19 +223,26 @@ def darkframe(im, pts):
 
 
 
-def find_max(img, d, noise = 4):
+def find_max(img, d, noise = 4, debug = False):
+	#img = cv2.medianBlur(img, 5)
 	bg = cv2.blur(img, (30, 30))
+	bg = cv2.blur(bg, (30, 30))
 	img = cv2.subtract(img, bg, dtype=cv2.CV_32FC1)
 
 	img = cv2.GaussianBlur(img, (9, 9), 0)
 
 	(mean, stddev) = cv2.meanStdDev(img)
+	if stddev == 0:
+		return []
 	img = cv2.subtract(img, mean + stddev * noise)
 
 	dilkernel = np.ones((d,d),np.uint8)
 	dil = cv2.dilate(img, dilkernel)
+
+
+	r,dil = cv2.threshold(dil,0,255,cv2.THRESH_TOZERO)
+	
 	locmax = cv2.compare(img, dil, cv2.CMP_GE)
-	locmax[np.where(img < 0)] = 0
 
 	(h, w) = locmax.shape
 	nonzero = zip(*locmax.nonzero())
@@ -250,20 +267,21 @@ def find_max(img, d, noise = 4):
 			ys = 0.5*(img[y - 1, x] - img[y + 1, x]) / dy
 		else:
 			ys = y
-		ret.append((y + ys, x + xs, img[y, x]))
+		# y, x, flux, certainity: n_sigma
+		ret.append((y + ys, x + xs, img[y, x] + mean + stddev * noise, math.erf((img[y, x] / stddev + noise) / 2**0.5) ** (w * h) ))
 	ret = sorted(ret, key=lambda pt: pt[2], reverse=True)[:30]
 	ret = sorted(ret, key=lambda pt: pt[0])
+	
 	return ret
 
 def match_idx(pt1, pt2, d, off = (0.0, 0.0)):
-	maxw = 1
 	if len(pt1) == 0 or len(pt2) == 0:
 		return np.array([])
-	maxw1 = max(maxw, np.amax(np.array(pt1)[:, 2]))
-	maxw2 = max(maxw, np.amax(np.array(pt2)[:, 2]))
+	maxflux1 = max(1, np.amax(np.array(pt1)[:, 2]))
+	maxflux2 = max(1, np.amax(np.array(pt2)[:, 2]))
 	match = []
 	l = len(pt2)
-	for i1, (y1orig, x1orig, weight) in enumerate(pt1):
+	for i1, (y1orig, x1orig, flux1, cert1) in enumerate(pt1):
 		y1 = y1orig + off[0]
 		x1 = x1orig + off[1]
 		i2 = bisect.bisect_left(pt2, (y1, x1))
@@ -271,10 +289,10 @@ def match_idx(pt1, pt2, d, off = (0.0, 0.0)):
 		closest_idx = -1
 		ii2 = i2;
 		while (ii2 >=0 and ii2 < l):
-			(y2, x2, weight2) = pt2[ii2]
+			(y2, x2, flux2, cert2) = pt2[ii2]
 			if (y2 < y1 - d):
 				break
-			dist = (y1 - y2) ** 2 + (x1 - x2) ** 2 + ((weight / maxw1 - weight2 / maxw2) * d) ** 2
+			dist = (y1 - y2) ** 2 + (x1 - x2) ** 2 + ((flux1 / maxflux1 - flux2 / maxflux2) * d) ** 2
 			if (dist < closest_dist):
 				closest_dist = dist
 				closest_idx = ii2
@@ -283,10 +301,10 @@ def match_idx(pt1, pt2, d, off = (0.0, 0.0)):
 
 		ii2 = i2;
 		while (ii2 >=0 and ii2 < l):
-			(y2, x2, weight2) = pt2[ii2]
+			(y2, x2, flux2, cert2) = pt2[ii2]
 			if (y2 > y1 + d):
 				break
-			dist = (y1 - y2) ** 2 + (x1 - x2) ** 2 + ((weight / maxw1 - weight2 / maxw2) * d) ** 2
+			dist = (y1 - y2) ** 2 + (x1 - x2) ** 2 + ((flux1 / maxflux1 - flux2 / maxflux2) * d) ** 2
 			if (dist < closest_dist):
 				closest_dist = dist
 				closest_idx = ii2
@@ -309,46 +327,31 @@ def filt_match_idx(pt1, pt2, d, off = (0.0, 0.0)):
 def avg_pt(pt1m, pt2m, noise = 1):
 	if pt1m.shape[0] > 1:
 		dif = pt2m[:, 0:2] - pt1m[:, 0:2]
-		weights = np.sqrt(pt2m[:, 2] * pt1m[:, 2])
-#		print "dif"
-#		print dif
-#		print "w"
-#		print weights
-		v, sumw = np.average(dif, axis = 0, weights = weights, returned=True)
-#		print "res", v, sumw
-#		print "dd"
-		difdif2 = np.sum((dif - v)**2, axis = 1)
-		var = np.sum(difdif2 * weights) / sumw[0]
-		weights[np.where(difdif2 > var * noise**2)] = 0.0
-#		print "w2"
-#		print weights
-		v = np.average(dif, axis = 0, weights = weights)
-
-		
+		weights = pt2m[:, 3] * pt1m[:, 3]
+		sumw = np.sum(weights)
+		if sumw > 0:
+			v = np.average(dif, axis = 0, weights = weights)
+			difdif2 = np.sum((dif - v)**2, axis = 1)
+			var = np.sum(difdif2 * weights) / sumw
+			weights[np.where(difdif2 > var * noise**2)] = 0.0
+			v = np.average(dif, axis = 0, weights = weights)
+			return v, weights
 	elif pt1m.shape[0] == 1:
 		v = (pt2m - pt1m)[0, 0:2]
-		weights = np.sqrt(pt2m[:, 2] * pt1m[:, 2])
-	else:
-		v = np.array([0.0, 0.0])
-		weights = np.array([0.0])
+		weights = np.sqrt(pt2m[:, 3] * pt1m[:, 3])
+		return v, weights
+	
+	v = np.array([0.0, 0.0])
+	weights = np.array([0.0])
 	return v, weights
 
-def filt_match_idx_mat(pt1, pt2, d, off = (0.0, 0.0)):
-	pt1m, pt2m, match = filt_match_idx(pt1, pt2, d, off)
-	if (match.shape[0] > 300000):
-		#M, mask = cv2.findHomography(pt1m, pt2m, cv2.RANSAC, 1.0)
-		M = cv2.estimateRigidTransform(np.array(np.fliplr(pt1m[:, 0:2]), np.int, ndmin=3), np.array(np.fliplr(pt2m[:, 0:2]), np.int, ndmin=3), False)
-	else:
-		v, weights = avg_pt(pt1m, pt2m)
-		M = np.array([[1.0, 0.0, v[1]],
-		              [0.0, 1.0, v[0]]])
-	return M
 
 class Stack:
-	def __init__(self, dist = 100):
+	def __init__(self, dist = 20):
 		self.img = None
 		self.dist = dist
 		self.xy = None
+		self.off = np.array([0.0, 0.0])
 	
 	def add(self, im):
 		if im.dtype == np.uint8:
@@ -358,18 +361,33 @@ class Stack:
 			return
 			
 		pt1 = self.get_xy()
-		pt2 = find_max(im, self.dist)
+		pt2 = find_max(im, 30, noise=4, debug=True)
 		
-		self.pts = cv2.divide(self.img, 255, dtype=cv2.CV_8UC1)
+		self.pts = normalize(self.img)
 		for p in pt1:
 			cv2.circle(self.pts, (int(p[1]), int(p[0])), 13, (255), 1)
-		for p in pt2:
-			cv2.circle(self.pts, (int(p[1]), int(p[0])), 10, (255), 1)
 		
-		M = filt_match_idx_mat(pt1, pt2, self.dist * 0.8)
-		if (M is not None):
-			self.img = cv2.warpAffine(self.img, M[0:2,0:3], (im.shape[1], im.shape[0]));
-		self.img = cv2.addWeighted(self.img, 0.9, im, 0.1, 0, dtype=cv2.CV_16UC1)
+		for p in pt2:
+			cv2.circle(self.pts, (int(p[1]), int(p[0])), 5, (255), 1)
+	
+		pt1m, pt2m, match = filt_match_idx(pt1, pt2, self.dist, self.off)
+		off, weights = avg_pt(pt1m, pt2m)
+		
+		if np.max(weights) >= 0.99:
+			self.off = off
+		else:
+			self.off = self.off * 0.9
+		
+		M = np.array([[1.0, 0.0, self.off[1]],
+		              [0.0, 1.0, self.off[0]]])
+
+		for p in pt2m:
+			cv2.circle(self.pts, (int(p[1]), int(p[0])), 10, (255), 1)
+
+		bg = cv2.blur(self.img, (30, 30))
+		self.img = cv2.warpAffine(self.img, M[0:2,0:3], (im.shape[1], im.shape[0]), bg, borderMode=cv2.BORDER_TRANSPARENT);
+		
+		self.img = cv2.addWeighted(self.img, 0.95, im, 0.05, 0, dtype=cv2.CV_16UC1)
 		self.xy = None
 
 	def add_simple(self, im):
@@ -389,7 +407,7 @@ class Stack:
 
 	def get_xy(self):
 		if self.xy is None:
-			self.xy = np.array(find_max(self.img, 20, noise=2))
+			self.xy = np.array(find_max(self.img, 20, noise=1))
 		return self.xy
 	
 	def reset(self):
@@ -427,7 +445,7 @@ class Navigator:
 		if self.astrometry.state == 'init' or self.astrometry.state == 'finished' :
 			xy = self.stack.get_xy()
 			print "len", len(xy)
-			if len(xy) > 6:
+			if len(xy) > 4:
 				
 				#self.astrometry.start(normalize(med), im, sources_img = med)
 				self.astrometry.start(normalize(med), im, sources_list = xy)
@@ -865,7 +883,7 @@ def run_v4l2():
 			if (key == 27):
 				break
 			im = cam.capture()
-			#cv2.imwrite("testimg11_" + str(i) + ".tif", im)
+			#cv2.imwrite("testimg14_" + str(i) + ".tif", im)
 			im = np.amin(im, axis = 2)
 			nav.proc_frame(im, i, key)
 			i = i + 1
@@ -908,7 +926,7 @@ def test():
 		#pil_image.thumbnail((1000,1000), Image.ANTIALIAS)
 		#im = np.amin(np.array(pil_image), axis = 2)
 		print i
-		im = cv2.imread("testimg11_" + str(i) + ".tif")
+		im = cv2.imread("testimg14_" + str(i) + ".tif")
 		im = np.amin(im, axis = 2)
 		#im = cv2.multiply(im, 255, dtype=cv2.CV_16UC1)
 
@@ -928,7 +946,7 @@ def test_g():
 		corr = go.recent_avg()
 		i = int((corr - go.recent_avg(1))  + err)
 		print err, corr * 3, i
-		key=cv2.waitKey(2000)
+		key=cv2.waitKey(500)
 		if (key == 27):
 			break
 #		pil_image = Image.open("testimg2_" + str(i + 377) + ".tif")
@@ -936,7 +954,7 @@ def test_g():
 #		pil_image = Image.open("testimg" + str(i) + ".tif")
 #		pil_image.thumbnail((1000,1000), Image.ANTIALIAS)
 		#im = np.amin(np.array(pil_image), axis = 2)
-		im = cv2.imread("testimg9_" + str(i + 10) + ".tif")
+		im = cv2.imread("testimg12_" + str(i + 50) + ".tif")
 		im = np.amin(im, axis = 2)
 		im = cv2.multiply(im, 255, dtype=cv2.CV_16UC1)
 
