@@ -33,6 +33,9 @@ from line_profiler import LineProfiler
 import matplotlib.pyplot as plt
 from PIL import Image, ImageDraw
 
+from gui import ui
+
+
 def normalize(img):
 	return cv2.normalize(img, alpha = 0, beta = 255, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_8UC1)
 	
@@ -154,7 +157,7 @@ class Astrometry:
 	
 		subprocess.call(['plot-constellations', '-i', 'nfield.ppm', '-w', 'nfield.wcs',  '-p', '-o', 'plot.ppm', '-N', '-C', '-B', '-G', '60', '-F', '0.0001', '-s', str(self.downscale)])
 		am_image = cv2.imread('plot.ppm')
-		cv2.imshow('plot', am_image)
+		ui.imshow('plot', am_image)
 		return True
 
 	def get_df(self):
@@ -175,6 +178,7 @@ class Median:
 		self.n = n
 		self.i = 0
 		self.list = []
+		self.res = None
 	
 	def add(self, im):
 		if (self.i < len(self.list)):
@@ -183,13 +187,14 @@ class Median:
 			self.list.append(im)
 		self.i = (self.i + 1) % self.n
 
-	def get(self):
 		a = np.array(self.list)
-	
 		for i in range(a.shape[1]):
 			a[:, i, :] = cv2.sort(a[:, i, :], cv2.SORT_DESCENDING | cv2.SORT_EVERY_COLUMN)
-	
-		return np.array(a[a.shape[0] / 2, :, :])
+		self.res = np.array(a[a.shape[0] / 2, :, :])
+
+
+	def get(self):
+		return self.res
 
 	def len(self):
 		return len(self.list)
@@ -407,7 +412,7 @@ class Stack:
 
 	def get_xy(self):
 		if self.xy is None:
-			self.xy = np.array(find_max(self.img, 20, noise=1))
+			self.xy = np.array(find_max(self.img, 20, noise=2))
 		return self.xy
 	
 	def reset(self):
@@ -434,13 +439,13 @@ class Navigator:
 		med = self.stack.get()
 
 		if (self.dispmode == 1):
-			cv2.imshow('capture', normalize(im))
+			ui.imshow('capture', normalize(im))
 		if (self.dispmode == 2):
-			cv2.imshow('capture', normalize(im_sub))
+			ui.imshow('capture', normalize(im_sub))
 		if (self.dispmode == 3):
-			cv2.imshow('capture', normalize(med))
+			ui.imshow('capture', normalize(med))
 		if (self.dispmode == 4):
-			cv2.imshow('capture', normalize(self.stack.pts))
+			ui.imshow('capture', normalize(self.stack.pts))
 	
 		if self.astrometry.state == 'init' or self.astrometry.state == 'finished' :
 			xy = self.stack.get_xy()
@@ -691,7 +696,7 @@ class Guider:
 			for p in self.pt0:
 				cv2.circle(debug, (int(p[1]), int(p[0])), 13, (255), 1)
 
-		cv2.imshow("debug", debug)
+		cv2.imshow("capture", debug)
 
 
 def set_config_choice(gp, camera, context, name, num):
@@ -770,7 +775,7 @@ def proc_zoom_frame(im, i, key):
 	
 	rgb[:,:, 1] = cv2.bitwise_and(med, cv2.bitwise_not(mask))
 	
-	cv2.imshow('capture', rgb)
+	ui.imshow('capture', rgb)
 
 
 def run_gphoto():
@@ -790,8 +795,8 @@ def run_gphoto():
 	set_config_choice(gp, camera, context, 'output', 0)
 	sleep(2)
 
-	cv2.namedWindow('capture')
-	cv2.namedWindow('plot')
+	ui.namedWindow('capture')
+	ui.namedWindow('plot')
 	nav = Navigator()
 
     	i = 0
@@ -801,7 +806,7 @@ def run_gphoto():
 	set_config_value(gp, camera, context, 'eoszoomposition', "%d,%d" % (x, y))
 
 	while True:
-		key=cv2.waitKey(1)
+		key=ui.waitKey(1)
 		if (key == 27):
 			break
 		if key == ord('q'):
@@ -870,8 +875,8 @@ def run_gphoto():
 	return 0
 
 def run_v4l2():
-	cv2.namedWindow('plot')
-	cv2.namedWindow('capture')
+	ui.namedWindow('plot')
+	ui.namedWindow('capture')
 	cam = Camera("/dev/video1")
 	cam.prepare(1280, 960)
 	nav = Navigator()
@@ -879,7 +884,7 @@ def run_v4l2():
 	i = 0
 	while True:
 #		try:
-			key=cv2.waitKey(50)
+			key=ui.waitKey(50)
 			if (key == 27):
 				break
 			im = cam.capture()
@@ -892,8 +897,8 @@ def run_v4l2():
 
 
 def run_v4l2_g():
-	cv2.namedWindow('plot')
-	cv2.namedWindow('capture')
+	ui.namedWindow('plot')
+	ui.namedWindow('capture')
 	cam = Camera("/dev/video1")
 	cam.prepare(1280, 960)
 	go = GuideOut()
@@ -902,7 +907,7 @@ def run_v4l2_g():
 	i = 0
 	while True:
 		print i
-		key=cv2.waitKey(50)
+		key=ui.waitKey(50)
 		if (key == 27):
 			break
 		im = cam.capture()
@@ -913,12 +918,12 @@ def run_v4l2_g():
 
 
 def test():
-	cv2.namedWindow('plot')
-	cv2.namedWindow('capture')
+	ui.namedWindow('plot')
+	ui.namedWindow('capture')
 	nav = Navigator()
 	i = 0
 	while True:
-		key=cv2.waitKey(20)
+		key=ui.waitKey(2000)
 		if (key == 27):
 			break
 		#pil_image = Image.open("testimg10_" + str(i) + ".tif")
@@ -926,16 +931,18 @@ def test():
 		#pil_image.thumbnail((1000,1000), Image.ANTIALIAS)
 		#im = np.amin(np.array(pil_image), axis = 2)
 		print i
-		im = cv2.imread("testimg14_" + str(i) + ".tif")
+		im = cv2.imread("testimg12_" + str(i) + ".tif")
 		im = np.amin(im, axis = 2)
 		#im = cv2.multiply(im, 255, dtype=cv2.CV_16UC1)
 
 		nav.proc_frame(im, i, key)
 		i = i + 1
+		if (i == 200):
+			break
 
 def test_g():
-	cv2.namedWindow('plot')
-	cv2.namedWindow('capture')
+	ui.namedWindow('plot')
+	ui.namedWindow('capture')
 	
 	go = GuideOutBase()
 	guider = Guider(go)
@@ -946,7 +953,7 @@ def test_g():
 		corr = go.recent_avg()
 		i = int((corr - go.recent_avg(1))  + err)
 		print err, corr * 3, i
-		key=cv2.waitKey(500)
+		key=ui.waitKey(500)
 		if (key == 27):
 			break
 #		pil_image = Image.open("testimg2_" + str(i + 377) + ".tif")
@@ -973,11 +980,13 @@ if __name__ == "__main__":
     profiler = LineProfiler()
     profiler.add_function(Navigator.proc_frame)
     profiler.add_function(Stack.add)
+    profiler.add_function(find_max)
     profiler.enable_by_count()
 
     #run_v4l2_g()
     #run_v4l2()
-    test()
+    with ui:
+    	test()
     profiler.print_stats()
 
 
