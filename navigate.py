@@ -14,13 +14,12 @@ import logging
 from time import sleep
 import bisect
 
-import pyfits
-from astrometry.util.util import anwcs
+
+from am import Solver, Plotter
 
 import gphoto2 as gp
 import sys
 import io
-import subprocess
 import os.path
 import time
 from v4l2_camera import *
@@ -39,139 +38,6 @@ from gui import ui
 def normalize(img):
 	return cv2.normalize(img, alpha = 0, beta = 255, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_8UC1)
 	
-
-class Astrometry:
-
-	def __init__(self):
-		self.ra = None
-		self.dec = None
-		self.field_deg = None
-		self.scale = 3
-		self.state = 'init'
-		self.cmd = None
-
-	def start(self, img_show, img_df, sources_img = None, sources_list = None):
-		
-		(self.field_h, self.field_w) = img_show.shape
-		
-		self.downscale = 1200.0 / (self.field_w * self.scale)
-		
-		if (sources_img is None):
-			tbhdu = pyfits.BinTableHDU.from_columns([
-				pyfits.Column(name='X', format='E', array=sources_list[:, 1]),
-				pyfits.Column(name='Y', format='E', array=sources_list[:, 0]),
-				pyfits.Column(name='FLUX', format='E', array=sources_list[:, 2])
-				])
-			prihdr = pyfits.Header()
-			prihdr['IMAGEW'] = self.field_w
-			prihdr['IMAGEH'] = self.field_h
-			prihdu = pyfits.PrimaryHDU(header=prihdr)
-			thdulist = pyfits.HDUList([prihdu, tbhdu])
-			thdulist.writeto('field.fits', clobber=True)
-		else:
-			cv2.imwrite("field.tif", sources_img)
-		
-		self.field = Image.fromarray(img_show)
-		self.df = img_df
-	
-		if os.path.exists("field.solved"):
-			os.remove("field.solved")
-		
-		cmd_s = ['solve-field', '-O',  '--objs', '20', '--depth', '20', '-E', '2', '--no-plots', '--no-remove-lines', '--no-fits2fits', '--crpix-center', '--no-tweak']
-		
-		if self.ra is not None:
-			cmd_s = cmd_s + ['--ra',  str(self.ra)]
-		if self.dec is not None:
-			cmd_s = cmd_s + ['--dec', str(self.dec)]
-		
-		if self.field_deg is not None:
-			cmd_s = cmd_s + ['--radius', str(self.field_deg * 2), '--scale-low', str(self.field_deg * 0.95), '--scale-high', str(self.field_deg * 1.05), '--odds-to-solve', '1e6']
-		else:
-			cmd_s = cmd_s + ['--odds-to-solve', '1e8']
-		
-		if (sources_img is None):
-			cmd_s = cmd_s + ['--sort-column', 'FLUX', 'field.fits']
-		else:
-			cmd_s = cmd_s + ['field.tif']
-
-		self.ra = None
-		self.dec = None
-		print cmd_s
-		self.cmd = subprocess.Popen(cmd_s)
-		self.state = 'running'
-
-	def poll(self):
-		return self.cmd.poll()
-
-	def terminate(self):
-		if self.cmd is None:
-			return
-		self.cmd.terminate()
-		subprocess.call(['killall', 'astrometry-engine'])
-		self.state = 'finished'
-		self.cmd = None
-		
-	
-	def finish(self):
-		self.cmd = None
-		self.state = 'finished'
-		if not os.path.exists("field.solved"):
-			return False
-	
-		wcsinfo = anwcs('field.wcs',0)
-		self.ra, self.dec = wcsinfo.get_center()
-		self.field_deg = self.field_w * wcsinfo.pixel_scale() / 3600
-		
-		print "found coords ", self.ra, self.dec, self.field_deg
-		xoff = self.field_w * (self.scale - 1) / 2.0
-		yoff = self.field_h * (self.scale - 1) / 2.0
-		nw = self.field_w * self.scale
-		nh = self.field_h * self.scale
-	
-		wcs = pyfits.open('field.wcs')
-		wcs_h = wcs[0].header
-		wcs_h['IMAGEW'] = nw
-		wcs_h['IMAGEH'] = nh
-		wcs_h['CRPIX1'] = wcs_h['CRPIX1'] + xoff
-		wcs_h['CRPIX2'] = wcs_h['CRPIX2'] + yoff
-		wcs.writeto('nfield.wcs', clobber=True)
-	
-	
-		nw = int(nw * self.downscale)
-		nh = int(nh * self.downscale)
-		nimg = Image.new("RGB", (nw, nh))   ## luckily, this is already black!
-	
-		tw = int(self.field_w * self.downscale)
-		th = int(self.field_h * self.downscale)
-		tx = int(xoff * self.downscale)
-		ty = int(yoff * self.downscale)
-		self.field.thumbnail((tw, th), Image.ANTIALIAS)
-		
-		print nw, nh, tw, th, tx, ty
-	
-		
-		nimg.paste(self.field, (tx, ty))
-		draw = ImageDraw.Draw(nimg)
-		draw.rectangle(((tx, ty), (tx + tw - 1, ty + th - 1)), outline = "blue")
-		nimg.save("nfield.ppm")
-	
-		subprocess.call(['plot-constellations', '-i', 'nfield.ppm', '-w', 'nfield.wcs',  '-p', '-o', 'plot.ppm', '-N', '-C', '-B', '-G', '60', '-F', '0.0001', '-s', str(self.downscale)])
-		am_image = cv2.imread('plot.ppm')
-		ui.imshow('plot', am_image)
-		return True
-
-	def get_df(self):
-		(h,w) = self.df.shape
-		ind = pyfits.open('field-indx.xyls')
-		tbdata = ind[1].data
-		pts = []
-		for l in tbdata:
-			x = np.clip(int(l['X'] * w / self.field_w), 0, w - 1)
-			y = np.clip(int(l['Y'] * h / self.field_h), 0, h - 1)
-			pts.append((x,y))
-		return darkframe(self.df, pts)
-		
-
 
 class Median:
 	def __init__(self, n):
@@ -274,7 +140,7 @@ def find_max(img, d, noise = 4, debug = False):
 			ys = y
 		# y, x, flux, certainity: n_sigma
 		ret.append((y + ys, x + xs, img[y, x] + mean + stddev * noise, math.erf((img[y, x] / stddev + noise) / 2**0.5) ** (w * h) ))
-	ret = sorted(ret, key=lambda pt: pt[2], reverse=True)[:30]
+	ret = sorted(ret, key=lambda pt: pt[2], reverse=True)[:50]
 	ret = sorted(ret, key=lambda pt: pt[0])
 	
 	return ret
@@ -363,7 +229,7 @@ class Stack:
 			im = cv2.multiply(im, 255, dtype=cv2.CV_16UC1)
 		if (self.img is None):
 			self.img = im
-			return
+			return (0.0, 0.0)
 			
 		pt1 = self.get_xy()
 		pt2 = find_max(im, 30, noise=4, debug=True)
@@ -394,6 +260,7 @@ class Stack:
 		
 		self.img = cv2.addWeighted(self.img, 0.95, im, 0.05, 0, dtype=cv2.CV_16UC1)
 		self.xy = None
+		return self.off
 
 	def add_simple(self, im):
 		if im.dtype == np.uint8:
@@ -403,6 +270,7 @@ class Stack:
 			return
 		self.img = cv2.addWeighted(self.img, 0.9, im, 0.1, 0, dtype=cv2.CV_16UC1)
 		self.xy = None
+		return (0.0, 0.0)
 
 	def get(self, dtype = np.uint8):
 		if dtype == np.uint8:
@@ -412,7 +280,7 @@ class Stack:
 
 	def get_xy(self):
 		if self.xy is None:
-			self.xy = np.array(find_max(self.img, 20, noise=2))
+			self.xy = np.array(find_max(self.img, 20, noise=1))
 		return self.xy
 	
 	def reset(self):
@@ -422,9 +290,14 @@ class Navigator:
 	def __init__(self):
 		self.dark = Median(10)
 		self.stack = Stack()
-		self.astrometry = None
+		self.solver = None
+		self.solver_off = np.array([0.0, 0.0])
 		self.dispmode = 3
-		self.astrometry = Astrometry()
+		self.ra = None
+		self.dec = None
+		self.field_deg = None
+		self.plotter = None
+		self.plotter_off = np.array([0.0, 0.0])
 
 	def proc_frame(self,im, i, key):
 	
@@ -435,30 +308,59 @@ class Navigator:
 		else:
 			im_sub = im
 	
-		self.stack.add(im_sub)
+		off = self.stack.add(im_sub)
 		med = self.stack.get()
+		
+		self.solver_off += off
+		self.plotter_off += off
 
 		if (self.dispmode == 1):
 			ui.imshow('capture', normalize(im))
 		if (self.dispmode == 2):
 			ui.imshow('capture', normalize(im_sub))
 		if (self.dispmode == 3):
-			ui.imshow('capture', normalize(med))
+			if self.plotter is not None:
+				nm = normalize(med)
+				for p in self.stack.get_xy():
+					cv2.circle(nm, (int(p[1]), int(p[0])), 13, (255), 1)
+		
+				ui.imshow('capture', self.plotter.plot(nm, self.plotter_off))
+			else:
+				ui.imshow('capture', normalize(med))
 		if (self.dispmode == 4):
 			ui.imshow('capture', normalize(self.stack.pts))
 	
-		if self.astrometry.state == 'init' or self.astrometry.state == 'finished' :
+		if self.solver is not None and not self.solver.is_alive():
+			self.solver.join()
+			if self.solver.solved:
+				self.ra = self.solver.ra
+				self.dec = self.solver.dec
+				self.field_deg = self.solver.field_deg
+			
+				self.dark.add(darkframe(self.solved_im, self.solver.ind_sources))
+				
+				self.plotter = Plotter(self.solver.wcs)
+				plot = self.plotter.plot_viewfinder(normalize(med), 5)
+				ui.imshow('plot', plot)
+				self.plotter_off = self.solver_off
+			else:
+				self.ra = None
+				self.dec = None
+			self.solver = None
+			self.solved_im = None
+
+		if self.solver is None and i > 20 :
 			xy = self.stack.get_xy()
 			print "len", len(xy)
 			if len(xy) > 4:
-				
-				#self.astrometry.start(normalize(med), im, sources_img = med)
-				self.astrometry.start(normalize(med), im, sources_list = xy)
-		elif self.astrometry.poll() is not None:
-			if self.astrometry.finish():
-				self.dark.add(self.astrometry.get_df())
-		if key == 32 and self.astrometry is not None:
-			self.astrometry.terminate()
+				self.solved_im = im
+				self.solver = Solver(sources_list = xy, field_w = im.shape[1], field_h = im.shape[0], ra = self.ra, dec = self.dec, field_deg = self.field_deg)
+				self.solver.start()
+				self.solver_off = np.array([0.0, 0.0])
+			
+		if key == 32 and self.solver is not None:
+			self.solver.terminate(wait=True)
+			self.field_deg = None
 
 		if key == ord('d'):
 			self.dark.add(im)
@@ -888,7 +790,7 @@ def run_v4l2():
 			if (key == 27):
 				break
 			im = cam.capture()
-			#cv2.imwrite("testimg14_" + str(i) + ".tif", im)
+			#cv2.imwrite("testimg17_" + str(i) + ".tif", im)
 			im = np.amin(im, axis = 2)
 			nav.proc_frame(im, i, key)
 			i = i + 1
@@ -923,7 +825,7 @@ def test():
 	nav = Navigator()
 	i = 0
 	while True:
-		key=ui.waitKey(2000)
+		key=ui.waitKey(20)
 		if (key == 27):
 			break
 		#pil_image = Image.open("testimg10_" + str(i) + ".tif")
@@ -931,14 +833,14 @@ def test():
 		#pil_image.thumbnail((1000,1000), Image.ANTIALIAS)
 		#im = np.amin(np.array(pil_image), axis = 2)
 		print i
-		im = cv2.imread("testimg12_" + str(i) + ".tif")
+		im = cv2.imread("testimg16_" + str(i) + ".tif")
 		im = np.amin(im, axis = 2)
 		#im = cv2.multiply(im, 255, dtype=cv2.CV_16UC1)
 
 		nav.proc_frame(im, i, key)
 		i = i + 1
-		if (i == 200):
-			break
+		#if (i == 200):
+		#	break
 
 def test_g():
 	ui.namedWindow('plot')
