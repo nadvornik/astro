@@ -116,10 +116,12 @@ def find_max(img, d, noise = 4, debug = False):
 	locmax = cv2.compare(img, dil, cv2.CMP_GE)
 
 	(h, w) = locmax.shape
-	nonzero = zip(*locmax.nonzero())
+	#nonzero = zip(*locmax.nonzero())
+	nonzero = cv2.findNonZero(locmax)[:, 0, :]
 	ret = []
 	
-	for (y, x) in nonzero:
+	#for (y, x) in nonzero:
+	for (x, y) in nonzero:
 		if (x < 1):
 			continue
 		if (y < 1):
@@ -863,7 +865,7 @@ def test_g():
 #		pil_image = Image.open("testimg" + str(i) + ".tif")
 #		pil_image.thumbnail((1000,1000), Image.ANTIALIAS)
 		#im = np.amin(np.array(pil_image), axis = 2)
-		im = cv2.imread("testimg12_" + str(i + 50) + ".tif")
+		im = cv2.imread("testimg16_" + str(i + 50) + ".tif")
 		im = np.amin(im, axis = 2)
 		im = cv2.multiply(im, 255, dtype=cv2.CV_16UC1)
 
