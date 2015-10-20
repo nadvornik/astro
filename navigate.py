@@ -69,32 +69,25 @@ class Median:
 		self.i = 0
 		self.list = []
 
-def darkframe(im, pts):
-	mask = np.zeros_like(im)
-	
-	fill = np.array(im, copy=True)
-	
-	maxv = np.iinfo(mask.dtype).max
+def darkframe(im, filt_im, pts):
+	mask = np.zeros_like(im, dtype=np.uint8)
 	
 	for p in pts:
-		cv2.circle(fill, p, 10, (0), -1)
-		cv2.circle(mask, p, 10, (maxv), -1)
-		
-	inv_mask = cv2.bitwise_not(mask)
-	fill = cv2.blur(fill, (30,30))
-	fill = cv2.blur(fill, (30,30))
-	fill = cv2.blur(fill, (30,30))
-	inv_mask = cv2.blur(inv_mask, (30,30))
-	inv_mask = cv2.blur(inv_mask, (30,30))
-	inv_mask = cv2.blur(inv_mask, (30,30))
-	fill = cv2.divide(fill, inv_mask, scale=maxv)
-	idx = (mask==0)
-        fill[idx] = im[idx]
-	return fill
+		cv2.circle(mask, p, 10, (255), -1)
+
+	dtype=cv2.CV_8UC1
+	if np.iinfo(im.dtype).max > 255:
+		dtype=cv2.CV_16UC1
+        cv2.imshow("filt_p",im)
+
+	filt_im = cv2.add(filt_im, 0, mask=mask, dtype=dtype) #convert dtype with saturate
+	im = cv2.subtract(im, filt_im, dst=im, mask=mask)
+        cv2.imshow("filt",im)
+	return im
 
 
 
-def find_max(img, d, noise = 4, debug = False):
+def find_max(img, d, noise = 4, filt = False):
 	#img = cv2.medianBlur(img, 5)
 	bg = cv2.blur(img, (30, 30))
 	bg = cv2.blur(bg, (30, 30))
@@ -102,22 +95,30 @@ def find_max(img, d, noise = 4, debug = False):
 
 	img = cv2.GaussianBlur(img, (9, 9), 0)
 
+
 	(mean, stddev) = cv2.meanStdDev(img)
-	if stddev == 0:
-		return []
+
 	img = cv2.subtract(img, mean + stddev * noise)
+
+	filt_img = img
 
 	dilkernel = np.ones((d,d),np.uint8)
 	dil = cv2.dilate(img, dilkernel)
 
+	(h, w) = img.shape
 
 	r,dil = cv2.threshold(dil,0,255,cv2.THRESH_TOZERO)
 	
 	locmax = cv2.compare(img, dil, cv2.CMP_GE)
 
-	(h, w) = locmax.shape
-	#nonzero = zip(*locmax.nonzero())
-	nonzero = cv2.findNonZero(locmax)[:, 0, :]
+	nonzero = None
+	if stddev > 0.0:
+		#nonzero = zip(*locmax.nonzero())
+		nonzero = cv2.findNonZero(locmax)
+	if nonzero is  not None:
+		nonzero = nonzero[:, 0, :]
+	else:
+		nonzero = []
 	ret = []
 	
 	#for (y, x) in nonzero:
@@ -145,7 +146,10 @@ def find_max(img, d, noise = 4, debug = False):
 	ret = sorted(ret, key=lambda pt: pt[2], reverse=True)[:50]
 	ret = sorted(ret, key=lambda pt: pt[0])
 	
-	return ret
+	if (filt):
+		return ret, filt_img
+	else:
+		return ret
 
 def match_idx(pt1, pt2, d, off = (0.0, 0.0)):
 	if len(pt1) == 0 or len(pt2) == 0:
@@ -234,7 +238,7 @@ class Stack:
 			return (0.0, 0.0)
 			
 		pt1 = self.get_xy()
-		pt2 = find_max(im, 30, noise=4, debug=True)
+		pt2, self.filt_img = find_max(im, 30, noise=5, filt=True)
 		
 		self.pts = normalize(self.img)
 		for p in pt1:
@@ -282,7 +286,7 @@ class Stack:
 
 	def get_xy(self):
 		if self.xy is None:
-			self.xy = np.array(find_max(self.img, 20, noise=1))
+			self.xy = np.array(find_max(self.img, 20, noise=2))
 		return self.xy
 	
 	def reset(self):
@@ -339,10 +343,10 @@ class Navigator:
 				self.dec = self.solver.dec
 				self.field_deg = self.solver.field_deg
 			
-				self.dark.add(darkframe(self.solved_im, self.solver.ind_sources))
+				self.dark.add(darkframe(self.solved_im, self.filt_im, self.solver.ind_sources))
 				
 				self.plotter = Plotter(self.solver.wcs)
-				plot = self.plotter.plot_viewfinder(normalize(med), 5)
+				plot = self.plotter.plot_viewfinder(normalize(med), 10)
 				ui.imshow('plot', plot)
 				self.plotter_off = self.solver_off
 			else:
@@ -356,6 +360,7 @@ class Navigator:
 			print "len", len(xy)
 			if len(xy) > 4:
 				self.solved_im = im
+				self.filt_im = self.stack.filt_img
 				self.solver = Solver(sources_list = xy, field_w = im.shape[1], field_h = im.shape[0], ra = self.ra, dec = self.dec, field_deg = self.field_deg)
 				self.solver.start()
 				self.solver_off = np.array([0.0, 0.0])
