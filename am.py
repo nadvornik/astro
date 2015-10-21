@@ -5,7 +5,7 @@ import os
 import subprocess
 
 import pyfits
-from astrometry.util.util import anwcs
+from astrometry.util.util import Tan
 from astrometry.blind.plotstuff import *
 import threading
 
@@ -72,8 +72,8 @@ class Solver(threading.Thread):
 			return
 	
 		self.solved = True
-		self.wcs = anwcs('field.wcs',0)
-		self.ra, self.dec = self.wcs.get_center()
+		self.wcs = Tan('field.wcs',0)
+		self.ra, self.dec = self.wcs.radec_center()
 		self.field_deg = self.field_w * self.wcs.pixel_scale() / 3600
 		
 		ind = pyfits.open('field-indx.xyls')
@@ -97,18 +97,23 @@ class Plotter:
 		self.wcs = wcs
 
 	def plot(self, img, off):
-		self.wcs.writeto('off1_field.wcs')
+		#self.wcs.write_to('off1_field.wcs')
 		
-		ra, dec = self.wcs.get_center()
-		ok, x0, y0 = self.wcs.radec2pixelxy(ra, dec)
-		ok, ra2, dec2 = self.wcs.pixelxy2radec(x0 - off[1], y0 - off[0])
-		print ra,dec, ra2, dec2
+		#ra, dec = self.wcs.radec_center()
+		#ok, x0, y0 = self.wcs.radec2pixelxy(ra, dec)
+		x0, y0 = self.wcs.crpix
+		ra2, dec2 = self.wcs.pixelxy2radec(x0 - off[1], y0 - off[0])
+		#print ra,dec, ra2, dec2
 		
-		wcs = pyfits.open('off1_field.wcs')
-		wcs_h = wcs[0].header
-		wcs_h['CRVAL1'] = ra2
-		wcs_h['CRVAL2'] = dec2
-		wcs.writeto('off2_field.wcs', clobber=True)
+		new_wcs = Tan(self.wcs)
+		new_wcs.set_crval(ra2, dec2)
+		new_wcs.write_to('off2_field.wcs')
+
+		#wcs = pyfits.open('off1_field.wcs')
+		#wcs_h = wcs[0].header
+		#wcs_h['CRVAL1'] = ra2
+		#wcs_h['CRVAL2'] = dec2
+		#wcs.writeto('off2_field.wcs', clobber=True)
 
 		
 		plot = Plotstuff(outformat=PLOTSTUFF_FORMAT_PPM, wcsfn='off2_field.wcs')
@@ -166,13 +171,12 @@ class Plotter:
 		nw = field_w * scale
 		nh = field_h * scale
 	
-		wcs = pyfits.open('field.wcs')
-		wcs_h = wcs[0].header
-		wcs_h['IMAGEW'] = nw
-		wcs_h['IMAGEH'] = nh
-		wcs_h['CRPIX1'] = wcs_h['CRPIX1'] + xoff
-		wcs_h['CRPIX2'] = wcs_h['CRPIX2'] + yoff
-		wcs.writeto('nfield.wcs', clobber=True)
+		new_wcs = Tan(self.wcs)
+		new_wcs.set_width(nw)
+		new_wcs.set_height(nh)
+		(crpix1, crpix2) = new_wcs.crpix
+		new_wcs.set_crpix(crpix1 + xoff, crpix2 + yoff)
+		new_wcs.write_to('nfield.wcs')
 
 		#thumbnail size and pos
 		tw = int(field_w * downscale)
