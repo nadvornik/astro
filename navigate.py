@@ -78,11 +78,9 @@ def darkframe(im, filt_im, pts):
 	dtype=cv2.CV_8UC1
 	if np.iinfo(im.dtype).max > 255:
 		dtype=cv2.CV_16UC1
-        cv2.imshow("filt_p",im)
 
 	filt_im = cv2.add(filt_im, 0, mask=mask, dtype=dtype) #convert dtype with saturate
 	im = cv2.subtract(im, filt_im, dst=im, mask=mask)
-        cv2.imshow("filt",im)
 	return im
 
 
@@ -224,15 +222,16 @@ def avg_pt(pt1m, pt2m, noise = 1):
 
 
 class Stack:
-	def __init__(self, dist = 20):
+	def __init__(self, dist = 20, ratio = 0.1):
 		self.img = None
 		self.dist = dist
 		self.xy = None
 		self.off = np.array([0.0, 0.0])
+		self.ratio = ratio
 	
 	def add(self, im):
 		if im.dtype == np.uint8:
-			im = cv2.multiply(im, 255, dtype=cv2.CV_16UC1)
+			im = cv2.multiply(im, 255.0, dtype=cv2.CV_16UC1)
 		if (self.img is None):
 			self.img = im
 			return (0.0, 0.0)
@@ -264,7 +263,7 @@ class Stack:
 		bg = cv2.blur(self.img, (30, 30))
 		self.img = cv2.warpAffine(self.img, M[0:2,0:3], (im.shape[1], im.shape[0]), bg, borderMode=cv2.BORDER_TRANSPARENT);
 		
-		self.img = cv2.addWeighted(self.img, 0.95, im, 0.05, 0, dtype=cv2.CV_16UC1)
+		self.img = cv2.addWeighted(self.img, 1.0 - self.ratio, im, self.ratio, 0, dtype=cv2.CV_16UC1)
 		self.xy = None
 		return self.off
 
@@ -274,7 +273,7 @@ class Stack:
 		if (self.img is None or self.img.shape != im.shape):
 			self.img = im
 			return
-		self.img = cv2.addWeighted(self.img, 0.9, im, 0.1, 0, dtype=cv2.CV_16UC1)
+		self.img = cv2.addWeighted(self.img, 1.0 - self.ratio, im, self.ratio, 0, dtype=cv2.CV_16UC1)
 		self.xy = None
 		return (0.0, 0.0)
 
@@ -346,7 +345,7 @@ class Navigator:
 				self.dark.add(darkframe(self.solved_im, self.filt_im, self.solver.ind_sources))
 				
 				self.plotter = Plotter(self.solver.wcs)
-				plot = self.plotter.plot_viewfinder(normalize(med), 10)
+				plot = self.plotter.plot_viewfinder(normalize(med), 3)
 				ui.imshow('plot', plot)
 				self.plotter_off = self.solver_off
 			else:
@@ -404,7 +403,7 @@ class Guider:
 		self.cnt = 0
 		self.pt0 = []
 
-	def get_df(self, im):
+	def get_df(self, im, filt_img):
 		mask = np.zeros_like(im)
 		h, w = mask.shape
 		pts = []
@@ -419,7 +418,7 @@ class Guider:
 			if (y > h - 1):
 				continue
 			pts.append((x,y))
-		return darkframe(im, pts)
+		return darkframe(im, filt_img, pts)
 
 	def proc_frame(self, im, i, key):
 		t = time.time()
@@ -528,7 +527,7 @@ class Guider:
 		elif self.mode==3:
 			plt.figure(1)
 			self.cnt += 1
-			pt = find_max(im_sub, 50)
+			pt, filt_img = find_max(im_sub, 50, filt = True)
 			pt0, pt, match = filt_match_idx(self.pt0, pt, 30, self.off)
 			if match.shape[0] > 0:
 				self.off, weights = avg_pt(pt0, pt)
@@ -540,7 +539,7 @@ class Guider:
 				print "err:", err, err.real
 
 				if (err.real > 30):
-					self.dark.add(self.get_df(im))
+					self.dark.add(self.get_df(im, filt_img))
 
 				for p in pt:
 					cv2.circle(debug, (int(p[1]), int(p[0])), 10, (255), 1)

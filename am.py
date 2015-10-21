@@ -201,7 +201,7 @@ class Plotter:
 		ann.bright = True
 		ann.ngc_fraction = 0.001
 
-		ann.HD = True
+		ann.HD = (self.wcs.pixel_scale() * scale < 5)
 		ann.HD_labels = True
 		ann.hd_catalog = "hd.fits"
 
