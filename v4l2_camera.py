@@ -48,12 +48,20 @@ def sonix_read_asic(fd, addr):
 
 class Camera:
     def __init__(self, dev_name):
-        self.vd = os.open(dev_name, os.O_RDWR | os.O_NONBLOCK, 0)
         self.buffers = []
         self.i = 0
+        self.dev_name = dev_name
+        self.vd = None
 
-    def prepare(self, width, height, format = V4L2_PIX_FMT_SBGGR16):
+    def _prepare(self, width, height, format = V4L2_PIX_FMT_SBGGR16):
+
+
+        self.vd = os.open(self.dev_name, os.O_RDWR | os.O_NONBLOCK, 0)
 	self.fmt = format
+
+
+	self.control(V4L2_CID_EXPOSURE_AUTO, V4L2_EXPOSURE_MANUAL)
+	self.control(V4L2_CID_EXPOSURE_ABSOLUTE, 500)
 	
         cp = v4l2_capability()
         fcntl.ioctl(self.vd, VIDIOC_QUERYCAP, cp)
@@ -64,9 +72,9 @@ class Camera:
         fmt.fmt.pix.height = height
         fmt.fmt.pix.field = V4L2_FIELD_NONE
 
-	fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_JPEG
-        fcntl.ioctl(self.vd, VIDIOC_S_FMT, fmt)
-        time.sleep(0.01)
+	#fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_JPEG
+        #fcntl.ioctl(self.vd, VIDIOC_S_FMT, fmt)
+        #time.sleep(0.01)
 
 	if (self.fmt == V4L2_PIX_FMT_SBGGR16):
 		fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_YUYV
@@ -78,7 +86,7 @@ class Camera:
         self.width = width
 
         req = v4l2_requestbuffers()
-        req.count = 4
+        req.count = 2
         req.type = V4L2_BUF_TYPE_VIDEO_CAPTURE
         req.memory = V4L2_MEMORY_MMAP
         fcntl.ioctl(self.vd, VIDIOC_REQBUFS, req)
@@ -105,14 +113,39 @@ class Camera:
         type = v4l2_buf_type(V4L2_BUF_TYPE_VIDEO_CAPTURE)
 
 
+	t0 = time.time()
+	max_t = 5
+
         fcntl.ioctl(self.vd, VIDIOC_STREAMON, type)
-	#self.control(V4L2_CID_EXPOSURE_AUTO,  V4L2_EXPOSURE_APERTURE_PRIORITY)
-	#
+
+        ready_to_read, ready_to_write, in_error = ([], [], [])
+        while len(ready_to_read) == 0 and time.time() - t0 < max_t:
+            try:
+                ready_to_read, ready_to_write, in_error = select.select([self.vd], [], [], max_t)
+            except (OSError, select.error) as why:
+                continue
+
+	if time.time() - t0 >= max_t:
+		os.close(self.vd)
+		self.vd = None
+		return False
+	
+	return True
+
+
+    def prepare(self, width, height, format = V4L2_PIX_FMT_SBGGR16):
+
+	for i in range(0, 20):
+		if self._prepare(width, height, format):
+			break
+		print "camera init failed, retry %d" % i
+
 	# longest manual exposure available via uvc driver
 	self.control(V4L2_CID_EXPOSURE_AUTO, V4L2_EXPOSURE_MANUAL)
 	self.control(V4L2_CID_EXPOSURE_ABSOLUTE, 5000)
 
 #######################################################################
+        time.sleep(0.2)
 	
 	if (self.fmt == V4L2_PIX_FMT_SBGGR16):
 		# the registers seems to be similar to gspca/sn9c20x.c driver
@@ -123,7 +156,7 @@ class Camera:
 		# this one worked:
 		sonix_write_asic(self.vd, 0x1100, 0xff) # switch to raw mode
 
-        time.sleep(0.02)
+        time.sleep(0.2)
         
         # modify sensor registers
         # AR0130 Register Reference
@@ -136,7 +169,12 @@ class Camera:
         #sonix_write_sensor(self.vd, 0x30ea, 0x8c00) #disable black level compensation
         #sonix_write_sensor(self.vd, 0x3044, 0x0000) #disable row noise compensation
         sonix_write_sensor(self.vd, 0x3012, 0x2000) #exposure time coarse
-
+        
+        # skip incorrectly set  frames at the beginning
+        self.capture()
+        self.capture()
+	self.capture()
+	
 #######################################################################
 
 
