@@ -13,7 +13,7 @@ import cv2
 import logging
 from time import sleep
 import bisect
-
+import subprocess
 
 from am import Solver, Plotter
 
@@ -73,14 +73,14 @@ def darkframe(im, filt_im, pts):
 	mask = np.zeros_like(im, dtype=np.uint8)
 	
 	for p in pts:
-		cv2.circle(mask, p, 10, (255), -1)
+		cv2.circle(mask, p, 20, (255), -1)
 
 	dtype=cv2.CV_8UC1
 	if np.iinfo(im.dtype).max > 255:
 		dtype=cv2.CV_16UC1
 
 	filt_im = cv2.add(filt_im, 0, mask=mask, dtype=dtype) #convert dtype with saturate
-	im = cv2.subtract(im, filt_im, dst=im, mask=mask)
+	#im = cv2.subtract(im, filt_im / 2, dst=im, mask=mask)
 	return im
 
 
@@ -225,6 +225,7 @@ class Stack:
 	def __init__(self, dist = 20, ratio = 0.1):
 		self.img = None
 		self.dist = dist
+		self.prev_pt = None
 		self.xy = None
 		self.off = np.array([0.0, 0.0])
 		self.ratio = ratio
@@ -236,8 +237,11 @@ class Stack:
 			self.img = im
 			return (0.0, 0.0)
 			
-		pt1 = self.get_xy()
+		pt1 = self.prev_pt
+		if pt1 is None:
+			pt1 = self.get_xy()
 		pt2, self.filt_img = find_max(im, 30, noise=5, filt=True)
+		self.prev_pt = pt2
 		
 		self.pts = normalize(self.img)
 		for p in pt1:
@@ -345,7 +349,7 @@ class Navigator:
 				self.dark.add(darkframe(self.solved_im, self.filt_im, self.solver.ind_sources))
 				
 				self.plotter = Plotter(self.solver.wcs)
-				plot = self.plotter.plot_viewfinder(normalize(med), 3)
+				plot = self.plotter.plot_viewfinder(normalize(med), 13)
 				ui.imshow('plot', plot)
 				self.plotter_off = self.solver_off
 			else:
@@ -796,7 +800,7 @@ def run_v4l2():
 			if (key == 27):
 				break
 			im = cam.capture()
-			#cv2.imwrite("testimg17_" + str(i) + ".tif", im)
+			#cv2.imwrite("testimg18_" + str(i) + ".tif", im)
 			im = np.amin(im, axis = 2)
 			nav.proc_frame(im, i, key)
 			i = i + 1
@@ -839,7 +843,7 @@ def test():
 		#pil_image.thumbnail((1000,1000), Image.ANTIALIAS)
 		#im = np.amin(np.array(pil_image), axis = 2)
 		print i
-		im = cv2.imread("testimg16_" + str(i) + ".tif")
+		im = cv2.imread("testimg17_" + str(i) + ".tif")
 		im = np.amin(im, axis = 2)
 		#im = cv2.multiply(im, 255, dtype=cv2.CV_16UC1)
 
@@ -895,6 +899,8 @@ if __name__ == "__main__":
     #run_v4l2()
     with ui:
     	test()
+    	#run_gphoto()
+    	#run_v4l2_g()
     profiler.print_stats()
 
 
