@@ -307,9 +307,12 @@ class Navigator:
 		self.field_deg = None
 		self.plotter = None
 		self.plotter_off = np.array([0.0, 0.0])
+		self.ii = 0
 
-	def proc_frame(self,im, i, key):
+	def proc_frame(self,im, i, key, t = None):
 	
+		if t == None:
+			t = time.time()
 		if (self.dark.len() > 0):
 			im_sub = cv2.subtract(im, self.dark.get())
 			minVal, maxVal, minLoc, maxLoc = cv2.minMaxLoc(im_sub)
@@ -348,6 +351,10 @@ class Navigator:
 			
 				self.dark.add(darkframe(self.solved_im, self.filt_im, self.solver.ind_sources))
 				
+				#self.solver.wcs.write_to("log_%d.wcs" % self.ii)
+				#subprocess.call(['touch', '-r', "testimg17_" + str(i) + ".tif", "log_%d.wcs" % self.ii])
+				
+				self.ii += 1
 				self.plotter = Plotter(self.solver.wcs)
 				plot = self.plotter.plot_viewfinder(normalize(med), 13)
 				ui.imshow('plot', plot)
@@ -365,6 +372,7 @@ class Navigator:
 				self.solved_im = im
 				self.filt_im = self.stack.filt_img
 				self.solver = Solver(sources_list = xy, field_w = im.shape[1], field_h = im.shape[0], ra = self.ra, dec = self.dec, field_deg = self.field_deg)
+				#self.solver = Solver(sources_img = med, field_w = im.shape[1], field_h = im.shape[0], ra = self.ra, dec = self.dec, field_deg = self.field_deg)
 				self.solver.start()
 				self.solver_off = np.array([0.0, 0.0])
 			
@@ -429,10 +437,7 @@ class Guider:
 		if key == ord('r'):
 			self.reset()
 			self.mode = 1
-		elif key == ord('s'):
-			np.save("resp0_%d.npy" % self.t0, np.array(self.resp0))
-			self.go.save("go_%d.npy" % self.t0)
-			print "SAVED" 
+		
 
 		if (self.dark.len() >= 4):
 			print "dark"
@@ -589,7 +594,8 @@ class Guider:
 
 				err_corr = err.real + self.go.recent_avg(self.t_delay) * self.pixpersec
 				
-				err_corr *= 0.5
+				aggresivnes = 0.2 + (t - self.t0) / 3600
+				err_corr *= aggresivnes
 				print "err:", err, err.real, "corr:", err_corr, "t_delay: ", self.t_delay
 				if err_corr > 0.1:
 					self.go.out(-1, -err_corr / self.pixpersec_neg)
@@ -603,6 +609,11 @@ class Guider:
 				
 				plt.figure(2)
 				plt.plot(t - self.t0, self.go.recent_avg(), "go")
+
+				if i % 100 == 0:
+					np.save("resp0_%d.npy" % self.t0, np.array(self.resp0))
+					self.go.save("go_%d.npy" % self.t0)
+					print "SAVED" 
 				
 		if len(self.pt0) > 0:
 			for p in self.pt0:
@@ -656,6 +667,9 @@ def capture_bulb(gp, camera, context, sec):
 	print('Copying image to', target)
 	camera_file = gp.check_result(gp.gp_camera_file_get(camera, file_path.folder, file_path.name, gp.GP_FILE_TYPE_NORMAL, context))
 	gp.check_result(gp.gp_file_save(camera_file, target))
+
+	set_config_choice(gp, camera, context, 'output', 1)
+	set_config_choice(gp, camera, context, 'output', 0)
 
 
 zimage = Stack()
@@ -733,7 +747,7 @@ def run_gphoto():
 			if key == ord('z'):
 				if zoom == 1:
 					zoom = 5
-					minVal, maxVal, (minx, miny), (maxx, maxy) = cv2.minMaxLoc(nav.image.get())
+					minVal, maxVal, (minx, miny), (maxx, maxy) = cv2.minMaxLoc(nav.stack.get())
 					
 					x = maxx * zoom - 300
 					y = maxy * zoom - 300
@@ -778,8 +792,8 @@ def run_gphoto():
 
 		except KeyboardInterrupt:
 			break
-		except:
-			print "Unexpected error:", sys.exc_info()
+		#except:
+		#	print "Unexpected error:", sys.exc_info()
 
 
 	gp.check_result(gp.gp_camera_exit(camera, context))
@@ -835,7 +849,7 @@ def test():
 	nav = Navigator()
 	i = 0
 	while True:
-		key=ui.waitKey(20)
+		key=ui.waitKey(1000)
 		if (key == 27):
 			break
 		#pil_image = Image.open("testimg10_" + str(i) + ".tif")
@@ -844,10 +858,11 @@ def test():
 		#im = np.amin(np.array(pil_image), axis = 2)
 		print i
 		im = cv2.imread("testimg17_" + str(i) + ".tif")
+		t = t = os.path.getmtime("testimg17_" + str(i) + ".tif")
 		im = np.amin(im, axis = 2)
 		#im = cv2.multiply(im, 255, dtype=cv2.CV_16UC1)
 
-		nav.proc_frame(im, i, key)
+		nav.proc_frame(im, i, key, t)
 		i = i + 1
 		#if (i == 200):
 		#	break
@@ -898,7 +913,7 @@ if __name__ == "__main__":
     #run_v4l2_g()
     #run_v4l2()
     with ui:
-    	test()
+    	test_g()
     	#run_gphoto()
     	#run_v4l2_g()
     profiler.print_stats()

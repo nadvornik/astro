@@ -8,7 +8,7 @@ import pyfits
 from astrometry.util.util import Tan
 from astrometry.blind.plotstuff import *
 import threading
-
+import math
 
 class Solver(threading.Thread):
 	def __init__(self, sources_img = None, sources_list = None, field_w = None, field_h = None, ra = None, dec = None, field_deg = None):
@@ -45,7 +45,7 @@ class Solver(threading.Thread):
 		if os.path.exists("field.solved"):
 			os.remove("field.solved")
 		
-		cmd_s = ['solve-field', '-O',  '--objs', '20', '--depth', '20', '-E', '2', '--no-plots', '--no-remove-lines', '--no-fits2fits', '--crpix-center', '--no-tweak']
+		cmd_s = ['solve-field', '-O',  '--objs', '20', '--depth', '20', '-E', '2', '--no-plots', '--no-remove-lines', '--no-fits2fits', '--crpix-center', '--no-tweak', '-z', '2']
 		
 		if self.ra is not None:
 			cmd_s = cmd_s + ['--ra',  str(self.ra)]
@@ -96,7 +96,7 @@ class Plotter:
 	def __init__(self, wcs):
 		self.wcs = wcs
 
-	def plot(self, img, off):
+	def plot(self, img = None, off = [0., 0.], extra = []):
 		#self.wcs.write_to('off1_field.wcs')
 		
 		#ra, dec = self.wcs.radec_center()
@@ -125,8 +125,9 @@ class Plotter:
 		plot.plot('fill')
 
 		plot.color = 'gray'
-		grid_step = 10 ** round (np.log10(self.wcs.pixel_scale() /3600) + 2)
-		plot.plot_grid(grid_step, grid_step, grid_step * 2, grid_step * 2)
+		grid_step_ra = float(10 ** round (np.log10(self.wcs.pixel_scale() /3600 / (0.01 + math.cos(math.radians(dec2)))) + 2))
+		grid_step_dec = float(10 ** round (np.log10(self.wcs.pixel_scale() /3600) + 2))
+		plot.plot_grid(grid_step_ra, grid_step_dec, grid_step_ra * 2.0, grid_step_dec * 2.0)
 
 		ann = plot.annotations
 		ann.NGC = True
@@ -136,9 +137,12 @@ class Plotter:
 		ann.bright = True
 		ann.ngc_fraction = 0.05
 
-		ann.HD = True
+		#ann.HD = True
 		ann.HD_labels = True
 		ann.hd_catalog = "hd.fits"
+
+		for (r, d, name) in extra:
+			ann.add_target(r, d, name)
 
 		plot.color = 'green'
 		plot.lw = 2
@@ -153,7 +157,8 @@ class Plotter:
 		plot_image = plot.get_image_as_numpy()
 	
 		bg = np.zeros_like(plot_image)
-		bg[:, :, 0] = bg[:, :, 1] = bg[:, :, 2] = img
+		if img is not None:
+			bg[:, :, 0] = bg[:, :, 1] = bg[:, :, 2] = img
 	
 		res=cv2.add(plot_image, bg)
 		return res
@@ -194,7 +199,7 @@ class Plotter:
 		plot.plot('fill')
 
 		plot.color = 'gray'
-		grid_step = 10 ** round (np.log10(self.wcs.pixel_scale() /3600) + 3)
+		grid_step = float(10 ** round (np.log10(self.wcs.pixel_scale() /3600) + 3))
 		plot.plot_grid(grid_step, grid_step, grid_step * 2, grid_step * 2)
 		
 		ann = plot.annotations
