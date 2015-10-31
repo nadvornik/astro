@@ -8,7 +8,7 @@ from PIL import Image
 import StringIO
 import time
 import os
-import Queue
+from cmd import cmdQueue
 
 class MjpegBuf:
 	def __init__(self):
@@ -106,7 +106,7 @@ class Handler(BaseHTTPRequestHandler):
 			self.send_header('Content-type','text/text')
 			self.end_headers()
 			self.wfile.write("ok")
-			cmdqueue.put(postvars['key'][0])
+			cmdQueue.put(postvars['key'][0])
 			return
 		self.send_response(404)
 		self.end_headers()
@@ -129,7 +129,6 @@ class ServerThread(threading.Thread):
 		self.server.shutdown()
 		
 mjpeglist = MjpegList()
-cmdqueue = Queue.Queue()
 
 if __name__ == '__main__':
 	server = ServerThread()

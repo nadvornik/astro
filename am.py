@@ -9,6 +9,8 @@ from astrometry.util.util import Tan
 from astrometry.blind.plotstuff import *
 import threading
 import math
+import tempfile
+import shutil
 
 class Solver(threading.Thread):
 	def __init__(self, sources_img = None, sources_list = None, field_w = None, field_h = None, ra = None, dec = None, field_deg = None):
@@ -27,6 +29,7 @@ class Solver(threading.Thread):
 		
 	
 	def run(self):
+		tmp_dir = tempfile.mkdtemp()
 		if (self.sources_img is None):
 			tbhdu = pyfits.BinTableHDU.from_columns([
 				pyfits.Column(name='X', format='E', array=self.sources_list[:, 1]),
@@ -38,12 +41,9 @@ class Solver(threading.Thread):
 			prihdr['IMAGEH'] = self.field_h
 			prihdu = pyfits.PrimaryHDU(header=prihdr)
 			thdulist = pyfits.HDUList([prihdu, tbhdu])
-			thdulist.writeto('field.fits', clobber=True)
+			thdulist.writeto(tmp_dir + '/field.fits', clobber=True)
 		else:
-			cv2.imwrite("field.tif", self.sources_img)
-		
-		if os.path.exists("field.solved"):
-			os.remove("field.solved")
+			cv2.imwrite(tmp_dir + "/field.tif", self.sources_img)
 		
 		cmd_s = ['solve-field', '-O',  '--objs', '20', '--depth', '20', '-E', '2', '--no-plots', '--no-remove-lines', '--no-fits2fits', '--crpix-center', '--no-tweak', '-z', '2']
 		
@@ -58,31 +58,33 @@ class Solver(threading.Thread):
 			cmd_s = cmd_s + ['--odds-to-solve', '1e8']
 		
 		if (self.sources_img is None):
-			cmd_s = cmd_s + ['--sort-column', 'FLUX', 'field.fits']
+			cmd_s = cmd_s + ['--sort-column', 'FLUX', tmp_dir + "/field.fits"]
 		else:
-			cmd_s = cmd_s + ['field.tif']
+			cmd_s = cmd_s + [tmp_dir + "/field.tif"]
 
 		self.cmd = subprocess.Popen(cmd_s)
 		self.cmd.wait()
 
-		if not os.path.exists("field.solved"):
+		if not os.path.exists(tmp_dir + "/field.solved"):
 			self.ra = None
 			self.dec = None
 			self.field_deg = None
+			shutil.rmtree(tmp_dir)
 			return
 	
 		self.solved = True
-		self.wcs = Tan('field.wcs',0)
+		self.wcs = Tan(tmp_dir + "/field.wcs", 0)
 		self.ra, self.dec = self.wcs.radec_center()
 		self.field_deg = self.field_w * self.wcs.pixel_scale() / 3600
 		
-		ind = pyfits.open('field-indx.xyls')
+		ind = pyfits.open(tmp_dir + '/field-indx.xyls')
 		tbdata = ind[1].data
 		self.ind_sources = []
 		for l in tbdata:
 			x = np.clip(int(l['X']), 0, self.field_w - 1)
 			y = np.clip(int(l['Y']), 0, self.field_h - 1)
 			self.ind_sources.append((x,y))
+		shutil.rmtree(tmp_dir)
 
 
 	def terminate(self, wait = True):
@@ -97,6 +99,7 @@ class Plotter:
 		self.wcs = wcs
 
 	def plot(self, img = None, off = [0., 0.], extra = []):
+		tmp_dir = tempfile.mkdtemp()
 		#self.wcs.write_to('off1_field.wcs')
 		
 		#ra, dec = self.wcs.radec_center()
@@ -107,7 +110,7 @@ class Plotter:
 		
 		new_wcs = Tan(self.wcs)
 		new_wcs.set_crval(ra2, dec2)
-		new_wcs.write_to('off2_field.wcs')
+		new_wcs.write_to(tmp_dir + '/off2_field.wcs')
 
 		#wcs = pyfits.open('off1_field.wcs')
 		#wcs_h = wcs[0].header
@@ -116,7 +119,7 @@ class Plotter:
 		#wcs.writeto('off2_field.wcs', clobber=True)
 
 		
-		plot = Plotstuff(outformat=PLOTSTUFF_FORMAT_PPM, wcsfn='off2_field.wcs')
+		plot = Plotstuff(outformat=PLOTSTUFF_FORMAT_PPM, wcsfn = tmp_dir + '/off2_field.wcs')
 
 		plot.set_size_from_wcs()
 
@@ -161,12 +164,14 @@ class Plotter:
 			bg[:, :, 0] = bg[:, :, 1] = bg[:, :, 2] = img
 	
 		res=cv2.add(plot_image, bg)
+		shutil.rmtree(tmp_dir)
 		return res
 
 		
 	
 	
 	def plot_viewfinder(self, img, scale, res_w = 1200):
+		tmp_dir = tempfile.mkdtemp()
 		field_w = self.wcs.get_width()
 		field_h = self.wcs.get_height()
 		downscale = res_w / (field_w * scale)
@@ -181,7 +186,7 @@ class Plotter:
 		new_wcs.set_height(nh)
 		(crpix1, crpix2) = new_wcs.crpix
 		new_wcs.set_crpix(crpix1 + xoff, crpix2 + yoff)
-		new_wcs.write_to('nfield.wcs')
+		new_wcs.write_to(tmp_dir + '/nfield.wcs')
 
 		#thumbnail size and pos
 		tw = int(field_w * downscale)
@@ -189,7 +194,7 @@ class Plotter:
 		tx = int(xoff * downscale)
 		ty = int(yoff * downscale)
 
-		plot = Plotstuff(outformat=PLOTSTUFF_FORMAT_PPM, wcsfn='nfield.wcs')
+		plot = Plotstuff(outformat=PLOTSTUFF_FORMAT_PPM, wcsfn = tmp_dir + '/nfield.wcs')
 
 		plot.scale_wcs(downscale)
 		plot.set_size_from_wcs()

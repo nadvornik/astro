@@ -213,6 +213,9 @@ class Camera:
         fcntl.ioctl(self.vd, VIDIOC_S_CTRL, control)
         time.sleep(0.01)
 
+    def cmd(self, cmd):
+        print "camera:", cmd
+
     def __del__(self):
     	os.close(self.vd)
 

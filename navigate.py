@@ -17,23 +17,22 @@ import subprocess
 
 from am import Solver, Plotter
 
-import gphoto2 as gp
 import sys
 import io
 import os.path
 import time
+import threading
+
 from v4l2_camera import *
+from camera_gphoto import *
 
 from serial_control import GuideOutBase, GuideOut
 
 import random
 from line_profiler import LineProfiler
 
-import matplotlib.pyplot as plt
-from PIL import Image, ImageDraw
-
 from gui import ui
-
+from cmd import cmdQueue
 
 def normalize(img):
 	return cv2.normalize(img, alpha = 0, beta = 255, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_8UC1)
@@ -296,7 +295,7 @@ class Stack:
 		self.img = None
 
 class Navigator:
-	def __init__(self):
+	def __init__(self, ui_capture, ui_plot):
 		self.dark = Median(10)
 		self.stack = Stack()
 		self.solver = None
@@ -308,9 +307,13 @@ class Navigator:
 		self.plotter = None
 		self.plotter_off = np.array([0.0, 0.0])
 		self.ii = 0
+		self.ui_capture = ui_capture
+		self.ui_plot = ui_plot
 
-	def proc_frame(self,im, i, key, t = None):
+	def proc_frame(self,im, i, t = None):
 	
+		self.im = im
+		
 		if t == None:
 			t = time.time()
 		if (self.dark.len() > 0):
@@ -327,20 +330,20 @@ class Navigator:
 		self.plotter_off += off
 
 		if (self.dispmode == 1):
-			ui.imshow('capture', normalize(im))
+			ui.imshow(self.ui_capture, normalize(im))
 		if (self.dispmode == 2):
-			ui.imshow('capture', normalize(im_sub))
+			ui.imshow(self.ui_capture, normalize(im_sub))
 		if (self.dispmode == 3):
 			if self.plotter is not None:
 				nm = normalize(med)
 				for p in self.stack.get_xy():
 					cv2.circle(nm, (int(p[1]), int(p[0])), 13, (255), 1)
 		
-				ui.imshow('capture', self.plotter.plot(nm, self.plotter_off))
+				ui.imshow(self.ui_capture, self.plotter.plot(nm, self.plotter_off))
 			else:
-				ui.imshow('capture', normalize(med))
+				ui.imshow(self.ui_capture, normalize(med))
 		if (self.dispmode == 4):
-			ui.imshow('capture', normalize(self.stack.pts))
+			ui.imshow(self.ui_capture, normalize(self.stack.pts))
 	
 		if self.solver is not None and not self.solver.is_alive():
 			self.solver.join()
@@ -357,7 +360,7 @@ class Navigator:
 				self.ii += 1
 				self.plotter = Plotter(self.solver.wcs)
 				plot = self.plotter.plot_viewfinder(normalize(med), 13)
-				ui.imshow('plot', plot)
+				ui.imshow(self.ui_plot, plot)
 				self.plotter_off = self.solver_off
 			else:
 				self.ra = None
@@ -375,22 +378,25 @@ class Navigator:
 				#self.solver = Solver(sources_img = med, field_w = im.shape[1], field_h = im.shape[0], ra = self.ra, dec = self.dec, field_deg = self.field_deg)
 				self.solver.start()
 				self.solver_off = np.array([0.0, 0.0])
-			
-		if key == 32 and self.solver is not None:
+		
+	def cmd(self, cmd):
+		if cmd == ' ' and self.solver is not None:
 			self.solver.terminate(wait=True)
 			self.field_deg = None
 
-		if key == ord('d'):
-			self.dark.add(im)
+		if cmd == 'dark':
+			self.dark.add(self.im)
 		
-		if key == ord('1'):
+		if cmd == '1':
 			self.dispmode = 1
-		if key == ord('2'):
+		if cmd == '2':
 			self.dispmode = 2
-		if key == ord('3'):
+		if cmd == '3':
 			self.dispmode = 3
-		if key == ord('4'):
+		if cmd == '4':
 			self.dispmode = 4
+		if cmd == 'save':
+			cv2.imwrite(self.ui_capture + str(int(time.time())) + ".tif", self.stack.get())
 
 def fit_line(xylist):
 	a = np.array(xylist)
@@ -399,13 +405,14 @@ def fit_line(xylist):
 	return np.polyfit(x, y, 1)
 
 class Guider:
-	def __init__(self, go):
+	def __init__(self, go, ui_capture):
 		self.go = go
 		self.reset()
 		self.t0 = 0
 		self.resp0 = []
 		self.pt0 = []
-	
+		self.ui_capture = ui_capture
+
 	def reset(self):
 		self.mode = 0
 		self.dark = Median(10)
@@ -414,6 +421,8 @@ class Guider:
 		self.go.out(0)
 		self.cnt = 0
 		self.pt0 = []
+		self.ok = False
+		self.capture_in_progress = False
 
 	def get_df(self, im, filt_img):
 		mask = np.zeros_like(im)
@@ -432,11 +441,17 @@ class Guider:
 			pts.append((x,y))
 		return darkframe(im, filt_img, pts)
 
-	def proc_frame(self, im, i, key):
-		t = time.time()
-		if key == ord('r'):
+	def cmd(self, cmd):
+		if cmd == 'r':
 			self.reset()
 			self.mode = 1
+		if cmd == "capture":
+			self.capture_in_progress = True
+		if cmd == "capture-finished":
+			self.capture_in_progress = False
+
+	def proc_frame(self, im, i):
+		t = time.time()
 		
 
 		if (self.dark.len() >= 4):
@@ -466,12 +481,8 @@ class Guider:
 				self.mode = 2
 				self.t0 = t
 				self.resp0 = []
-				plt.ion()
-				plt.axvline(x=0)
-				plt.axhline(y=0)
 
 		elif self.mode==2:
-			plt.figure(1)
 				
 			self.dark.add(im)
 			self.cnt += 1
@@ -488,7 +499,6 @@ class Guider:
 			if (dist > 20):
 				self.dark.add(im)
 			
-			plt.scatter(t - self.t0, dist)
 			self.resp0.append((t - self.t0, dist))
 			
 			if (dist > self.dist):
@@ -520,11 +530,6 @@ class Guider:
 				self.dist = m * dt + c
 				self.ref_off = complex(*self.off) / dist
 				
-				plt.plot([self.t_delay1, dt], [0, m * dt + c])
-				plt.axhline(y=self.dist)
-				plt.axvline(x=dt)
-				plt.axvline(x=self.t_delay1)
-				
 				print "pixpersec", self.pixpersec, "pixperframe", self.pixperframe, "t_delay1", self.t_delay1
 				
 				self.pt0 = np.array(self.pt0)[np.where(np.bincount(self.used_cnt) > self.cnt / 2)]
@@ -534,7 +539,6 @@ class Guider:
 				self.go.out(-1, self.dist / self.pixpersec)
 
 		elif self.mode==3:
-			plt.figure(1)
 			self.cnt += 1
 			pt, filt_img = find_max(im_sub, 50, filt = True)
 			pt0, pt, match = filt_match_idx(self.pt0, pt, 30, self.off)
@@ -542,7 +546,6 @@ class Guider:
 				self.off, weights = avg_pt(pt0, pt)
 				err = complex(*self.off) / self.ref_off
 				
-				plt.scatter(t - self.t0, err.real)
 				self.resp0.append((t - self.t0, err.real))
 			
 				print "err:", err, err.real
@@ -568,13 +571,6 @@ class Guider:
 
 					self.pixperframe_neg = self.pixpersec_neg * dt / self.cnt
 				
-					plt_x = np.array([self.t1 - self.t0 + self.t_delay2, self.t2 - self.t0])
-					plt.plot(plt_x, plt_x * m + c)
-					plt.plot([(self.dist - c) / m, dt], [self.dist, m * dt + c])
-					plt.axvline(x=self.t1 - self.t0 + self.t_delay2)
-					
-
-
 					print "pixpersec_neg", self.pixpersec_neg, "pixperframe_neg", self.pixperframe_neg, "t_delay2", self.t_delay2
 					self.t_delay = (self.t_delay1 + self.t_delay2) / 2
 					if (self.t_delay < 0):
@@ -584,7 +580,6 @@ class Guider:
 
 
 		elif self.mode==4:
-			plt.figure(1)
 			pt = find_max(im_sub, 50)
 			pt0, pt, match = filt_match_idx(self.pt0, pt, 30, self.off)
 			if match.shape[0] > 0:
@@ -603,12 +598,15 @@ class Guider:
 					self.go.out(1, -err_corr / self.pixpersec)
 				else:
 					self.go.out(0)
-
+				
+				self.ok = (err.real < 2 and err.real > -2)
+				if self.ok and not self.capture_in_progress:
+					cmdQueue.put('capture')
+					self.capture_in_progress = True
+				
 				for p in pt:
 					cv2.circle(debug, (int(p[1]), int(p[0])), 10, (255), 1)
 				
-				plt.figure(2)
-				plt.plot(t - self.t0, self.go.recent_avg(), "go")
 
 				if i % 100 == 0:
 					np.save("resp0_%d.npy" % self.t0, np.array(self.resp0))
@@ -619,285 +617,282 @@ class Guider:
 			for p in self.pt0:
 				cv2.circle(debug, (int(p[1]), int(p[0])), 13, (255), 1)
 
-		cv2.imshow("capture", debug)
+		ui.imshow(self.ui_capture, debug)
 
 
-def set_config_choice(gp, camera, context, name, num):
-	config = gp.check_result(gp.gp_camera_get_config(camera, context))
-	OK, widget = gp.gp_widget_get_child_by_name(config, name)
-	if OK >= gp.GP_OK:
-		# set value
-		value = gp.check_result(gp.gp_widget_get_choice(widget, num))
-		print name, value
-		gp.check_result(gp.gp_widget_set_value(widget, value))
-	# set config
-	gp.check_result(gp.gp_camera_set_config(camera, config, context))
-
-def set_config_value(gp, camera, context, name, value):
-	config = gp.check_result(gp.gp_camera_get_config(camera, context))
-	OK, widget = gp.gp_widget_get_child_by_name(config, name)
-	if OK >= gp.GP_OK:
-		# set value
-		print name, value
-		gp.check_result(gp.gp_widget_set_value(widget, value))
-	# set config
-	gp.check_result(gp.gp_camera_set_config(camera, config, context))
-
-def handle_focus_keys(gp, camera, context, key):
-	if ('x' == chr(key & 255)):
-		set_config_choice(gp, camera, context, 'manualfocusdrive', 2)
-	if ('c' == chr(key & 255)):
-		set_config_choice(gp, camera, context, 'manualfocusdrive', 1)
-	if ('v' == chr(key & 255)):
-		set_config_choice(gp, camera, context, 'manualfocusdrive', 0)
-	if ('b' == chr(key & 255)):
-		set_config_choice(gp, camera, context, 'manualfocusdrive', 4)
-	if ('n' == chr(key & 255)):
-		set_config_choice(gp, camera, context, 'manualfocusdrive', 5)
-	if ('m' == chr(key & 255)):
-		set_config_choice(gp, camera, context, 'manualfocusdrive', 6)
-
-def capture_bulb(gp, camera, context, sec):
-	set_config_value(gp, camera, context, 'shutterspeed', 'bulb')
-	set_config_value(gp, camera, context, 'eosremoterelease', 'Immediate')
-	time.sleep(sec)
-	file_path = gp.check_result(gp.gp_camera_capture(camera, gp.GP_CAPTURE_IMAGE, context))
-	print('Camera file path: {0}/{1}'.format(file_path.folder, file_path.name))
-	target = os.path.join('/tmp', file_path.name)
-	print('Copying image to', target)
-	camera_file = gp.check_result(gp.gp_camera_file_get(camera, file_path.folder, file_path.name, gp.GP_FILE_TYPE_NORMAL, context))
-	gp.check_result(gp.gp_file_save(camera_file, target))
-
-	set_config_choice(gp, camera, context, 'output', 1)
-	set_config_choice(gp, camera, context, 'output', 0)
+class Focuser:
+	def __init__(self, ui_capture):
+		self.stack = Stack()
+		self.dark = Median(10)
+		self.ui_capture = ui_capture
 
 
-zimage = Stack()
-zdark = Median(10)
-
-def proc_zoom_frame(im, i, key):
-	global zimage
-
-	if key == ord('d'):
-		zdark.add(im)
-
-	if (zdark.len() > 0):
-		im_sub = cv2.subtract(im, zdark.get())
-		minVal, maxVal, minLoc, maxLoc = cv2.minMaxLoc(im_sub)
-		im_sub = cv2.add(im_sub, -minVal, dtype=cv2.CV_8UC1)
-	else:
-		im_sub = im
-
-
-	zimage.add_simple(im_sub)
-	med = zimage.get()
-	med = normalize(med)
-	
-	mask = cv2.compare(med, 128, cv2.CMP_GE)
-	
-	print "Nonzero size: ", cv2.countNonZero(mask)
-	
-	rgb = cv2.cvtColor(med,cv2.COLOR_GRAY2RGB)
-	
-	rgb[:,:, 1] = cv2.bitwise_and(med, cv2.bitwise_not(mask))
-	
-	ui.imshow('capture', rgb)
-
-
-def run_gphoto():
-	global cmd
-	subprocess.call(['killall', 'gvfsd-gphoto2'])
-
-	logging.basicConfig(
-		format='%(levelname)s: %(name)s: %(message)s', level=logging.ERROR)
-	gp.check_result(gp.use_python_logging())
-	context = gp.gp_context_new()
-	camera = gp.check_result(gp.gp_camera_new())
-	gp.check_result(gp.gp_camera_init(camera, context))
-	# required configuration will depend on camera type!
-	set_config_choice(gp, camera, context, 'capturesizeclass', 2)
-
-	set_config_choice(gp, camera, context, 'output', 1)
-	set_config_choice(gp, camera, context, 'output', 0)
-	sleep(2)
-
-	ui.namedWindow('capture')
-	ui.namedWindow('plot')
-	nav = Navigator()
-
-    	i = 0
-	zoom = 1
-	x = 3000
-	y = 2000
-	set_config_value(gp, camera, context, 'eoszoomposition', "%d,%d" % (x, y))
-
-	while True:
-		key=ui.waitKey(1)
-		if (key == 27):
-			break
-		if key == ord('q'):
-			break
-
-		try:
-			if i == 0:
-				camera_file = gp.check_result(gp.gp_camera_capture_preview(camera, context))
-			file_data = gp.check_result(gp.gp_file_get_data_and_size(camera_file))
-
-			handle_focus_keys(gp, camera, context, key)
-			if key == ord('z'):
-				if zoom == 1:
-					zoom = 5
-					minVal, maxVal, (minx, miny), (maxx, maxy) = cv2.minMaxLoc(nav.stack.get())
-					
-					x = maxx * zoom - 300
-					y = maxy * zoom - 300
-					set_config_value(gp, camera, context, 'eoszoomposition', "%d,%d" % (x, y))
-					set_config_value(gp, camera, context, 'eoszoom', '5')
-					
-				elif zoom == 5:
-					zoom = 1
-					set_config_value(gp, camera, context, 'eoszoom', '1')
-
-			if key == ord('j'):
-				x = max(100, x - 100)
-				set_config_value(gp, camera, context, 'eoszoomposition', "%d,%d" % (x, y))
-				zdark.reset()
-			if key == ord('l'):
-				x = x + 100
-				set_config_value(gp, camera, context, 'eoszoomposition', "%d,%d" % (x, y))
-				zdark.reset()
-			if key == ord('i'):
-				y = max(100, y - 100)
-				set_config_value(gp, camera, context, 'eoszoomposition', "%d,%d" % (x, y))
-				zdark.reset()
-			if key == ord('k'):
-				y = y + 100
-				set_config_value(gp, camera, context, 'eoszoomposition', "%d,%d" % (x, y))
-				zdark.reset()
-
-			if key == ord('t'):
-				capture_bulb(gp, camera, context, 5)
-
-			camera_file = gp.check_result(gp.gp_camera_capture_preview(camera, context))
-			pil_image = Image.open(io.BytesIO(file_data))
-			#pil_image.save("testimg2_" + str(i) + ".tif")
-			im = np.amin(np.array(pil_image), axis = 2)
-
-			if zoom == 1:
-				nav.proc_frame(im, i, key)
-			else:
-				proc_zoom_frame(im, i, key)
+	def cmd(self, cmd):
+		if cmd == 'd':
+			self.dark.add(self.im)
 			
-			i = i + 1
+	def proc_frame(self, im, i):
+		self.im = im
 
-		except KeyboardInterrupt:
-			break
-		#except:
-		#	print "Unexpected error:", sys.exc_info()
+		if (self.dark.len() > 0):
+			im_sub = cv2.subtract(im, self.dark.get())
+			minVal, maxVal, minLoc, maxLoc = cv2.minMaxLoc(im_sub)
+			im_sub = cv2.add(im_sub, -minVal, dtype=cv2.CV_8UC1)
+		else:
+			im_sub = im
 
 
-	gp.check_result(gp.gp_camera_exit(camera, context))
-	subprocess.call(['killall', 'astrometry-engine'])
-	return 0
+		self.stack.add_simple(im_sub)
+		med = self.stack.get()
+		med = normalize(med)
+	
+		mask = cv2.compare(med, 128, cv2.CMP_GE)
+	
+		print "Nonzero size: ", cv2.countNonZero(mask)
+	
+		rgb = cv2.cvtColor(med,cv2.COLOR_GRAY2RGB)
+	
+		rgb[:,:, 1] = cv2.bitwise_and(med, cv2.bitwise_not(mask))
+	
+		ui.imshow(self.ui_capture, rgb)
 
-def run_v4l2():
-	ui.namedWindow('plot')
-	ui.namedWindow('capture')
-	cam = Camera("/dev/video1")
-	cam.prepare(1280, 960)
-	nav = Navigator()
+class Runner(threading.Thread):
+	def __init__(self, camera, navigator = None, guider = None, focuser = None):
+                threading.Thread.__init__(self)
+		self.camera = camera
+		self.navigator = navigator
+		self.guider = guider
+		self.focuser = focuser
+		
+	def run(self):
+		cmdQueue.register(self)
+		
+		i = 0
+		if self.navigator is not None:
+			mode = 'navigator'
+		else:
+			mode = 'guider'
 
-	i = 0
-	while True:
-#		try:
-			key=ui.waitKey(50)
-			if (key == 27):
-				break
-			im = cam.capture()
+		while True:
+			while True:
+				cmd=cmdQueue.get(self, 1)
+				if cmd is None:
+					break
+				if cmd == 'exit':
+					return
+				elif cmd == 'navigator' and self.navigator is not None:
+					mode = 'navigator'
+				elif cmd == 'guider' and self.guider is not None:
+					mode = 'guider'
+				elif cmd == 'z1':
+					if self.focuser is not None:
+						mode = 'focuser'
+						maxx = 300
+						maxy = 300
+						if self.navigator:
+							minVal, maxVal, (minx, miny), (maxx, maxy) = cv2.minMaxLoc(self.navigator.stack.get())
+						self.camera.cmd(cmd, x=maxx, y=maxy)
+				elif cmd == 'z0' and self.navigator is not None:
+					mode = 'navigator'
+					self.camera.cmd(cmd)
+				elif cmd == 'z0' and self.guider is not None:
+					mode = 'guider'
+					self.camera.cmd(cmd)
+				else:
+					self.camera.cmd(cmd)
+					
+				if mode == 'navigator':
+					self.navigator.cmd(cmd)
+				if mode == 'guider':
+					self.guider.cmd(cmd)
+				if mode == 'focuser':
+					self.focuser.cmd(cmd)
+	
+			im = self.camera.capture()
 			#cv2.imwrite("testimg18_" + str(i) + ".tif", im)
 			im = np.amin(im, axis = 2)
-			nav.proc_frame(im, i, key)
-			i = i + 1
-#		except:
-#			print "Unexpected error:", sys.exc_info()
+			if mode == 'navigator':
+				self.navigator.proc_frame(im, i)
+			if mode == 'guider':
+				self.guider.proc_frame(im, i)
+			if mode == 'focuser':
+				self.focuser.proc_frame(im, i)
+			i += 1
+
+class Camera_test:
+	def __init__(self):
+		self.i = 0
+	
+	def cmd(self, cmd):
+		print "camera:", cmd
+	
+	def capture(self):
+		time.sleep(0.5)
+		print self.i
+		im = cv2.imread("testimg17_" + str(self.i) + ".tif")
+		t = t = os.path.getmtime("testimg17_" + str(self.i) + ".tif")
+		self.i += 1
+		return im
+
+class Camera_test_g:
+	def __init__(self, go):
+		self.i = 0
+		self.err = 0.0
+		self.go = go
+	
+	def cmd(self, cmd):
+		print "camera:", cmd
+	
+	def capture(self):
+		time.sleep(0.5)
+		self.err += random.random() * 2 - 1.01
+		corr = self.go.recent_avg()
+		i = int((corr - self.go.recent_avg(1))  + self.err)
+		print self.err, corr * 3, i
+		im = cv2.imread("testimg16_" + str(i + 50) + ".tif")
+		return im
+
+
+def run_v4l2():
+	ui.namedWindow('capture')
+	ui.namedWindow('plot')
+	cam = Camera("/dev/video1")
+	cam.prepare(1280, 960)
+	nav = Navigator('capture', 'plot')
+
+	runner = Runner(cam, navigator = nav)
+	runner.start()
+	runner.join()
+
+def run_gphoto():
+	cam = Camera_gphoto()
+	cam.prepare()
+	ui.namedWindow('capture')
+	ui.namedWindow('plot')
+	nav = Navigator('capture', 'plot')
+	focuser = Focuser('capture')
+
+	runner = Runner(cam, navigator = nav, focuser = focuser)
+	runner.start()
+	runner.join()
 
 
 def run_v4l2_g():
-	ui.namedWindow('plot')
 	ui.namedWindow('capture')
+	ui.namedWindow('plot')
 	cam = Camera("/dev/video1")
 	cam.prepare(1280, 960)
+
+	nav = Navigator('capture', 'plot')
 	go = GuideOut()
-	guider = Guider(go)
+	guider = Guider(go, 'capture')
 
-	i = 0
-	while True:
-		print i
-		key=ui.waitKey(50)
-		if (key == 27):
-			break
-		im = cam.capture()
-		#cv2.imwrite("testimg10_" + str(i) + ".tif", im)
-		im = np.amin(im, axis = 2)
-		guider.proc_frame(im, i, key)
-		i = i + 1
+	runner = Runner(cam, navigator = nav, guider = guider)
+	runner.start()
+	runner.join()
 
-
-def test():
-	ui.namedWindow('plot')
+def run_test_g():
 	ui.namedWindow('capture')
-	nav = Navigator()
-	i = 0
-	while True:
-		key=ui.waitKey(1000)
-		if (key == 27):
-			break
-		#pil_image = Image.open("testimg10_" + str(i) + ".tif")
-		#pil_image = Image.open("/home/nadvornik/rawmk/collection/2015-09-12/img_" + str(7780+i) + ".jpg")
-		#pil_image.thumbnail((1000,1000), Image.ANTIALIAS)
-		#im = np.amin(np.array(pil_image), axis = 2)
-		print i
-		im = cv2.imread("testimg17_" + str(i) + ".tif")
-		t = t = os.path.getmtime("testimg17_" + str(i) + ".tif")
-		im = np.amin(im, axis = 2)
-		#im = cv2.multiply(im, 255, dtype=cv2.CV_16UC1)
-
-		nav.proc_frame(im, i, key, t)
-		i = i + 1
-		#if (i == 200):
-		#	break
-
-def test_g():
 	ui.namedWindow('plot')
-	ui.namedWindow('capture')
-	
+	nav = Navigator('capture', 'plot')
 	go = GuideOutBase()
-	guider = Guider(go)
-	err = 0
-	while True:
-		err += random.random() * 2 - 1.01
-		#err += 0.2
-		corr = go.recent_avg()
-		i = int((corr - go.recent_avg(1))  + err)
-		print err, corr * 3, i
-		key=ui.waitKey(500)
-		if (key == 27):
-			break
-#		pil_image = Image.open("testimg2_" + str(i + 377) + ".tif")
-#		pil_image = Image.open("testimg11_" + str(i + 60) + ".tif")
-#		pil_image = Image.open("testimg" + str(i) + ".tif")
-#		pil_image.thumbnail((1000,1000), Image.ANTIALIAS)
-		#im = np.amin(np.array(pil_image), axis = 2)
-		im = cv2.imread("testimg16_" + str(i + 50) + ".tif")
-		im = np.amin(im, axis = 2)
-		im = cv2.multiply(im, 255, dtype=cv2.CV_16UC1)
+	guider = Guider(go, 'capture')
+	cam = Camera_test_g(go)
 
-		guider.proc_frame(im, i, key)
-		if guider.t0 > 0:
-			plt.figure(2)
-			plt.plot(time.time() - guider.t0, err + guider.go.recent_avg(), "ro")
+	runner = Runner(cam, navigator = nav, guider = guider)
+	runner.start()
+	runner.join()
+
+def run_test():
+	ui.namedWindow('capture')
+	ui.namedWindow('plot')
+	
+	cam = Camera_test()
+	nav = Navigator('capture', 'plot')
+
+	runner = Runner(cam, navigator = nav)
+	runner.start()
+	runner.join()
+
+def run_test_2():
+	ui.namedWindow('capture_gphoto')
+	ui.namedWindow('plot_gphoto')
+	ui.namedWindow('capture_v4l')
+	ui.namedWindow('plot_v4l')
+	
+	cam1 = Camera_test()
+	nav1 = Navigator('capture_gphoto', 'plot_gphoto')
+
+	nav = Navigator('capture_v4l', 'plot_v4l')
+	go = GuideOutBase()
+	guider = Guider(go, 'capture_v4l')
+	cam = Camera_test_g(go)
+
+	runner = Runner(cam1, navigator = nav1)
+	runner.start()
+	
+	runner2 = Runner(cam, navigator = nav, guider = guider)
+	runner2.start()
+	
+	
+	runner.join()
+	runner2.join()
+
+def run_test_2_gphoto():
+	
+	cam1 = Camera_gphoto()
+	cam1.prepare()
+	nav1 = Navigator('capture_gphoto', 'plot_gphoto')
+	focuser = Focuser('capture_gphoto')
+
+	nav = Navigator('capture_v4l', 'plot_v4l')
+	go = GuideOutBase()
+	guider = Guider(go, 'capture_v4l')
+	cam = Camera_test_g(go)
+
+	ui.namedWindow('capture_gphoto')
+	ui.namedWindow('plot_gphoto')
+	ui.namedWindow('capture_v4l')
+	ui.namedWindow('plot_v4l')
+
+	runner = Runner(cam1, navigator = nav1, focuser=focuser)
+	runner.start()
+	
+	runner2 = Runner(cam, navigator = nav, guider = guider)
+	runner2.start()
+	
+	
+	runner.join()
+	runner2.join()
 
 
+def run_2():
+	
+	cam1 = Camera_gphoto()
+	cam1.prepare()
+	nav1 = Navigator('capture_gphoto', 'plot_gphoto')
+	focuser = Focuser('capture_gphoto')
+
+	nav = Navigator('capture_v4l', 'plot_v4l')
+	go = GuideOut()
+	guider = Guider(go, 'capture_v4l')
+	cam = Camera("/dev/video1")
+	cam.prepare(1280, 960)
+
+	ui.namedWindow('capture_gphoto')
+	ui.namedWindow('plot_gphoto')
+	ui.namedWindow('capture_v4l')
+	ui.namedWindow('plot_v4l')
+
+	runner = Runner(cam1, navigator = nav1, focuser=focuser)
+	runner.start()
+	
+	runner2 = Runner(cam, navigator = nav, guider = guider)
+	runner2.start()
+	
+	
+	runner.join()
+	runner2.join()
 
 
 
@@ -913,21 +908,14 @@ if __name__ == "__main__":
     #run_v4l2_g()
     #run_v4l2()
     with ui:
-    	test_g()
     	#run_gphoto()
+    	#run_test_2()
+    	#run_test_2_gphoto()
     	#run_v4l2_g()
+    	run_2()
     profiler.print_stats()
 
 
-#pil_image = Image.open("img_4316.jpg")
-#cmd = astrometry_start(pil_image)
-
-#while cmd.poll() is None:
-#	sleep(1)
-
-#astrometry_finish(cmd)
-
-#print cmd.poll
 
 
 
