@@ -16,6 +16,7 @@ import bisect
 import subprocess
 
 from am import Solver, Plotter
+from polar import Polar
 
 import sys
 import io
@@ -309,6 +310,10 @@ class Navigator:
 		self.ii = 0
 		self.ui_capture = ui_capture
 		self.ui_plot = ui_plot
+		self.polar = Polar()
+		self.polar_mode = 1
+		self.polar_show = False
+		self.index_sources = []
 
 	def proc_frame(self,im, i, t = None):
 	
@@ -339,7 +344,13 @@ class Navigator:
 				for p in self.stack.get_xy():
 					cv2.circle(nm, (int(p[1]), int(p[0])), 13, (255), 1)
 		
-				ui.imshow(self.ui_capture, self.plotter.plot(nm, self.plotter_off))
+				extra = []
+				if self.polar_show:
+					transf_index = self.polar.transform_ra_dec_list(self.index_sources)
+					extra = [ (ti[0], ti[1], "") for ti in transf_index ]
+					print "extra: ", extra
+					
+				ui.imshow(self.ui_capture, self.plotter.plot(nm, self.plotter_off, extra = extra))
 			else:
 				ui.imshow(self.ui_capture, normalize(med))
 		if (self.dispmode == 4):
@@ -354,9 +365,16 @@ class Navigator:
 			
 				self.dark.add(darkframe(self.solved_im, self.filt_im, self.solver.ind_sources))
 				
+				self.index_sources = self.solver.ind_radec
+				print "self.solver.ind_radec", self.solver.ind_radec
 				#self.solver.wcs.write_to("log_%d.wcs" % self.ii)
 				#subprocess.call(['touch', '-r', "testimg17_" + str(i) + ".tif", "log_%d.wcs" % self.ii])
-				
+				if self.polar_mode == 1:
+					self.polar.add_tan(self.solver.wcs, self.solver_time)
+					if self.polar.compute()[0]:
+						self.polar_show = True
+						ui.imshow(self.ui_plot + 'polar', self.polar.plot())
+					
 				self.ii += 1
 				self.plotter = Plotter(self.solver.wcs)
 				plot = self.plotter.plot_viewfinder(normalize(med), 13)
@@ -372,6 +390,7 @@ class Navigator:
 			xy = self.stack.get_xy()
 			print "len", len(xy)
 			if len(xy) > 4:
+				self.solver_time = t
 				self.solved_im = im
 				self.filt_im = self.stack.filt_img
 				self.solver = Solver(sources_list = xy, field_w = im.shape[1], field_h = im.shape[0], ra = self.ra, dec = self.dec, field_deg = self.field_deg)
@@ -397,6 +416,11 @@ class Navigator:
 			self.dispmode = 4
 		if cmd == 'save':
 			cv2.imwrite(self.ui_capture + str(int(time.time())) + ".tif", self.stack.get())
+
+		if cmd == 'polar-reset':
+			self.polar = Polar()
+			self.polar_mode = 1
+			self.polar_show = False
 
 def fit_line(xylist):
 	a = np.array(xylist)
@@ -625,11 +649,20 @@ class Focuser:
 		self.stack = Stack()
 		self.dark = Median(10)
 		self.ui_capture = ui_capture
+		self.dispmode = 3
 
 
 	def cmd(self, cmd):
-		if cmd == 'd':
+		if cmd == 'dark':
 			self.dark.add(self.im)
+		if cmd == '1':
+			self.dispmode = 1
+		if cmd == '2':
+			self.dispmode = 2
+		if cmd == '3':
+			self.dispmode = 3
+		if cmd == '4':
+			self.dispmode = 4
 			
 	def proc_frame(self, im, i):
 		self.im = im
@@ -643,18 +676,25 @@ class Focuser:
 
 
 		self.stack.add_simple(im_sub)
-		med = self.stack.get()
-		med = normalize(med)
 	
-		mask = cv2.compare(med, 128, cv2.CMP_GE)
+		if (self.dispmode == 1):
+			ui.imshow(self.ui_capture, normalize(im))
+		if (self.dispmode == 2):
+			ui.imshow(self.ui_capture, normalize(im_sub))
+		if (self.dispmode == 3):
+			ui.imshow(self.ui_capture, normalize(self.stack.get()))
+		if (self.dispmode == 4):
+			med = self.stack.get()
+			med = normalize(med)
 	
-		print "Nonzero size: ", cv2.countNonZero(mask)
+			mask = cv2.compare(med, 128, cv2.CMP_GE)
 	
-		rgb = cv2.cvtColor(med,cv2.COLOR_GRAY2RGB)
+			print "Nonzero size: ", cv2.countNonZero(mask)
 	
-		rgb[:,:, 1] = cv2.bitwise_and(med, cv2.bitwise_not(mask))
+			rgb = cv2.cvtColor(med,cv2.COLOR_GRAY2RGB)
 	
-		ui.imshow(self.ui_capture, rgb)
+			rgb[:,:, 1] = cv2.bitwise_and(med, cv2.bitwise_not(mask))
+			ui.imshow(self.ui_capture, rgb)
 
 class Runner(threading.Thread):
 	def __init__(self, camera, navigator = None, guider = None, focuser = None):
@@ -729,8 +769,8 @@ class Camera_test:
 	def capture(self):
 		time.sleep(0.5)
 		print self.i
-		im = cv2.imread("testimg17_" + str(self.i) + ".tif")
-		t = t = os.path.getmtime("testimg17_" + str(self.i) + ".tif")
+		im = cv2.imread("testimg16_" + str(self.i) + ".tif")
+		t = os.path.getmtime("testimg16_" + str(self.i) + ".tif")
 		self.i += 1
 		return im
 
@@ -867,6 +907,8 @@ def run_test_2_gphoto():
 
 
 def run_2():
+	cam = Camera("/dev/video1")
+	cam.prepare(1280, 960)
 	
 	cam1 = Camera_gphoto()
 	cam1.prepare()
@@ -876,8 +918,6 @@ def run_2():
 	nav = Navigator('capture_v4l', 'plot_v4l')
 	go = GuideOut()
 	guider = Guider(go, 'capture_v4l')
-	cam = Camera("/dev/video1")
-	cam.prepare(1280, 960)
 
 	ui.namedWindow('capture_gphoto')
 	ui.namedWindow('plot_gphoto')
@@ -909,10 +949,10 @@ if __name__ == "__main__":
     #run_v4l2()
     with ui:
     	#run_gphoto()
-    	#run_test_2()
+    	run_test_2()
     	#run_test_2_gphoto()
     	#run_v4l2_g()
-    	run_2()
+    	#run_2()
     profiler.print_stats()
 
 

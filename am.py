@@ -3,6 +3,7 @@ import numpy as np
 
 import os
 import subprocess
+import signal
 
 import pyfits
 from astrometry.util.util import Tan
@@ -62,7 +63,7 @@ class Solver(threading.Thread):
 		else:
 			cmd_s = cmd_s + [tmp_dir + "/field.tif"]
 
-		self.cmd = subprocess.Popen(cmd_s)
+		self.cmd = subprocess.Popen(cmd_s, preexec_fn=os.setpgrp)
 		self.cmd.wait()
 
 		if not os.path.exists(tmp_dir + "/field.solved"):
@@ -80,15 +81,19 @@ class Solver(threading.Thread):
 		ind = pyfits.open(tmp_dir + '/field-indx.xyls')
 		tbdata = ind[1].data
 		self.ind_sources = []
+		self.ind_radec = []
 		for l in tbdata:
 			x = np.clip(int(l['X']), 0, self.field_w - 1)
 			y = np.clip(int(l['Y']), 0, self.field_h - 1)
 			self.ind_sources.append((x,y))
+			self.ind_radec.append(self.wcs.pixelxy2radec(l['X'], l['Y']))
 		shutil.rmtree(tmp_dir)
 
 
 	def terminate(self, wait = True):
 		if self.cmd is not None:
+			pgid = os.getpgid(self.cmd.pid)
+    			os.killpg(pgid, signal.SIGTERM)
 			self.cmd.terminate()
 		if (wait):
 			self.join()
@@ -98,7 +103,7 @@ class Plotter:
 	def __init__(self, wcs):
 		self.wcs = wcs
 
-	def plot(self, img = None, off = [0., 0.], extra = []):
+	def plot(self, img = None, off = [0., 0.], extra = [], grid = True):
 		tmp_dir = tempfile.mkdtemp()
 		#self.wcs.write_to('off1_field.wcs')
 		
@@ -128,9 +133,10 @@ class Plotter:
 		plot.plot('fill')
 
 		plot.color = 'gray'
-		grid_step_ra = float(10 ** round (np.log10(self.wcs.pixel_scale() /3600 / (0.01 + math.cos(math.radians(dec2)))) + 2))
-		grid_step_dec = float(10 ** round (np.log10(self.wcs.pixel_scale() /3600) + 2))
-		plot.plot_grid(grid_step_ra, grid_step_dec, grid_step_ra * 2.0, grid_step_dec * 2.0)
+		if grid:
+			grid_step_ra = float(10 ** round (np.log10(self.wcs.pixel_scale() /3600 / (0.01 + math.cos(math.radians(dec2)))) + 2))
+			grid_step_dec = float(10 ** round (np.log10(self.wcs.pixel_scale() /3600) + 2))
+			plot.plot_grid(grid_step_ra, grid_step_dec, grid_step_ra * 2.0, grid_step_dec * 2.0)
 
 		ann = plot.annotations
 		ann.NGC = True
