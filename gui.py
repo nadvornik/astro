@@ -39,6 +39,7 @@ class MyGUI_CV2(threading.Thread):
 		ord('k') : 'down',
 		
 		ord('p') : 'polar-reset',
+		ord('o') : 'polar-align',
 		
 		ord('s') : 'save',
 		}

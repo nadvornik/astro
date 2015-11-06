@@ -312,7 +312,7 @@ class Navigator:
 		self.ui_plot = ui_plot
 		self.polar = Polar()
 		self.polar_mode = 1
-		self.polar_show = False
+		self.polar_solved = False
 		self.index_sources = []
 
 	def proc_frame(self,im, i, t = None):
@@ -345,7 +345,7 @@ class Navigator:
 					cv2.circle(nm, (int(p[1]), int(p[0])), 13, (255), 1)
 		
 				extra = []
-				if self.polar_show:
+				if self.polar_solved:
 					transf_index = self.polar.transform_ra_dec_list(self.index_sources)
 					extra = [ (ti[0], ti[1], "") for ti in transf_index ]
 					print "extra: ", extra
@@ -372,8 +372,11 @@ class Navigator:
 				if self.polar_mode == 1:
 					self.polar.add_tan(self.solver.wcs, self.solver_time)
 					if self.polar.compute()[0]:
-						self.polar_show = True
+						self.polar_solved = True
 						ui.imshow(self.ui_plot + 'polar', self.polar.plot())
+				elif self.polar_mode == 2:
+					self.polar.phase2_set_tan(self.solver.wcs)
+					ui.imshow(self.ui_plot + 'polar', self.polar.plot())
 					
 				self.ii += 1
 				self.plotter = Plotter(self.solver.wcs)
@@ -420,7 +423,11 @@ class Navigator:
 		if cmd == 'polar-reset':
 			self.polar = Polar()
 			self.polar_mode = 1
-			self.polar_show = False
+			self.polar_solved = False
+
+		if cmd == 'polar-align' and self.polar_solved:
+			self.polar_mode = 2
+
 
 def fit_line(xylist):
 	a = np.array(xylist)
@@ -752,12 +759,13 @@ class Runner(threading.Thread):
 			#cv2.imwrite("testimg18_" + str(i) + ".tif", im)
 			im = np.amin(im, axis = 2)
 			if mode == 'navigator':
-				self.navigator.proc_frame(im, i)
+				self.navigator.proc_frame(im, i,t=0)
 			if mode == 'guider':
 				self.guider.proc_frame(im, i)
 			if mode == 'focuser':
 				self.focuser.proc_frame(im, i)
 			i += 1
+from PIL import Image;
 
 class Camera_test:
 	def __init__(self):
@@ -767,8 +775,11 @@ class Camera_test:
 		print "camera:", cmd
 	
 	def capture(self):
-		time.sleep(0.5)
+		#time.sleep(0.5)
 		print self.i
+		#pil_image = Image.open("converted/IMG_%04d.jpg" % (146+self.i))
+		#pil_image.thumbnail((1000,1000), Image.ANTIALIAS)
+		#im = np.array(pil_image)
 		im = cv2.imread("testimg16_" + str(self.i) + ".tif")
 		t = os.path.getmtime("testimg16_" + str(self.i) + ".tif")
 		self.i += 1
@@ -949,7 +960,7 @@ if __name__ == "__main__":
     #run_v4l2()
     with ui:
     	#run_gphoto()
-    	run_test_2()
+    	run_test()
     	#run_test_2_gphoto()
     	#run_v4l2_g()
     	#run_2()

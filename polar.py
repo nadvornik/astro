@@ -34,6 +34,7 @@ class Polar:
 	def __init__(self):
 		self.pos = []
 		self.t0 = None
+		self.p2_from = None
 
 	def add(self, ra, dec, roll, t):
 		if self.t0 is None:
@@ -43,7 +44,7 @@ class Polar:
 		print qha.to_euler(), Quaternion([ra, dec, roll]).to_euler(), (qha * Quaternion([ra, dec, roll])).to_euler()
 		self.pos.append(qha * Quaternion([ra, dec, roll]))
 
-	def add_tan(self, tan, t):
+	def tan_to_euler(self, tan):
 		ra, dec = tan.radec_center()
 		cd11, cd12, cd21, cd22 = tan.cd
 		
@@ -55,8 +56,11 @@ class Polar:
 		T = parity * cd11 + cd22
 		A = parity * cd21 - cd12
 		orient = -math.degrees(math.atan2(A, T))
+		return ra, dec, orient
+
+	def add_tan(self, tan, t):
+		ra, dec, orient = self.tan_to_euler(tan)
 		print ra, dec, orient
-		#ra = 300
 		self.add(ra, dec, orient, t)
 		print "added ", t
 
@@ -157,6 +161,28 @@ class Polar:
 		for rd in l:
 			res.append(t.transform_ra_dec(rd))
 		return res
+
+	def phase2_set_ref_pos(self, ra, dec, roll):
+		self.p2_from = Quaternion([ra, dec, roll])
+		self.ref_ra = self.ra
+		self.ref_dec = self.dec
+		
+	def pase2_set_ref_tan(self, tan):
+		ra, dec, orient = self.tan_to_euler(tan)
+		self.phase2_set_ref_pos(ra, dec, orient)
+	
+	def phase2_set_pos(self, ra, dec, roll):
+		if self.p2_from is None:
+			return self.phase2_set_ref_pos(ra, dec, roll)
+			
+		pos = Quaternion([ra, dec, roll])
+		t = pos / self.p2_from
+		self.ra, self.dec = t.transform_ra_dec([self.ref_ra, self.ref_dec])
+	
+	def phase2_set_tan(self, tan):
+		ra, dec, orient = self.tan_to_euler(tan)
+		self.phase2_set_pos(ra, dec, orient)
+
 
 if __name__ == "__main__":
 	
