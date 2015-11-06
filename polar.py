@@ -90,23 +90,36 @@ class Polar:
 	def compute(self):
 		if len(self.pos) < 4:
 			return False, None, None
-	#Quat([ (p[3] - t0) / 3600 / 24 * 360, 0, 0]
 		qa = np.array([p.a for p in self.pos])
 		
-		
+		qamin = np.amin(qa, axis = 0)
+		qamax = np.amax(qa, axis = 0)
+		qarange = qamax - qamin
+		ao = np.argsort(qarange) #axis order, ao[0], ao[1] are computed from ao[2] and ao[3]
 
 		ones = np.ones(len(qa))
 		
-		A = np.column_stack((qa[:,0], qa[:,1]))
-		res2 = np.linalg.lstsq(A, qa[:,2])[0]
-		res3 = np.linalg.lstsq(A, qa[:,3])[0]
-		print res2, res3
+		A = np.column_stack((qa[:,ao[2]], qa[:,ao[3]]))
+		res0 = np.linalg.lstsq(A, qa[:,ao[0]])[0]
+		res1 = np.linalg.lstsq(A, qa[:,ao[1]])[0]
 		
 		#for q in qa:
 		#	print q[0] * res2[0] + q[1] * res2[1] + res2[2]  - q[2] , q[0] * res3[0] + q[1] * res3[1] + res3[2]  - q[3]
-			
-		q1 = Quaternion([1., 0., res2[0], res3[0]], normalize=True)
-		q2 = Quaternion([0., 1., res2[1], res3[1]], normalize=True)
+		qa1 = np.zeros(4)
+		qa1[ao[2]] = 1.
+		qa1[ao[0]] = res0[0]
+		qa1[ao[1]] = res1[0]
+		
+		qa2 = np.zeros(4)
+		qa2[ao[3]] = 1.
+		qa2[ao[0]] = res0[1]
+		qa2[ao[1]] = res1[1]
+		
+		#q1 = Quaternion([1., 0., res2[0], res3[0]], normalize=True)
+		#q2 = Quaternion([0., 1., res2[1], res3[1]], normalize=True)
+		
+		q1 = Quaternion(qa1, normalize=True)
+		q2 = Quaternion(qa2, normalize=True)
 		
 		c = q2 / q1
 
