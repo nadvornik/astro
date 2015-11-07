@@ -13,61 +13,72 @@ from cmd import cmdQueue
 
 class Camera_gphoto:
 
-	def set_config_choice(self, name, num):
+	def get_config_value(self, name):
 		config = gp.check_result(gp.gp_camera_get_config(self.camera, self.context))
 		OK, widget = gp.gp_widget_get_child_by_name(config, name)
 		if OK >= gp.GP_OK:
 			# set value
-			value = gp.check_result(gp.gp_widget_get_choice(widget, num))
-			print name, value
-			gp.check_result(gp.gp_widget_set_value(widget, value))
-		# set config
-		gp.check_result(gp.gp_camera_set_config(self.camera, config, self.context))
+			value = gp.check_result(gp.gp_widget_get_value(widget))
+			print >> sys.stderr,name, value
+			return value
+
+	def set_config_choice(self, name, num):
+		for t in range(0, 20):
+			try:
+				config = gp.check_result(gp.gp_camera_get_config(self.camera, self.context))
+				OK, widget = gp.gp_widget_get_child_by_name(config, name)
+				if OK >= gp.GP_OK:
+					# set value
+					value = gp.check_result(gp.gp_widget_get_choice(widget, num))
+					print >> sys.stderr,name, value
+					gp.check_result(gp.gp_widget_set_value(widget, value))
+				# set config
+				gp.check_result(gp.gp_camera_set_config(self.camera, config, self.context))
+				break
+			except gp.GPhoto2Error as ex:
+				print ex.code
+				time.sleep(0.1)
+				continue
 
 	def set_config_value(self, name, value):
-		config = gp.check_result(gp.gp_camera_get_config(self.camera, self.context))
-		OK, widget = gp.gp_widget_get_child_by_name(config, name)
-		if OK >= gp.GP_OK:
-			# set value
-			print name, value
-			gp.check_result(gp.gp_widget_set_value(widget, value))
-		# set config
-		gp.check_result(gp.gp_camera_set_config(self.camera, config, self.context))
-	
+		for t in range(0, 20):
+			try:
+				config = gp.check_result(gp.gp_camera_get_config(self.camera, self.context))
+				OK, widget = gp.gp_widget_get_child_by_name(config, name)
+				if OK >= gp.GP_OK:
+					# set value
+					print >> sys.stderr,name, value
+					gp.check_result(gp.gp_widget_set_value(widget, value))
+				# set config
+				gp.check_result(gp.gp_camera_set_config(self.camera, config, self.context))
+				break
+			except gp.GPhoto2Error as ex:
+				print ex.code
+				time.sleep(0.1)
+				continue
 	
 	def capture_bulb(self, sec, card = False):
-		if self.camera_file is not None:
-			file_data = gp.check_result(gp.gp_file_get_data_and_size(self.camera_file))
-			self.camera_file = None
-		while True:
-			try:
-				if card:
-					self.set_config_choice('capturetarget', 1) #card
-					self.set_config_choice('imageformat', 24) #RAW 
-				else:
-					self.set_config_choice('capturetarget', 0) #mem
-					self.set_config_choice('imageformat', 1) #Large Normal JPEG
+		if card:
+			self.set_config_choice('capturetarget', 1) #card
+			#self.set_config_choice('imageformat', 24) #RAW 
+			self.set_config_choice('imageformat', 7) #RAW + Large Normal JPEG 
 			
-				break
-			except gp.GPhoto2Error as ex:
-            			if ex.code == gp.GP_ERROR_CAMERA_BUSY:
-                			time.sleep(0.1)
-               				continue
-            			# some other error we can't handle here
-            			raise
-
-		self.set_config_value('shutterspeed', 'bulb')
-		time.sleep(.1)
+		else:
+			self.set_config_choice('capturetarget', 0) #mem
+			self.set_config_choice('imageformat', 1) #Large Normal JPEG
+		
 		self.set_config_value('eosremoterelease', 'Immediate')
 		time.sleep(sec)
+		self.set_config_value('eosremoterelease', 'Release Full')
 		while True:
-			try:
-				file_path = gp.check_result(gp.gp_camera_capture(self.camera, gp.GP_CAPTURE_IMAGE, self.context))
-				break
-			except gp.GPhoto2Error as ex:
-				if ex.code == gp.GP_ERROR_CAMERA_BUSY:
-					continue
-				raise
+			print >> sys.stderr, "wait for event"
+			e, file_path =  gp.check_result(gp.gp_camera_wait_for_event(self.camera, 1000,self.context))
+			if e == gp.GP_EVENT_FILE_ADDED:
+				print >> sys.stderr, "filepath:", file_path.folder, file_path.name
+				filename, file_extension = os.path.splitext(file_path.name)
+				if file_extension == ".jpg" or file_extension == ".JPG":
+					break
+				
 		
 		target = os.path.join('/tmp', file_path.name)
 		
@@ -87,11 +98,10 @@ class Camera_gphoto:
 				raise
 
 	
-		self.set_config_choice('capturetarget', 0) #mem
 		time.sleep(.1)
 		self.set_config_choice('output', 1)
 		self.set_config_choice('output', 0)
-		time.sleep(2)
+		time.sleep(12)
 		
 	
 	
@@ -100,23 +110,30 @@ class Camera_gphoto:
 		subprocess.call(['killall', 'gvfs-gphoto2-volume-monitor'])
 	
 		logging.basicConfig(
-			format='%(levelname)s: %(name)s: %(message)s', level=logging.INFO)
+			format='%(levelname)s: %(name)s: %(message)s', level=logging.ERROR)
 		gp.check_result(gp.use_python_logging())
 		self.context = gp.gp_context_new()
-		self.camera = gp.check_result(gp.gp_camera_new())
-		gp.check_result(gp.gp_camera_init(self.camera, self.context))
+		while True:
+			try:
+				self.camera = gp.check_result(gp.gp_camera_new())
+				gp.check_result(gp.gp_camera_init(self.camera, self.context))
+				break
+			except gp.GPhoto2Error as ex:
+				print "gphoto2 camera is not ready"
+				time.sleep(2)
+				continue
+		
 		# required configuration will depend on camera type!
 		self.set_config_choice('capturesizeclass', 2)
 	
 		self.set_config_choice('output', 1)
 		self.set_config_choice('output', 0)
-		time.sleep(2)
 	
 		self.zoom = 1
 		self.x = 3000
 		self.y = 2000
 		self.set_config_value('eoszoomposition', "%d,%d" % (self.x, self.y))
-		self.camera_file = None
+		time.sleep(3)
 	
 	def cmd(self, cmd, x = None, y = None):
 		if cmd == "f-3":
@@ -132,9 +149,6 @@ class Camera_gphoto:
 		if cmd == "f+3":
 			self.set_config_choice('manualfocusdrive', 6)
 		if cmd == "z1":
-			if self.camera_file is not None:
-				file_data = gp.check_result(gp.gp_file_get_data_and_size(self.camera_file))
-				self.camera_file = None
 
 			zoom = 5
 						
@@ -149,9 +163,6 @@ class Camera_gphoto:
 			time.sleep(12)
 
 		if cmd == "z0":
-			if self.camera_file is not None:
-				file_data = gp.check_result(gp.gp_file_get_data_and_size(self.camera_file))
-				self.camera_file = None
 			zoom = 1
 			self.set_config_value('eoszoom', '1')
 			time.sleep(.1)
@@ -177,35 +188,24 @@ class Camera_gphoto:
 			self.capture_bulb(3)
 		
 		if cmd == 'capture':
-			self.capture_bulb(300, card=True)
+			self.capture_bulb(5, card=True)
 			cmdQueue.put('capture-finished')
 		
 	
 	def capture(self):
 		while True:
 			try:
-				if self.camera_file is None:
-					for i in range(0,20):
-						try:
-							self.camera_file = gp.check_result(gp.gp_camera_capture_preview(self.camera, self.context))
-							break
-						except gp.GPhoto2Error as ex:
-							if i < 19:
-								continue
-						raise
-						
-				file_data = gp.check_result(gp.gp_file_get_data_and_size(self.camera_file))
-	
-	
 				for i in range(0,20):
 					try:
-						self.camera_file = gp.check_result(gp.gp_camera_capture_preview(self.camera, self.context))
+						camera_file = gp.check_result(gp.gp_camera_capture_preview(self.camera, self.context))
 						break
 					except gp.GPhoto2Error as ex:
 						if i < 19:
 							continue
 					raise
-
+						
+				file_data = gp.check_result(gp.gp_file_get_data_and_size(camera_file))
+	
 				pil_image = Image.open(io.BytesIO(file_data))
 				#pil_image.save("testimg2_" + str(i) + ".tif")
 				im = np.array(pil_image)
