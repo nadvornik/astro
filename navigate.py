@@ -57,6 +57,26 @@ class Median:
 		for i in range(a.shape[1]):
 			a[:, i, :] = cv2.sort(a[:, i, :], cv2.SORT_DESCENDING | cv2.SORT_EVERY_COLUMN)
 		self.res = np.array(a[a.shape[0] / 2, :, :])
+		#a = np.median(self.list, axis = 0)
+		#self.res = np.empty_like(self.list[0])
+		#self.res[:,:] = a
+
+	def add_masked(self, im, pts):
+		mask = np.zeros_like(im, dtype=np.uint8)
+	
+		for p in pts:
+			cv2.circle(mask, p, 15, (1), -1)
+
+		#dtype=cv2.CV_8UC1
+		#if np.iinfo(im.dtype).max > 255:
+		#	dtype=cv2.CV_16UC1
+
+		#filt_im = cv2.add(filt_im, 0, mask=mask, dtype=dtype) #convert dtype with saturate
+		#im = cv2.subtract(im, filt_im / 2, dst=im, mask=mask)
+		nonzero = mask > 0
+		im[nonzero] = self.res[nonzero]
+		self.add(im)
+		#ui.imshow("dark", normalize(mask * 10 + im))
 
 
 	def get(self):
@@ -69,19 +89,6 @@ class Median:
 		self.i = 0
 		self.list = []
 
-def darkframe(im, filt_im, pts):
-	mask = np.zeros_like(im, dtype=np.uint8)
-	
-	for p in pts:
-		cv2.circle(mask, p, 20, (255), -1)
-
-	dtype=cv2.CV_8UC1
-	if np.iinfo(im.dtype).max > 255:
-		dtype=cv2.CV_16UC1
-
-	filt_im = cv2.add(filt_im, 0, mask=mask, dtype=dtype) #convert dtype with saturate
-	#im = cv2.subtract(im, filt_im / 2, dst=im, mask=mask)
-	return im
 
 
 
@@ -321,15 +328,18 @@ class Navigator:
 		
 		if t == None:
 			t = time.time()
-		if (self.dark.len() > 0):
+		if (self.dark.len() > 2):
 			im_sub = cv2.subtract(im, self.dark.get())
 			minVal, maxVal, minLoc, maxLoc = cv2.minMaxLoc(im_sub)
 			im_sub = cv2.add(im_sub, -minVal)
 		else:
 			im_sub = im
+		
+		if (self.dark.len() == 0):
+			self.dark.add(im)
 	
 		off = self.stack.add(im_sub)
-		med = self.stack.get()
+		filtered = self.stack.get()
 		
 		self.solver_off += off
 		self.plotter_off += off
@@ -340,7 +350,7 @@ class Navigator:
 			ui.imshow(self.ui_capture, normalize(im_sub))
 		if (self.dispmode == 3):
 			if self.plotter is not None:
-				nm = normalize(med)
+				nm = normalize(filtered)
 				for p in self.stack.get_xy():
 					cv2.circle(nm, (int(p[1]), int(p[0])), 13, (255), 1)
 		
@@ -352,7 +362,7 @@ class Navigator:
 					
 				ui.imshow(self.ui_capture, self.plotter.plot(nm, self.plotter_off, extra = extra))
 			else:
-				ui.imshow(self.ui_capture, normalize(med))
+				ui.imshow(self.ui_capture, normalize(filtered))
 		if (self.dispmode == 4):
 			ui.imshow(self.ui_capture, normalize(self.stack.pts))
 	
@@ -363,7 +373,7 @@ class Navigator:
 				self.dec = self.solver.dec
 				self.field_deg = self.solver.field_deg
 			
-				self.dark.add(darkframe(self.solved_im, self.filt_im, self.solver.ind_sources))
+				self.dark.add_masked(self.solved_im, self.solver.ind_sources)
 				
 				self.index_sources = self.solver.ind_radec
 				print "self.solver.ind_radec", self.solver.ind_radec
@@ -380,7 +390,7 @@ class Navigator:
 					
 				self.ii += 1
 				self.plotter = Plotter(self.solver.wcs)
-				plot = self.plotter.plot_viewfinder(normalize(med), 13)
+				plot = self.plotter.plot_viewfinder(normalize(filtered), 13)
 				ui.imshow(self.ui_plot, plot)
 				self.plotter_off = self.solver_off
 			else:
@@ -397,7 +407,7 @@ class Navigator:
 				self.solved_im = im
 				self.filt_im = self.stack.filt_img
 				self.solver = Solver(sources_list = xy, field_w = im.shape[1], field_h = im.shape[0], ra = self.ra, dec = self.dec, field_deg = self.field_deg)
-				#self.solver = Solver(sources_img = med, field_w = im.shape[1], field_h = im.shape[0], ra = self.ra, dec = self.dec, field_deg = self.field_deg)
+				#self.solver = Solver(sources_img = filtered, field_w = im.shape[1], field_h = im.shape[0], ra = self.ra, dec = self.dec, field_deg = self.field_deg)
 				self.solver.start()
 				self.solver_off = np.array([0.0, 0.0])
 		
@@ -691,16 +701,16 @@ class Focuser:
 		if (self.dispmode == 3):
 			ui.imshow(self.ui_capture, normalize(self.stack.get()))
 		if (self.dispmode == 4):
-			med = self.stack.get()
-			med = normalize(med)
+			filtered = self.stack.get()
+			filtered = normalize(filtered)
 	
-			mask = cv2.compare(med, 128, cv2.CMP_GE)
+			mask = cv2.compare(filtered, 128, cv2.CMP_GE)
 	
 			print "Nonzero size: ", cv2.countNonZero(mask)
 	
-			rgb = cv2.cvtColor(med,cv2.COLOR_GRAY2RGB)
+			rgb = cv2.cvtColor(filtered,cv2.COLOR_GRAY2RGB)
 	
-			rgb[:,:, 1] = cv2.bitwise_and(med, cv2.bitwise_not(mask))
+			rgb[:,:, 1] = cv2.bitwise_and(filtered, cv2.bitwise_not(mask))
 			ui.imshow(self.ui_capture, rgb)
 
 class Runner(threading.Thread):
@@ -712,6 +722,17 @@ class Runner(threading.Thread):
 		self.focuser = focuser
 		
 	def run(self):
+		profiler = LineProfiler()
+		profiler.add_function(Navigator.proc_frame)
+		profiler.add_function(Stack.add)
+		profiler.add_function(Median.add)
+		profiler.add_function(find_max)
+		profiler.add_function(Plotter.plot)
+		profiler.add_function(Plotter.plot_viewfinder)
+		
+		profiler.enable_by_count()
+		
+		
 		cmdQueue.register(self)
 		
 		i = 0
@@ -726,6 +747,8 @@ class Runner(threading.Thread):
 				if cmd is None:
 					break
 				if cmd == 'exit':
+					profiler.print_stats()
+
 					return
 				elif cmd == 'navigator' and self.navigator is not None:
 					mode = 'navigator'
@@ -759,7 +782,7 @@ class Runner(threading.Thread):
 			#cv2.imwrite("testimg18_" + str(i) + ".tif", im)
 			im = np.amin(im, axis = 2)
 			if mode == 'navigator':
-				self.navigator.proc_frame(im, i,t=0)
+				self.navigator.proc_frame(im, i)
 			if mode == 'guider':
 				self.guider.proc_frame(im, i)
 			if mode == 'focuser':
@@ -780,8 +803,8 @@ class Camera_test:
 		#pil_image = Image.open("converted/IMG_%04d.jpg" % (146+self.i))
 		#pil_image.thumbnail((1000,1000), Image.ANTIALIAS)
 		#im = np.array(pil_image)
-		im = cv2.imread("testimg16_" + str(self.i) + ".tif")
-		t = os.path.getmtime("testimg16_" + str(self.i) + ".tif")
+		im = cv2.imread("testimg17_" + str(self.i) + ".tif")
+		t = os.path.getmtime("testimg17_" + str(self.i) + ".tif")
 		self.i += 1
 		return im
 
@@ -950,21 +973,15 @@ def run_2():
 if __name__ == "__main__":
 #    sys.exit(run_gphoto())
     #sys.exit(test_g())
-    profiler = LineProfiler()
-    profiler.add_function(Navigator.proc_frame)
-    profiler.add_function(Stack.add)
-    profiler.add_function(find_max)
-    profiler.enable_by_count()
 
     #run_v4l2_g()
     #run_v4l2()
     with ui:
-    	#run_gphoto()
-    	run_test()
+    	run_gphoto()
+    	#run_test()
     	#run_test_2_gphoto()
     	#run_v4l2_g()
     	#run_2()
-    profiler.print_stats()
 
 
 

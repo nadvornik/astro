@@ -35,13 +35,16 @@ class Polar:
 		self.pos = []
 		self.t0 = None
 		self.p2_from = None
-
+		self.prec_q = precession()
+		self.prec_ra, self.prec_dec = self.prec_q.inv().transform_ra_dec([0, 90])
+		
 	def add(self, ra, dec, roll, t):
 		if self.t0 is None:
 			self.t0 = t
 		ha = (t - self.t0) / 240.0
-		qha = Quaternion([-ha, 0, 0])
-		print qha.to_euler(), Quaternion([ra, dec, roll]).to_euler(), (qha * Quaternion([ra, dec, roll])).to_euler()
+		qha = self.prec_q * Quaternion([-ha, 0, 0]) / self.prec_q
+		print "qha", quat_axis_to_ra_dec(qha), "prec", self.prec_ra, self.prec_dec 
+		print Quaternion([ra, dec, roll]).to_euler(), (qha * Quaternion([ra, dec, roll])).to_euler()
 		self.pos.append(qha * Quaternion([ra, dec, roll]))
 
 	def tan_to_euler(self, tan):
@@ -149,9 +152,7 @@ class Polar:
 		extra = []
 		extra.append((self.ra, self.dec, "A"))
 		
-		qp = precession()
-		ra, dec = qp.inv().transform_ra_dec([0, 90])
-		extra.append((ra, dec, "P"))
+		extra.append((self.prec_ra, self.prec_dec, "P"))
 		
 		ra = 0.0 #self.ra
 		dec = 90.0 #self.dec
@@ -168,7 +169,7 @@ class Polar:
 		return plot.plot(extra=extra, grid = False)
 
 	def transform_ra_dec_list(self, l):
-		t = Quaternion.from_ra_dec_pair([self.ra, self.dec], [0, 90])
+		t = Quaternion.from_ra_dec_pair([self.ra, self.dec], [self.prec_ra, self.prec_dec])
 		print "transform_ra_dec_list", t.transform_ra_dec([self.ra, self.dec])
 		res = []
 		for rd in l:
