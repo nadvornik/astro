@@ -2,6 +2,8 @@
 
 import webserver
 import cv2
+import numpy as np
+import io
 from PIL import Image
 from cmd import cmdQueue
 import Queue
@@ -56,6 +58,11 @@ class MyGUI_CV2(threading.Thread):
 	
 	def imshow(self, name, img):
 		self.queue.put((name, img))
+
+	def imshow_jpg(self, name, jpg):
+		pil_image = Image.open(io.BytesIO(jpg))
+		img = np.array(pil_image)
+		self.queue.put((name, img))
 	
 	
 	def run(self):
@@ -69,7 +76,7 @@ class MyGUI_CV2(threading.Thread):
 			except Queue.Empty:
 				continue
 			if img is None:
-				cv2.namedWindow(name)
+				cv2.namedWindow(name, cv2.WINDOW_NORMAL)
 			else:
 				cv2.imshow(name, img)
 		
@@ -93,6 +100,9 @@ class MyGUI_Web:
 		pil_image = Image.fromarray(img)
 		webserver.mjpeglist.update(name, pil_image)
 
+	def imshow_jpg(self, name, jpg):
+		webserver.mjpeglist.update(name,jpg)
+	
 	def __enter__(self):
 		pass
 

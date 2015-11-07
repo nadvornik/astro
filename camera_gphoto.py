@@ -9,6 +9,7 @@ import io
 from PIL import Image
 import numpy as np
 
+from gui import ui
 from cmd import cmdQueue
 
 class Camera_gphoto:
@@ -87,7 +88,8 @@ class Camera_gphoto:
 			n -= 1
 			try:
 				camera_file = gp.check_result(gp.gp_camera_file_get(self.camera, file_path.folder, file_path.name, gp.GP_FILE_TYPE_NORMAL, self.context))
-				gp.check_result(gp.gp_file_save(camera_file, target))
+				file_data = gp.check_result(gp.gp_file_get_data_and_size(camera_file))
+				ui.imshow_jpg("full_res", file_data);
 				break
 			except gp.GPhoto2Error as ex:
 				if ex.code == gp.GP_ERROR_CAMERA_BUSY:

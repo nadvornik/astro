@@ -843,6 +843,7 @@ def run_gphoto():
 	cam.prepare()
 	ui.namedWindow('capture')
 	ui.namedWindow('plot')
+	ui.namedWindow('full_res')
 	nav = Navigator('capture', 'plot')
 	focuser = Focuser('capture')
 
