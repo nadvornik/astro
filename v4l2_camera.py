@@ -60,8 +60,6 @@ class Camera:
 	self.fmt = format
 
 
-	self.control(V4L2_CID_EXPOSURE_AUTO, V4L2_EXPOSURE_MANUAL)
-	self.control(V4L2_CID_EXPOSURE_ABSOLUTE, 500)
 	
         cp = v4l2_capability()
         fcntl.ioctl(self.vd, VIDIOC_QUERYCAP, cp)
@@ -82,6 +80,8 @@ class Camera:
         	fmt.fmt.pix.pixelformat = format
         fcntl.ioctl(self.vd, VIDIOC_S_FMT, fmt)
         time.sleep(0.01)
+	self.control(V4L2_CID_EXPOSURE_AUTO, V4L2_EXPOSURE_APERTURE_PRIORITY)
+	#self.control(V4L2_CID_EXPOSURE_ABSOLUTE, 50)
 
         self.width = width
 
@@ -126,6 +126,8 @@ class Camera:
                 continue
 
 	if time.time() - t0 >= max_t:
+		fcntl.ioctl(self.vd, VIDIOC_STREAMOFF, type)
+
 		os.close(self.vd)
 		self.vd = None
 		return False
@@ -139,6 +141,7 @@ class Camera:
 		if self._prepare(width, height, format):
 			break
 		print "camera init failed, retry %d" % i
+		time.sleep(1)
 
 	# longest manual exposure available via uvc driver
 	self.control(V4L2_CID_EXPOSURE_AUTO, V4L2_EXPOSURE_MANUAL)
@@ -217,13 +220,14 @@ class Camera:
         print "camera:", cmd
 
     def __del__(self):
-    	os.close(self.vd)
+	if self.vd is not None:
+		os.close(self.vd)
 
 if __name__ == "__main__":
 	cam = Camera("/dev/video1")
 	cam.prepare(1280, 960)
 
-	while True:
+	for i in range(0,20):
 		img = cam.capture()
 		cv2.imshow('capture', cv2.normalize(img, alpha = 0, beta = 65535, norm_type=cv2.NORM_MINMAX))
 		ch = 0xFF & cv2.waitKey(1)
