@@ -62,21 +62,20 @@ class Median:
 		#self.res[:,:] = a
 
 	def add_masked(self, im, pts):
-		mask = np.zeros_like(im, dtype=np.uint8)
+		mask = np.zeros_like(im)
 	
+		white = np.iinfo(im.dtype).max
 		for p in pts:
-			cv2.circle(mask, p, 15, (1), -1)
+			cv2.circle(mask, p, 20, (white), -1)
 
-		#dtype=cv2.CV_8UC1
-		#if np.iinfo(im.dtype).max > 255:
-		#	dtype=cv2.CV_16UC1
-
-		#filt_im = cv2.add(filt_im, 0, mask=mask, dtype=dtype) #convert dtype with saturate
-		#im = cv2.subtract(im, filt_im / 2, dst=im, mask=mask)
-		nonzero = mask > 0
-		im[nonzero] = self.res[nonzero]
-		self.add(im)
-		#ui.imshow("dark", normalize(mask * 10 + im))
+		mask = cv2.blur(mask, (20, 20))
+		mask = cv2.blur(mask, (20, 20))
+		inv_mask = cv2.bitwise_not(mask)
+		
+		res = cv2.add(cv2.multiply(im, inv_mask, scale = 1.0 / white), cv2.multiply(self.res, mask, scale = 1.0 / white))
+		
+		self.add(res)
+		#ui.imshow("dark", normalize(inv_mask))
 
 
 	def get(self):
@@ -148,7 +147,7 @@ def find_max(img, d, noise = 4, filt = False):
 			ys = y
 		# y, x, flux, certainity: n_sigma
 		ret.append((y + ys, x + xs, img[y, x] + mean + stddev * noise, math.erf((img[y, x] / stddev + noise) / 2**0.5) ** (w * h) ))
-	ret = sorted(ret, key=lambda pt: pt[2], reverse=True)[:50]
+	ret = sorted(ret, key=lambda pt: pt[2], reverse=True)[:40]
 	ret = sorted(ret, key=lambda pt: pt[0])
 	
 	if (filt):
@@ -383,10 +382,12 @@ class Navigator:
 					self.polar.add_tan(self.solver.wcs, self.solver_time)
 					if self.polar.compute()[0]:
 						self.polar_solved = True
-						ui.imshow(self.ui_plot + 'polar', self.polar.plot())
+						ui.imshow(self.ui_plot + 'polar2', self.polar.plot2())
+						#ui.imshow(self.ui_plot + 'polar', self.polar.plot())
 				elif self.polar_mode == 2:
 					self.polar.phase2_set_tan(self.solver.wcs)
-					ui.imshow(self.ui_plot + 'polar', self.polar.plot())
+					#ui.imshow(self.ui_plot + 'polar', self.polar.plot())
+					ui.imshow(self.ui_plot + 'polar2', self.polar.plot2())
 					
 				self.ii += 1
 				self.plotter = Plotter(self.solver.wcs)
@@ -726,6 +727,7 @@ class Runner(threading.Thread):
 		profiler.add_function(Navigator.proc_frame)
 		profiler.add_function(Stack.add)
 		profiler.add_function(Median.add)
+		profiler.add_function(Median.add_masked)
 		profiler.add_function(find_max)
 		profiler.add_function(Plotter.plot)
 		profiler.add_function(Plotter.plot_viewfinder)
@@ -798,13 +800,13 @@ class Camera_test:
 		print "camera:", cmd
 	
 	def capture(self):
-		#time.sleep(0.5)
+		time.sleep(0.5)
 		print self.i
 		#pil_image = Image.open("converted/IMG_%04d.jpg" % (146+self.i))
 		#pil_image.thumbnail((1000,1000), Image.ANTIALIAS)
 		#im = np.array(pil_image)
-		im = cv2.imread("testimg17_" + str(self.i) + ".tif")
-		t = os.path.getmtime("testimg17_" + str(self.i) + ".tif")
+		im = cv2.imread("testimg16_" + str(self.i) + ".tif")
+		t = os.path.getmtime("testimg16_" + str(self.i) + ".tif")
 		self.i += 1
 		return im
 
@@ -978,8 +980,8 @@ if __name__ == "__main__":
     #run_v4l2_g()
     #run_v4l2()
     with ui:
-    	run_gphoto()
-    	#run_test()
+    	#run_gphoto()
+    	run_test()
     	#run_test_2_gphoto()
     	#run_v4l2_g()
     	#run_2()

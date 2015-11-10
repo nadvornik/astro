@@ -13,14 +13,34 @@ from am import Plotter
 
 def quat_axis_to_ra_dec(q):
 	(w,x,y,z) = q.a
-	print x,y,z
+	#print x,y,z
 	ra = math.degrees(math.atan2(y,x))
 	dec = math.degrees(math.atan2(z, (x ** 2 + y ** 2)**0.5))
 	return (ra, dec)
 
+def ra_dec_to_xyz(rd):
+	rd = np.deg2rad(rd)
+	v = [ math.cos(rd[0]) * math.cos(rd[1]), math.sin(rd[0]) * math.cos(rd[1]), math.sin(rd[1]) ]
+	return v
+
+def julian_date(t = None):
+	if t is None:
+		t = time.time()
+	return ( t / 86400.0 ) + 2440587.5;
+
+def celestial_rot(t = None):
+	jd = julian_date(t)
+	jh = (jd + 0.5 - math.floor(jd + 0.5)) * 24
+	jd0 = math.floor(jd + 0.5) - 0.5
+	T = (jd0 - 2451545.0) / 36525
+	S0 = (6.697374558 + 2400.05133691 * T + 0.0000258622 * T ** 2 - 0.0000000017 * T**3) % 24
+	S = S0 + 1.0027379093 * jh
+	rot = S * 15 + 15
+	print "cel time", T, S0, jh, S
+	return rot
+
 def precession():
-	T = (time.time() - time.mktime((2000, 1, 1, 12, 0, 0, 0, 0, 0))) / 3600 / 24 / 36525
-	print T
+	T = (julian_date() - 2451545.0) / 36525
 	e0 = 84381.406
 	a1 = 5038.481507 * T - 1.0790069 * T**2 - 0.00114045 * T**3 + 0.000132851 * T**4 - 0.0000000951 * T**5
 	a2 = e0 - 0.025754 * T + 0.0512623 * T**2 - 0.00772503 * T**3 - 0.000000467 * T**4 + 0.0000003337 * T**5
@@ -43,8 +63,8 @@ class Polar:
 			self.t0 = t
 		ha = (t - self.t0) / 240.0
 		qha = self.prec_q * Quaternion([-ha, 0, 0]) / self.prec_q
-		print "qha", quat_axis_to_ra_dec(qha), "prec", self.prec_ra, self.prec_dec 
-		print Quaternion([ra, dec, roll]).to_euler(), (qha * Quaternion([ra, dec, roll])).to_euler()
+		#print "qha", quat_axis_to_ra_dec(qha), "prec", self.prec_ra, self.prec_dec 
+		#print Quaternion([ra, dec, roll]).to_euler(), (qha * Quaternion([ra, dec, roll])).to_euler()
 		self.pos.append(qha * Quaternion([ra, dec, roll]))
 
 	def tan_to_euler(self, tan):
@@ -91,7 +111,7 @@ class Polar:
 		return ra, dec
 
 	def compute(self):
-		if len(self.pos) < 4:
+		if len(self.pos) < 2:
 			return False, None, None
 		qa = np.array([p.a for p in self.pos])
 		
@@ -118,6 +138,7 @@ class Polar:
 		qa2[ao[0]] = res0[1]
 		qa2[ao[1]] = res1[1]
 		
+		#print ao, qa1, qa2
 		#q1 = Quaternion([1., 0., res2[0], res3[0]], normalize=True)
 		#q2 = Quaternion([0., 1., res2[1], res3[1]], normalize=True)
 		
@@ -136,7 +157,7 @@ class Polar:
 		
 		self.ra = ra
 		self.dec = dec
-		print "rotation center", ra, dec
+		#print "rotation center", ra, dec
 		return True, ra, dec
 
 		
@@ -198,8 +219,82 @@ class Polar:
 		self.phase2_set_pos(ra, dec, orient)
 
 
+	def plot2(self, size = 800, area = 0.1):
+		ha = celestial_rot()
+		qha = Quaternion([ha, 0, 0])
+		
+		img = np.zeros((size, size, 3), dtype=np.uint8)
+		c = size / 2
+		scale = size / area
+		
+		t = Quaternion.from_ra_dec_pair([self.ra, self.dec], [self.prec_ra, self.prec_dec])
+
+		
+		polaris = [37.9529,  89.2642]
+		
+		polaris_target = self.prec_q.transform_ra_dec(polaris)
+		prec = t.transform_ra_dec([0, 90])
+		polaris_real = t.transform_ra_dec(polaris_target)
+
+		polaris_target = qha.transform_ra_dec(polaris_target)
+		prec = qha.transform_ra_dec(prec)
+		polaris_real = qha.transform_ra_dec(polaris_real)
+
+		polaris_target_xyz = ra_dec_to_xyz(polaris_target)
+		polaris_r = (polaris_target_xyz[0] ** 2 + polaris_target_xyz[1] ** 2)**0.5
+		prec_xyz = ra_dec_to_xyz(prec)
+		polaris_real_xyz = ra_dec_to_xyz(polaris_real)
+
+		cv2.circle(img, (c,c), int(polaris_r * scale), (0, 255, 0), 1)
+		for i in range (0, 24):
+			a = np.deg2rad([i * 360.0 / 24.0])
+			sa = math.sin(a)
+			ca = math.cos(a)
+			cv2.line(img, (int(c + sa * polaris_r * scale), int(c + ca * polaris_r * scale)), (int(c + sa * (polaris_r * scale + 8)), int(c + ca * (polaris_r * scale + 8))), (0, 255, 0), 1)
+			
+		cv2.circle(img, (int(c - polaris_target_xyz[0] * scale), int(c + polaris_target_xyz[1] * scale)), 4, (0, 255, 0), 2)
+		
+		cv2.line(img, (0, c), (size, c), (0, 255, 0), 1)
+		cv2.line(img, (c, 0), (c, size), (0, 255, 0), 1)
+		
+		
+		cv2.circle(img, (int(c - prec_xyz[0] * scale), int(c + prec_xyz[1] * scale)), 4, (255, 255, 255), 2)
+		cv2.circle(img, (int(c - polaris_real_xyz[0] * scale), int(c + polaris_real_xyz[1] * scale)), 4, (255, 255, 255), 2)
+		
+		pole_dist = (prec_xyz[0] ** 2 + prec_xyz[1] ** 2) ** 0.5
+		if pole_dist >= area / 2:
+			cv2.putText(img, "%0.1fdeg" % (90 - prec[1]), (int(c - prec_xyz[0] / pole_dist * area / 5 * scale - 50), int(c + prec_xyz[1] / pole_dist * area / 5 * scale)), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
+			cv2.arrowedLine(img, (int(c - prec_xyz[0] / pole_dist * area / 3 * scale), int(c + prec_xyz[1] / pole_dist * area / 3 * scale)), (int(c - prec_xyz[0] / pole_dist * area / 2 * scale), int(c + prec_xyz[1] / pole_dist * area / 2 * scale)), (255, 255, 255), 2)
+
+		return img
+
 if __name__ == "__main__":
 	
+#	import random
+#	import sys
+#	for tra in range(0, 360, 10):
+#		for tdec in range(5, 95, 10):
+#			for troll in range (-170, 170, 10):
+#				q = Quaternion([153, 44,73])
+#				rot = Quaternion([tra, tdec, troll])
+#				p = Polar()
+#				for i in range(0, 20):
+#					q = rot * q
+#					rra, rdec, rroll = q.to_euler()
+#					p.add(rra + random.random() * 2 - 1, rdec + random.random() * 2 - 1, rroll + random.random() * 2 - 1, 0)
+#					#p.add(rra, rdec, rroll, 0)
+#	
+#				print tra, tdec, troll,
+#				res = np.array((p.compute()))[1:3]
+#				ra, dec = quat_axis_to_ra_dec(rot)
+#				
+#				if dec * p.pos[0].to_euler()[1] < 0:
+#					dec = -dec
+#					ra -= 180
+#				if ra < 0.0 :
+#					ra += 360
+#				orig = np.array([ra, dec])
+#				print  np.linalg.norm(res - orig)
 
 	extra = [(0.0, 90.0, "z")]
 
@@ -265,6 +360,7 @@ if __name__ == "__main__":
 		p.add_tan(tan, t)
 	res, ra, dec = p.compute()
 	extra.append((ra, dec, "v4l2"))
+	cv2.imshow("polar", p.plot2())
 	
 	p.transform_ra_dec_list([])
 	
