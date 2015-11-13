@@ -68,8 +68,8 @@ class Median:
 		for p in pts:
 			cv2.circle(mask, p, 20, (white), -1)
 
-		mask = cv2.blur(mask, (20, 20))
-		mask = cv2.blur(mask, (20, 20))
+		mask = cv2.blur(mask, (30, 30))
+		mask = cv2.blur(mask, (30, 30))
 		inv_mask = cv2.bitwise_not(mask)
 		
 		res = cv2.add(cv2.multiply(im, inv_mask, scale = 1.0 / white), cv2.multiply(self.res, mask, scale = 1.0 / white))
@@ -357,7 +357,7 @@ class Navigator:
 				if self.polar_solved:
 					transf_index = self.polar.transform_ra_dec_list(self.index_sources)
 					extra = [ (ti[0], ti[1], "") for ti in transf_index ]
-					print "extra: ", extra
+					#print "extra: ", extra
 					
 				ui.imshow(self.ui_capture, self.plotter.plot(nm, self.plotter_off, extra = extra))
 			else:
@@ -375,7 +375,7 @@ class Navigator:
 				self.dark.add_masked(self.solved_im, self.solver.ind_sources)
 				
 				self.index_sources = self.solver.ind_radec
-				print "self.solver.ind_radec", self.solver.ind_radec
+				#print "self.solver.ind_radec", self.solver.ind_radec
 				#self.solver.wcs.write_to("log_%d.wcs" % self.ii)
 				#subprocess.call(['touch', '-r', "testimg17_" + str(i) + ".tif", "log_%d.wcs" % self.ii])
 				if self.polar_mode == 1:
@@ -383,7 +383,7 @@ class Navigator:
 					if self.polar.compute()[0]:
 						self.polar_solved = True
 						ui.imshow(self.ui_plot + 'polar2', self.polar.plot2())
-						#ui.imshow(self.ui_plot + 'polar', self.polar.plot())
+						ui.imshow(self.ui_plot + 'polar', self.polar.plot())
 				elif self.polar_mode == 2:
 					self.polar.phase2_set_tan(self.solver.wcs)
 					#ui.imshow(self.ui_plot + 'polar', self.polar.plot())
@@ -781,10 +781,10 @@ class Runner(threading.Thread):
 					self.focuser.cmd(cmd)
 	
 			im = self.camera.capture()
-			#cv2.imwrite("testimg18_" + str(i) + ".tif", im)
+			#cv2.imwrite("testimg20_" + str(i) + ".tif", im)
 			im = np.amin(im, axis = 2)
 			if mode == 'navigator':
-				self.navigator.proc_frame(im, i)
+				self.navigator.proc_frame(im, i, t=0)
 			if mode == 'guider':
 				self.guider.proc_frame(im, i)
 			if mode == 'focuser':
@@ -800,13 +800,13 @@ class Camera_test:
 		print "camera:", cmd
 	
 	def capture(self):
-		time.sleep(0.5)
+		#time.sleep(0.5)
 		print self.i
 		#pil_image = Image.open("converted/IMG_%04d.jpg" % (146+self.i))
 		#pil_image.thumbnail((1000,1000), Image.ANTIALIAS)
 		#im = np.array(pil_image)
-		im = cv2.imread("testimg16_" + str(self.i) + ".tif")
-		t = os.path.getmtime("testimg16_" + str(self.i) + ".tif")
+		im = cv2.imread("testimg19_" + str(self.i * 6) + ".tif")
+		#t = os.path.getmtime("testimg16_" + str(self.i) + ".tif")
 		self.i += 1
 		return im
 

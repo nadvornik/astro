@@ -46,7 +46,7 @@ class Solver(threading.Thread):
 		else:
 			cv2.imwrite(tmp_dir + "/field.tif", self.sources_img)
 		
-		cmd_s = ['solve-field', '-O',  '--objs', '20', '--depth', '20', '-E', '2', '--no-plots', '--no-remove-lines', '--no-fits2fits', '--crpix-center', '--no-tweak', '-z', '2']
+		cmd_s = ['solve-field', '-O',  '--objs', '20', '--depth', '20', '-E', '2', '--no-plots', '--no-remove-lines', '--no-fits2fits', '--crpix-center'] #, '--no-tweak'] #, '-z', '2']
 		
 		if self.ra is not None:
 			cmd_s = cmd_s + ['--ra',  str(self.ra)]
