@@ -13,7 +13,7 @@ from am import Plotter
 
 def quat_axis_to_ra_dec(q):
 	(w,x,y,z) = q.a
-	#print x,y,z
+	print "xyz", x,y,z
 	ra = math.degrees(math.atan2(y,x))
 	dec = math.degrees(math.atan2(z, (x ** 2 + y ** 2)**0.5))
 	return (ra, dec)
@@ -66,6 +66,7 @@ class Polar:
 		#print "qha", quat_axis_to_ra_dec(qha), "prec", self.prec_ra, self.prec_dec 
 		#print Quaternion([ra, dec, roll]).to_euler(), (qha * Quaternion([ra, dec, roll])).to_euler()
 		self.pos.append(qha * Quaternion([ra, dec, roll]))
+		#self.pos.append(Quaternion([ra, dec, roll]))
 
 	def tan_to_euler(self, tan):
 		ra, dec = tan.radec_center()
@@ -78,7 +79,9 @@ class Polar:
 			parity = -1.
 		T = parity * cd11 + cd22
 		A = parity * cd21 - cd12
-		orient = -math.degrees(math.atan2(A, T))
+		orient = math.degrees(math.atan2(A, T))
+		#orient = math.degrees(math.atan2(cd21, cd11))
+		
 		return ra, dec, orient
 
 	def add_tan(self, tan, t):
@@ -94,21 +97,23 @@ class Polar:
 		q1 = self.pos[i]
 		q2 = self.pos[j]
 		
-		print q1.q
-		print q2.q
+		print q1.a
+		print q2.a
 		
 		c = q2 / q1
 
 		ra, dec = quat_axis_to_ra_dec(c)
 		
-		if dec * self.pos[i].to_euler()[1] < 0:
+		if dec < 0:
 			dec = -dec
 			ra -= 180
 		if ra < 0.0 :
 			ra += 360
 		
 		print ra, dec
-		return ra, dec
+		self.ra = ra
+		self.dec = dec
+		return True, ra, dec
 
 	def compute(self):
 		if len(self.pos) < 2:
@@ -149,7 +154,7 @@ class Polar:
 
 		ra, dec = quat_axis_to_ra_dec(c)
 		
-		if dec * self.pos[0].to_euler()[1] < 0:
+		if dec < 0:
 			dec = -dec
 			ra -= 180
 		if ra < 0.0 :
@@ -177,7 +182,7 @@ class Polar:
 		
 		ra = 0.0 #self.ra
 		dec = 90.0 #self.dec
-		size = 7.0
+		size = 2.0
 		w = 640
 		h = 640
 		pixscale = size / w
@@ -187,7 +192,7 @@ class Polar:
 			-pixscale, 0., 0., pixscale, w, h,
 			]])
 		plot = Plotter(wcs)
-		return plot.plot(extra=extra, grid = False)
+		return plot.plot(extra=extra)
 
 	def transform_ra_dec_list(self, l):
 		t = Quaternion.from_ra_dec_pair([self.ra, self.dec], [self.prec_ra, self.prec_dec])
@@ -298,7 +303,7 @@ if __name__ == "__main__":
 
 	extra = [(0.0, 90.0, "z")]
 
-	for r in [#(169, 243), # 0x
+	for r in [(169, 243), # 0x
 	          (274, 351), # 1x
 	          (377, 450), # 2x
 	          (457, 484), # 6x (457)485-516
@@ -317,7 +322,7 @@ if __name__ == "__main__":
 		extra.append((ra, dec, "1"))
 		
 
-	for r in [#(124, 628), # 0x
+	for r in [(124, 628), # 0x
 	          (748, 872), # 1x
 	          (1017, 1418), # 2x
 	          (1424, 1432), # 6x (457)485-516
@@ -379,14 +384,14 @@ if __name__ == "__main__":
 	qp = precession()
 	ra, dec = qp.inv().transform_ra_dec([0, 90])
 	extra.append((ra, dec, "p"))
-	
+	print "precession", ra, dec
 	
 	
 	ra = 0.
 	dec = 90.
 	size = 5.0
-	w = 1200
-	h = 1200
+	w = 800
+	h = 800
 	pixscale = size / w
 	
 	wcs = Tan(*[float(x) for x in [

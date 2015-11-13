@@ -19,7 +19,7 @@ class Quaternion:
 		cp = cos(pitch/2);
 		cy = cos(yaw/2);
 		sr = sin(roll/2);
-		sp = sin(pitch/2);
+		sp = sin(-pitch/2);
 		sy = sin(yaw/2);
 		cpcy = cp * cy;
 		spsy = sp * sy;
@@ -32,7 +32,7 @@ class Quaternion:
 	def to_euler(self):
 		w, x, y, z = self.a
 		roll = atan2(2 * (w * x + y * z), 1 - 2 * (x * x + y * y))
-		pitch = asin(2 * (w * y - z * x));
+		pitch = -asin(2 * (w * y - z * x));
 		yaw = atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z));
 		return np.rad2deg([yaw, pitch, roll]);
 
