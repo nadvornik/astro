@@ -302,12 +302,12 @@ class Stack:
 		self.img = None
 
 class Navigator:
-	def __init__(self, ui_capture, ui_plot):
+	def __init__(self, ui_capture):
 		self.dark = Median(10)
 		self.stack = Stack()
 		self.solver = None
 		self.solver_off = np.array([0.0, 0.0])
-		self.dispmode = 3
+		self.dispmode = 'disp-normal'
 		self.ra = None
 		self.dec = None
 		self.field_deg = None
@@ -315,7 +315,6 @@ class Navigator:
 		self.plotter_off = np.array([0.0, 0.0])
 		self.ii = 0
 		self.ui_capture = ui_capture
-		self.ui_plot = ui_plot
 		self.polar = Polar()
 		self.polar_mode = 1
 		self.polar_solved = False
@@ -343,11 +342,11 @@ class Navigator:
 		self.solver_off += off
 		self.plotter_off += off
 
-		if (self.dispmode == 1):
+		if (self.dispmode == 'disp-orig'):
 			ui.imshow(self.ui_capture, normalize(im))
-		if (self.dispmode == 2):
+		if (self.dispmode == 'disp-df-cor'):
 			ui.imshow(self.ui_capture, normalize(im_sub))
-		if (self.dispmode == 3):
+		if (self.dispmode == 'disp-normal'):
 			if self.plotter is not None:
 				nm = normalize(filtered)
 				for p in self.stack.get_xy():
@@ -362,7 +361,7 @@ class Navigator:
 				ui.imshow(self.ui_capture, self.plotter.plot(nm, self.plotter_off, extra = extra))
 			else:
 				ui.imshow(self.ui_capture, normalize(filtered))
-		if (self.dispmode == 4):
+		if (self.dispmode == 'disp-match'):
 			ui.imshow(self.ui_capture, normalize(self.stack.pts))
 	
 		if self.solver is not None and not self.solver.is_alive():
@@ -382,17 +381,19 @@ class Navigator:
 					self.polar.add_tan(self.solver.wcs, self.solver_time)
 					if self.polar.compute()[0]:
 						self.polar_solved = True
-						ui.imshow(self.ui_plot + 'polar2', self.polar.plot2())
-						ui.imshow(self.ui_plot + 'polar', self.polar.plot())
+						ui.imshow(self.ui_capture + '_polar2', self.polar.plot2())
+						ui.imshow(self.ui_capture + '_polar', self.polar.plot())
 				elif self.polar_mode == 2:
 					self.polar.phase2_set_tan(self.solver.wcs)
-					#ui.imshow(self.ui_plot + 'polar', self.polar.plot())
-					ui.imshow(self.ui_plot + 'polar2', self.polar.plot2())
+					ui.imshow(self.ui_capture + '_polar', self.polar.plot())
+					ui.imshow(self.ui_capture + '_polar2', self.polar.plot2())
 					
 				self.ii += 1
 				self.plotter = Plotter(self.solver.wcs)
-				plot = self.plotter.plot_viewfinder(normalize(filtered), 13)
-				ui.imshow(self.ui_plot, plot)
+				if (self.dispmode.startswith('disp-zoom-')):
+					zoom = int(self.dispmode[len('disp-zoom-'):])
+					plot = self.plotter.plot_viewfinder(normalize(filtered), zoom)
+					ui.imshow(self.ui_capture, plot)
 				self.plotter_off = self.solver_off
 			else:
 				self.ra = None
@@ -420,14 +421,8 @@ class Navigator:
 		if cmd == 'dark':
 			self.dark.add(self.im)
 		
-		if cmd == '1':
-			self.dispmode = 1
-		if cmd == '2':
-			self.dispmode = 2
-		if cmd == '3':
-			self.dispmode = 3
-		if cmd == '4':
-			self.dispmode = 4
+		if cmd.startswith('disp-'):
+			self.dispmode = cmd
 		if cmd == 'save':
 			cv2.imwrite(self.ui_capture + str(int(time.time())) + ".tif", self.stack.get())
 
@@ -780,11 +775,11 @@ class Runner(threading.Thread):
 				if mode == 'focuser':
 					self.focuser.cmd(cmd)
 	
-			im = self.camera.capture()
+			im, t = self.camera.capture()
 			#cv2.imwrite("testimg20_" + str(i) + ".tif", im)
 			im = np.amin(im, axis = 2)
 			if mode == 'navigator':
-				self.navigator.proc_frame(im, i, t=0)
+				self.navigator.proc_frame(im, i, t)
 			if mode == 'guider':
 				self.guider.proc_frame(im, i)
 			if mode == 'focuser':
@@ -795,9 +790,21 @@ from PIL import Image;
 class Camera_test:
 	def __init__(self):
 		self.i = 0
+		self.step = 1
+		self.x = 0
+		self.y = 0
 	
 	def cmd(self, cmd):
-		print "camera:", cmd
+		if cmd == 'left':
+			self.x -= 1
+		if cmd == 'right':
+			self.x += 1
+		if cmd == 'up':
+			self.y += 1
+		if cmd == 'down':
+			self.y -= 1
+		if cmd == 'test-capture':
+			self.step = 1 - self.step
 	
 	def capture(self):
 		#time.sleep(0.5)
@@ -805,10 +812,15 @@ class Camera_test:
 		#pil_image = Image.open("converted/IMG_%04d.jpg" % (146+self.i))
 		#pil_image.thumbnail((1000,1000), Image.ANTIALIAS)
 		#im = np.array(pil_image)
-		im = cv2.imread("testimg19_" + str(self.i * 6) + ".tif")
-		#t = os.path.getmtime("testimg16_" + str(self.i) + ".tif")
-		self.i += 1
-		return im
+		im = cv2.imread("testimg17_" + str(self.i) + ".tif")
+		M = np.array([[1.0, 0.0, self.x],
+		              [0.0, 1.0, self.y]])
+		bg = cv2.blur(im, (30, 30))
+		im = cv2.warpAffine(im, M[0:2,0:3], (im.shape[1], im.shape[0]), bg, borderMode=cv2.BORDER_TRANSPARENT);
+
+		t = os.path.getmtime("testimg17_" + str(self.i) + ".tif")
+		self.i += self.step
+		return im, t
 
 class Camera_test_g:
 	def __init__(self, go):
@@ -826,15 +838,14 @@ class Camera_test_g:
 		i = int((corr - self.go.recent_avg(1))  + self.err)
 		print self.err, corr * 3, i
 		im = cv2.imread("testimg16_" + str(i + 50) + ".tif")
-		return im
+		return im, None
 
 
 def run_v4l2():
 	ui.namedWindow('capture')
-	ui.namedWindow('plot')
 	cam = Camera("/dev/video1")
 	cam.prepare(1280, 960)
-	nav = Navigator('capture', 'plot')
+	nav = Navigator('capture')
 
 	runner = Runner(cam, navigator = nav)
 	runner.start()
@@ -844,9 +855,8 @@ def run_gphoto():
 	cam = Camera_gphoto()
 	cam.prepare()
 	ui.namedWindow('capture')
-	ui.namedWindow('plot')
 	ui.namedWindow('full_res')
-	nav = Navigator('capture', 'plot')
+	nav = Navigator('capture')
 	focuser = Focuser('capture')
 
 	runner = Runner(cam, navigator = nav, focuser = focuser)
@@ -856,11 +866,10 @@ def run_gphoto():
 
 def run_v4l2_g():
 	ui.namedWindow('capture')
-	ui.namedWindow('plot')
 	cam = Camera("/dev/video1")
 	cam.prepare(1280, 960)
 
-	nav = Navigator('capture', 'plot')
+	nav = Navigator('capture')
 	go = GuideOut()
 	guider = Guider(go, 'capture')
 
@@ -870,8 +879,7 @@ def run_v4l2_g():
 
 def run_test_g():
 	ui.namedWindow('capture')
-	ui.namedWindow('plot')
-	nav = Navigator('capture', 'plot')
+	nav = Navigator('capture')
 	go = GuideOutBase()
 	guider = Guider(go, 'capture')
 	cam = Camera_test_g(go)
@@ -882,10 +890,9 @@ def run_test_g():
 
 def run_test():
 	ui.namedWindow('capture')
-	ui.namedWindow('plot')
 	
 	cam = Camera_test()
-	nav = Navigator('capture', 'plot')
+	nav = Navigator('capture')
 
 	runner = Runner(cam, navigator = nav)
 	runner.start()
@@ -893,14 +900,12 @@ def run_test():
 
 def run_test_2():
 	ui.namedWindow('capture_gphoto')
-	ui.namedWindow('plot_gphoto')
 	ui.namedWindow('capture_v4l')
-	ui.namedWindow('plot_v4l')
 	
 	cam1 = Camera_test()
-	nav1 = Navigator('capture_gphoto', 'plot_gphoto')
+	nav1 = Navigator('capture_gphoto')
 
-	nav = Navigator('capture_v4l', 'plot_v4l')
+	nav = Navigator('capture_v4l')
 	go = GuideOutBase()
 	guider = Guider(go, 'capture_v4l')
 	cam = Camera_test_g(go)
@@ -919,18 +924,16 @@ def run_test_2_gphoto():
 	
 	cam1 = Camera_gphoto()
 	cam1.prepare()
-	nav1 = Navigator('capture_gphoto', 'plot_gphoto')
+	nav1 = Navigator('capture_gphoto')
 	focuser = Focuser('capture_gphoto')
 
-	nav = Navigator('capture_v4l', 'plot_v4l')
+	nav = Navigator('capture_v4l')
 	go = GuideOutBase()
 	guider = Guider(go, 'capture_v4l')
 	cam = Camera_test_g(go)
 
 	ui.namedWindow('capture_gphoto')
-	ui.namedWindow('plot_gphoto')
 	ui.namedWindow('capture_v4l')
-	ui.namedWindow('plot_v4l')
 
 	runner = Runner(cam1, navigator = nav1, focuser=focuser)
 	runner.start()
@@ -949,17 +952,15 @@ def run_2():
 	
 	cam1 = Camera_gphoto()
 	cam1.prepare()
-	nav1 = Navigator('capture_gphoto', 'plot_gphoto')
+	nav1 = Navigator('capture_gphoto')
 	focuser = Focuser('capture_gphoto')
 
-	nav = Navigator('capture_v4l', 'plot_v4l')
+	nav = Navigator('capture_v4l')
 	go = GuideOut()
 	guider = Guider(go, 'capture_v4l')
 
 	ui.namedWindow('capture_gphoto')
-	ui.namedWindow('plot_gphoto')
 	ui.namedWindow('capture_v4l')
-	ui.namedWindow('plot_v4l')
 
 	runner = Runner(cam1, navigator = nav1, focuser=focuser)
 	runner.start()

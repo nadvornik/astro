@@ -46,7 +46,7 @@ class Solver(threading.Thread):
 		else:
 			cv2.imwrite(tmp_dir + "/field.tif", self.sources_img)
 		
-		cmd_s = ['solve-field', '-O',  '--objs', '20', '--depth', '20', '-E', '2', '--no-plots', '--no-remove-lines', '--no-fits2fits', '--crpix-center'] #, '--no-tweak'] #, '-z', '2']
+		cmd_s = ['solve-field', '-O',  '--objs', '20', '--depth', '20', '-E', '2', '--no-plots', '--no-remove-lines', '--no-fits2fits', '--crpix-center', '--tweak-order', '1' ] #, '--no-tweak'] #, '-z', '2']
 		
 		if self.ra is not None:
 			cmd_s = cmd_s + ['--ra',  str(self.ra)]
@@ -140,7 +140,7 @@ class Plotter:
 
 		ann = plot.annotations
 		ann.NGC = True
-		ann.constellations = False
+		ann.constellations = True
 		ann.constellation_labels = False
 		ann.constellation_labels_long = False
 		ann.bright = True
@@ -176,7 +176,9 @@ class Plotter:
 		
 	
 	
-	def plot_viewfinder(self, img, scale, res_w = 1200):
+	def plot_viewfinder(self, img, scale, res_w = None):
+	        if res_w is None:
+	        	res_w = img.shape[1]
 		tmp_dir = tempfile.mkdtemp()
 		field_w = self.wcs.get_width()
 		field_h = self.wcs.get_height()

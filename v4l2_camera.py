@@ -209,7 +209,7 @@ class Camera:
 		pass
 	
         fcntl.ioctl(self.vd, VIDIOC_QBUF, buf)
-        return img
+        return img, None
 
     def control(self, id, value):
         control = v4l2_control(id, value)

@@ -189,7 +189,7 @@ class Polar:
 	
 		wcs = Tan(*[float(x) for x in [
 			ra, dec, 0.5 + (w / 2.), 0.5 + (h / 2.),
-			-pixscale, 0., 0., pixscale, w, h,
+			-pixscale, 0., 0., -pixscale, w, h,
 			]])
 		plot = Plotter(wcs)
 		return plot.plot(extra=extra)
@@ -226,7 +226,7 @@ class Polar:
 
 	def plot2(self, size = 800, area = 0.1):
 		ha = celestial_rot()
-		qha = Quaternion([ha, 0, 0])
+		qha = Quaternion([90-ha, 0, 0])
 		
 		img = np.zeros((size, size, 3), dtype=np.uint8)
 		c = size / 2
@@ -257,19 +257,19 @@ class Polar:
 			ca = math.cos(a)
 			cv2.line(img, (int(c + sa * polaris_r * scale), int(c + ca * polaris_r * scale)), (int(c + sa * (polaris_r * scale + 8)), int(c + ca * (polaris_r * scale + 8))), (0, 255, 0), 1)
 			
-		cv2.circle(img, (int(c - polaris_target_xyz[0] * scale), int(c + polaris_target_xyz[1] * scale)), 4, (0, 255, 0), 2)
+		cv2.circle(img, (int(c + polaris_target_xyz[0] * scale), int(c + polaris_target_xyz[1] * scale)), 4, (0, 255, 0), 2)
 		
 		cv2.line(img, (0, c), (size, c), (0, 255, 0), 1)
 		cv2.line(img, (c, 0), (c, size), (0, 255, 0), 1)
 		
 		
-		cv2.circle(img, (int(c - prec_xyz[0] * scale), int(c + prec_xyz[1] * scale)), 4, (255, 255, 255), 2)
-		cv2.circle(img, (int(c - polaris_real_xyz[0] * scale), int(c + polaris_real_xyz[1] * scale)), 4, (255, 255, 255), 2)
+		cv2.circle(img, (int(c + prec_xyz[0] * scale), int(c + prec_xyz[1] * scale)), 4, (255, 255, 255), 2)
+		cv2.circle(img, (int(c + polaris_real_xyz[0] * scale), int(c + polaris_real_xyz[1] * scale)), 4, (255, 255, 255), 2)
 		
 		pole_dist = (prec_xyz[0] ** 2 + prec_xyz[1] ** 2) ** 0.5
 		if pole_dist >= area / 2:
-			cv2.putText(img, "%0.1fdeg" % (90 - prec[1]), (int(c - prec_xyz[0] / pole_dist * area / 5 * scale - 50), int(c + prec_xyz[1] / pole_dist * area / 5 * scale)), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
-			cv2.arrowedLine(img, (int(c - prec_xyz[0] / pole_dist * area / 3 * scale), int(c + prec_xyz[1] / pole_dist * area / 3 * scale)), (int(c - prec_xyz[0] / pole_dist * area / 2 * scale), int(c + prec_xyz[1] / pole_dist * area / 2 * scale)), (255, 255, 255), 2)
+			cv2.putText(img, "%0.1fdeg" % (90 - prec[1]), (int(c + prec_xyz[0] / pole_dist * area / 5 * scale - 50), int(c + prec_xyz[1] / pole_dist * area / 5 * scale)), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
+			cv2.arrowedLine(img, (int(c + prec_xyz[0] / pole_dist * area / 3 * scale), int(c + prec_xyz[1] / pole_dist * area / 3 * scale)), (int(c + prec_xyz[0] / pole_dist * area / 2 * scale), int(c + prec_xyz[1] / pole_dist * area / 2 * scale)), (255, 255, 255), 2)
 
 		return img
 
@@ -389,7 +389,7 @@ if __name__ == "__main__":
 	
 	ra = 0.
 	dec = 90.
-	size = 5.0
+	size = 70.0
 	w = 800
 	h = 800
 	pixscale = size / w

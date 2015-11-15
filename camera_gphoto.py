@@ -212,7 +212,7 @@ class Camera_gphoto:
 				#pil_image.save("testimg2_" + str(i) + ".tif")
 				im = np.array(pil_image)
 	
-				return im
+				return im, None
 	
 			except KeyboardInterrupt:
 				break
