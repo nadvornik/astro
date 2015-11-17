@@ -91,7 +91,7 @@ class Median:
 
 
 
-def find_max(img, d, noise = 4, filt = False):
+def find_max(img, d, noise = 4):
 	#img = cv2.medianBlur(img, 5)
 	bg = cv2.blur(img, (30, 30))
 	bg = cv2.blur(bg, (30, 30))
@@ -104,16 +104,15 @@ def find_max(img, d, noise = 4, filt = False):
 
 	img = cv2.subtract(img, mean + stddev * noise)
 
-	filt_img = img
-
 	dilkernel = np.ones((d,d),np.uint8)
 	dil = cv2.dilate(img, dilkernel)
 
 	(h, w) = img.shape
 
-	r,dil = cv2.threshold(dil,0,255,cv2.THRESH_TOZERO)
+	#r,dil = cv2.threshold(dil,0,255,cv2.THRESH_TOZERO)
+	#dil = np.maximum(dil, 0.0)
 	
-	locmax = cv2.compare(img, dil, cv2.CMP_GE)
+	locmax = cv2.bitwise_and(cv2.compare(img, dil, cv2.CMP_GE), cv2.compare(dil, 0, cv2.CMP_GE))
 
 	nonzero = None
 	if stddev > 0.0:
@@ -150,10 +149,7 @@ def find_max(img, d, noise = 4, filt = False):
 	ret = sorted(ret, key=lambda pt: pt[2], reverse=True)[:40]
 	ret = sorted(ret, key=lambda pt: pt[0])
 	
-	if (filt):
-		return ret, filt_img
-	else:
-		return ret
+	return ret
 
 def match_idx(pt1, pt2, d, off = (0.0, 0.0)):
 	if len(pt1) == 0 or len(pt2) == 0:
@@ -236,7 +232,7 @@ class Stack:
 		self.off = np.array([0.0, 0.0])
 		self.ratio = ratio
 	
-	def add(self, im):
+	def add(self, im, show_match = False):
 		if im.dtype == np.uint8:
 			im = cv2.multiply(im, 255.0, dtype=cv2.CV_16UC1)
 		if (self.img is None):
@@ -246,15 +242,9 @@ class Stack:
 		pt1 = self.prev_pt
 		if pt1 is None:
 			pt1 = self.get_xy()
-		pt2, self.filt_img = find_max(im, 30, noise=5, filt=True)
+		pt2 = find_max(im, 30, noise=5)
 		self.prev_pt = pt2
 		
-		self.pts = normalize(self.img)
-		for p in pt1:
-			cv2.circle(self.pts, (int(p[1]), int(p[0])), 13, (255), 1)
-		
-		for p in pt2:
-			cv2.circle(self.pts, (int(p[1]), int(p[0])), 5, (255), 1)
 	
 		pt1m, pt2m, match = filt_match_idx(pt1, pt2, self.dist, self.off)
 		off, weights = avg_pt(pt1m, pt2m)
@@ -267,14 +257,24 @@ class Stack:
 		M = np.array([[1.0, 0.0, self.off[1]],
 		              [0.0, 1.0, self.off[0]]])
 
-		for p in pt2m:
-			cv2.circle(self.pts, (int(p[1]), int(p[0])), 10, (255), 1)
 
 		bg = cv2.blur(self.img, (30, 30))
 		self.img = cv2.warpAffine(self.img, M[0:2,0:3], (im.shape[1], im.shape[0]), bg, borderMode=cv2.BORDER_TRANSPARENT);
 		
 		self.img = cv2.addWeighted(self.img, 1.0 - self.ratio, im, self.ratio, 0, dtype=cv2.CV_16UC1)
+
 		self.xy = None
+
+		if show_match:
+			self.match = normalize(self.img)
+			for p in pt1:
+				cv2.circle(self.match, (int(p[1]), int(p[0])), 13, (255), 1)
+		
+			for p in pt2:
+				cv2.circle(self.match, (int(p[1]), int(p[0])), 5, (255), 1)
+			for p in pt2m:
+				cv2.circle(self.match, (int(p[1]), int(p[0])), 10, (255), 1)
+		
 		return self.off
 
 	def add_simple(self, im):
@@ -303,7 +303,7 @@ class Stack:
 
 class Navigator:
 	def __init__(self, ui_capture):
-		self.dark = Median(10)
+		self.dark = Median(5)
 		self.stack = Stack()
 		self.solver = None
 		self.solver_off = np.array([0.0, 0.0])
@@ -336,7 +336,7 @@ class Navigator:
 		if (self.dark.len() == 0):
 			self.dark.add(im)
 	
-		off = self.stack.add(im_sub)
+		off = self.stack.add(im_sub, show_match=(self.dispmode == 'disp-match'))
 		filtered = self.stack.get()
 		
 		self.solver_off += off
@@ -370,7 +370,7 @@ class Navigator:
 				ui.imshow(self.ui_capture, normalize(filtered))
 				
 		elif (self.dispmode == 'disp-match'):
-			ui.imshow(self.ui_capture, normalize(self.stack.pts))
+			ui.imshow(self.ui_capture, normalize(self.stack.match))
 	
 		if self.solver is not None and not self.solver.is_alive():
 			self.solver.join()
@@ -390,10 +390,10 @@ class Navigator:
 					if self.polar.compute()[0]:
 						self.polar_solved = True
 						ui.imshow(self.ui_capture + '_polar2', self.polar.plot2())
-						ui.imshow(self.ui_capture + '_polar', self.polar.plot())
+						#ui.imshow(self.ui_capture + '_polar', self.polar.plot())
 				elif self.polar_mode == 2:
 					self.polar.phase2_set_tan(self.solver.wcs)
-					ui.imshow(self.ui_capture + '_polar', self.polar.plot())
+					#ui.imshow(self.ui_capture + '_polar', self.polar.plot())
 					ui.imshow(self.ui_capture + '_polar2', self.polar.plot2())
 					
 				self.ii += 1
@@ -408,10 +408,9 @@ class Navigator:
 		if self.solver is None and i > 20 :
 			xy = self.stack.get_xy()
 			print "len", len(xy)
-			if len(xy) > 4:
+			if len(xy) > 6:
 				self.solver_time = t
 				self.solved_im = im
-				self.filt_im = self.stack.filt_img
 				self.solver = Solver(sources_list = xy, field_w = im.shape[1], field_h = im.shape[0], ra = self.ra, dec = self.dec, field_deg = self.field_deg)
 				#self.solver = Solver(sources_img = filtered, field_w = im.shape[1], field_h = im.shape[0], ra = self.ra, dec = self.dec, field_deg = self.field_deg)
 				self.solver.start()
@@ -465,9 +464,8 @@ class Guider:
 		self.ok = False
 		self.capture_in_progress = False
 
-	def get_df(self, im, filt_img):
-		mask = np.zeros_like(im)
-		h, w = mask.shape
+	def dark_add_masked(self, im):
+		h, w = im.shape
 		pts = []
 		for p in self.pt0:
 			(x, y) = (int(p[1] + self.off[1]), int(p[0] + self.off[0]))
@@ -480,7 +478,7 @@ class Guider:
 			if (y > h - 1):
 				continue
 			pts.append((x,y))
-		return darkframe(im, filt_img, pts)
+		return self.dark.add_masked(im, pts)
 
 	def cmd(self, cmd):
 		if cmd == 'r':
@@ -581,7 +579,7 @@ class Guider:
 
 		elif self.mode==3:
 			self.cnt += 1
-			pt, filt_img = find_max(im_sub, 50, filt = True)
+			pt = find_max(im_sub, 50)
 			pt0, pt, match = filt_match_idx(self.pt0, pt, 30, self.off)
 			if match.shape[0] > 0:
 				self.off, weights = avg_pt(pt0, pt)
@@ -592,7 +590,7 @@ class Guider:
 				print "err:", err, err.real
 
 				if (err.real > 30):
-					self.dark.add(self.get_df(im, filt_img))
+					self.dark_add_masked(im)
 
 				for p in pt:
 					cv2.circle(debug, (int(p[1]), int(p[0])), 10, (255), 1)
@@ -630,7 +628,7 @@ class Guider:
 
 				err_corr = err.real + self.go.recent_avg(self.t_delay) * self.pixpersec
 				
-				aggresivnes = 0.2 + (t - self.t0) / 3600
+				aggresivnes = 0.6
 				err_corr *= aggresivnes
 				print "err:", err, err.real, "corr:", err_corr, "t_delay: ", self.t_delay
 				if err_corr > 0.1:
@@ -815,13 +813,13 @@ class Camera_test:
 		#pil_image = Image.open("converted/IMG_%04d.jpg" % (146+self.i))
 		#pil_image.thumbnail((1000,1000), Image.ANTIALIAS)
 		#im = np.array(pil_image)
-		im = cv2.imread("testimg2_" + str(self.i) + ".tif")
+		im = cv2.imread("testimg16_" + str(self.i) + ".tif")
 		M = np.array([[1.0, 0.0, self.x],
 		              [0.0, 1.0, self.y]])
 		bg = cv2.blur(im, (30, 30))
 		im = cv2.warpAffine(im, M[0:2,0:3], (im.shape[1], im.shape[0]), bg, borderMode=cv2.BORDER_TRANSPARENT);
 
-		t = os.path.getmtime("testimg19_" + str(self.i) + ".tif")
+		t = os.path.getmtime("testimg16_" + str(self.i) + ".tif")
 		self.i += self.step
 		return im, t
 
@@ -985,7 +983,7 @@ if __name__ == "__main__":
     #run_v4l2()
     with ui:
     	#run_gphoto()
-    	run_test()
+    	run_test_g()
     	#run_test_2_gphoto()
     	#run_v4l2_g()
     	#run_2()
