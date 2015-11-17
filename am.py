@@ -105,8 +105,6 @@ class Plotter:
 
 	def plot(self, img = None, off = [0., 0.], extra = [], grid = True, scale = 1):
 		tmp_dir = tempfile.mkdtemp()
-
-		tmp_dir = tempfile.mkdtemp()
 		field_w = self.wcs.get_width()
 		field_h = self.wcs.get_height()
 
