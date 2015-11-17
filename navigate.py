@@ -344,9 +344,9 @@ class Navigator:
 
 		if (self.dispmode == 'disp-orig'):
 			ui.imshow(self.ui_capture, normalize(im))
-		if (self.dispmode == 'disp-df-cor'):
+		elif (self.dispmode == 'disp-df-cor'):
 			ui.imshow(self.ui_capture, normalize(im_sub))
-		if (self.dispmode == 'disp-normal'):
+		elif (self.dispmode == 'disp-normal'):
 			if self.plotter is not None:
 				nm = normalize(filtered)
 				for p in self.stack.get_xy():
@@ -361,7 +361,15 @@ class Navigator:
 				ui.imshow(self.ui_capture, self.plotter.plot(nm, self.plotter_off, extra = extra))
 			else:
 				ui.imshow(self.ui_capture, normalize(filtered))
-		if (self.dispmode == 'disp-match'):
+		elif (self.dispmode.startswith('disp-zoom-')):
+			if self.plotter is not None:
+				zoom = self.dispmode[len('disp-zoom-'):]
+				plot = self.plotter.plot(normalize(filtered), self.plotter_off, scale=zoom)
+				ui.imshow(self.ui_capture, plot)
+			else:
+				ui.imshow(self.ui_capture, normalize(filtered))
+				
+		elif (self.dispmode == 'disp-match'):
 			ui.imshow(self.ui_capture, normalize(self.stack.pts))
 	
 		if self.solver is not None and not self.solver.is_alive():
@@ -390,10 +398,6 @@ class Navigator:
 					
 				self.ii += 1
 				self.plotter = Plotter(self.solver.wcs)
-				if (self.dispmode.startswith('disp-zoom-')):
-					zoom = int(self.dispmode[len('disp-zoom-'):])
-					plot = self.plotter.plot_viewfinder(normalize(filtered), zoom)
-					ui.imshow(self.ui_capture, plot)
 				self.plotter_off = self.solver_off
 			else:
 				self.ra = None
@@ -725,7 +729,6 @@ class Runner(threading.Thread):
 		profiler.add_function(Median.add_masked)
 		profiler.add_function(find_max)
 		profiler.add_function(Plotter.plot)
-		profiler.add_function(Plotter.plot_viewfinder)
 		
 		profiler.enable_by_count()
 		
@@ -812,13 +815,13 @@ class Camera_test:
 		#pil_image = Image.open("converted/IMG_%04d.jpg" % (146+self.i))
 		#pil_image.thumbnail((1000,1000), Image.ANTIALIAS)
 		#im = np.array(pil_image)
-		im = cv2.imread("testimg17_" + str(self.i) + ".tif")
+		im = cv2.imread("testimg2_" + str(self.i) + ".tif")
 		M = np.array([[1.0, 0.0, self.x],
 		              [0.0, 1.0, self.y]])
 		bg = cv2.blur(im, (30, 30))
 		im = cv2.warpAffine(im, M[0:2,0:3], (im.shape[1], im.shape[0]), bg, borderMode=cv2.BORDER_TRANSPARENT);
 
-		t = os.path.getmtime("testimg17_" + str(self.i) + ".tif")
+		t = os.path.getmtime("testimg19_" + str(self.i) + ".tif")
 		self.i += self.step
 		return im, t
 

@@ -61,7 +61,7 @@ class Solver(threading.Thread):
 		if (self.sources_img is None):
 			cmd_s = cmd_s + ['--sort-column', 'FLUX', tmp_dir + "/field.fits"]
 		else:
-			cmd_s = cmd_s + [tmp_dir + "/field.tif"]
+			cmd_s = cmd_s + [tmp_dir + "/field.tif", '-z', '2']
 
 		self.cmd = subprocess.Popen(cmd_s, preexec_fn=os.setpgrp)
 		self.cmd.wait()
@@ -103,28 +103,51 @@ class Plotter:
 	def __init__(self, wcs):
 		self.wcs = wcs
 
-	def plot(self, img = None, off = [0., 0.], extra = [], grid = True):
+	def plot(self, img = None, off = [0., 0.], extra = [], grid = True, scale = 1):
 		tmp_dir = tempfile.mkdtemp()
-		#self.wcs.write_to('off1_field.wcs')
+
+		tmp_dir = tempfile.mkdtemp()
+		field_w = self.wcs.get_width()
+		field_h = self.wcs.get_height()
+
+		try:
+			scale = float(scale)
+		except ValueError:
+			if scale.startswith('deg'):
+				scale = float(scale[3:]) / (self.wcs.pixel_scale() * field_w / 3600.0)
+			else:
+				raise
+
+		# the field moved by given offset pixels from the position in self.wcs
+		(crpix1, crpix2) = self.wcs.crpix
+		ra2, dec2 = self.wcs.pixelxy2radec(crpix1 - off[1], crpix2 - off[0])
 		
-		#ra, dec = self.wcs.radec_center()
-		#ok, x0, y0 = self.wcs.radec2pixelxy(ra, dec)
-		x0, y0 = self.wcs.crpix
-		ra2, dec2 = self.wcs.pixelxy2radec(x0 - off[1], y0 - off[0])
-		#print ra,dec, ra2, dec2
-		
+
+		# plot extra area with the original image in the center
+		xborder = field_w * (scale - 1) / 2.0
+		yborder = field_h * (scale - 1) / 2.0
+		nw = field_w * scale
+		nh = field_h * scale
+	
 		new_wcs = Tan(self.wcs)
 		new_wcs.set_crval(ra2, dec2)
-		new_wcs.write_to(tmp_dir + '/off2_field.wcs')
 
-		#wcs = pyfits.open('off1_field.wcs')
-		#wcs_h = wcs[0].header
-		#wcs_h['CRVAL1'] = ra2
-		#wcs_h['CRVAL2'] = dec2
-		#wcs.writeto('off2_field.wcs', clobber=True)
+		new_wcs.set_width(nw)
+		new_wcs.set_height(nh)
+		
+		new_wcs.set_crpix(crpix1 + xborder, crpix2 + yborder)
+		new_wcs.write_to(tmp_dir + '/nfield.wcs')
+
+		#thumbnail size and pos
+		tw = int(field_w / scale)
+		th = int(field_h / scale)
+		tx = int(xborder / scale)
+		ty = int(yborder / scale)
+
 
 		
-		plot = Plotstuff(outformat=PLOTSTUFF_FORMAT_PPM, wcsfn = tmp_dir + '/off2_field.wcs')
+		plot = Plotstuff(outformat=PLOTSTUFF_FORMAT_PPM, wcsfn = tmp_dir + '/nfield.wcs')
+		plot.scale_wcs(1.0 / scale)
 
 		plot.set_size_from_wcs()
 
@@ -133,20 +156,31 @@ class Plotter:
 		plot.plot('fill')
 
 		plot.color = 'gray'
+		
+		plot_area_deg = new_wcs.pixel_scale() * scale * field_w / 3600.0
+		print "plot area", plot_area_deg
+		
+		
 		if grid:
-			grid_step_ra = float(10 ** round (np.log10(self.wcs.pixel_scale() /3600 / (0.01 + math.cos(math.radians(dec2)))) + 2))
-			grid_step_dec = float(10 ** round (np.log10(self.wcs.pixel_scale() /3600) + 2))
-			plot.plot_grid(grid_step_ra, grid_step_dec, grid_step_ra * 2.0, grid_step_dec * 2.0)
+			log_step = [1, 2, 5];
+			log_ra = int(np.floor(np.log10(plot_area_deg / (0.01 + math.cos(math.radians(dec2)))) * 3)) - 1
+			log_dec = int(np.floor(np.log10(plot_area_deg) * 3)) - 1
+			grid_step_ra = 10 ** int(log_ra / 3) * log_step[log_ra % 3]
+			grid_step_dec = 10 ** int(log_dec / 3) * log_step[log_dec % 3]
+			grid_step_ra = min(10, grid_step_ra)
+			grid_step_dec = min(10, grid_step_dec)
+			print "grid", plot_area_deg, log_ra, log_dec, grid_step_ra, grid_step_dec
+			plot.plot_grid(grid_step_ra, grid_step_dec, grid_step_ra, grid_step_dec)
 
 		ann = plot.annotations
-		ann.NGC = True
-		ann.constellations = True
-		ann.constellation_labels = False
+		ann.NGC = (plot_area_deg < 60)
+		ann.constellations = (plot_area_deg > 10)
+		ann.constellation_labels = (plot_area_deg > 10)
 		ann.constellation_labels_long = False
-		ann.bright = True
-		ann.ngc_fraction = 0.05
+		ann.bright = (plot_area_deg < 60)
+		ann.ngc_fraction = 0.05 / scale
 
-		#ann.HD = True
+		ann.HD = (plot_area_deg < 3)
 		ann.HD_labels = True
 		ann.hd_catalog = "hd.fits"
 
@@ -161,106 +195,40 @@ class Plotter:
 		plot.label_offset_y = -20;
 
 		plot.plot('annotations')
-
+		
+		# frame around the image
+		if scale > 1:
+			plot.color = 'blue'
+			plot.polygon([(tx, ty), (tx + tw, ty), (tx + tw, ty + th), (tx, ty + th)])
+            		plot.close_path()
+            		plot.stroke()
 
 		plot_image = plot.get_image_as_numpy()
-	
+
 		bg = np.zeros_like(plot_image)
 		if img is not None:
-			bg[:, :, 0] = bg[:, :, 1] = bg[:, :, 2] = img
-	
+			if scale == 1:
+				thumb = img
+			else:
+				thumb = cv2.resize(img, (tw, th))
+			bg[ty:ty+th, tx:tx+tw, 0] = bg[ty:ty+th, tx:tx+tw, 1] = bg[ty:ty+th, tx:tx+tw, 2] = thumb
+		
 		res=cv2.add(plot_image, bg)
+
 		shutil.rmtree(tmp_dir)
 		return res
 
-		
-	
-	
-	def plot_viewfinder(self, img, scale, res_w = None):
-	        if res_w is None:
-	        	res_w = img.shape[1]
-		tmp_dir = tempfile.mkdtemp()
-		field_w = self.wcs.get_width()
-		field_h = self.wcs.get_height()
-		downscale = res_w / (field_w * scale)
-	
-		xoff = field_w * (scale - 1) / 2.0
-		yoff = field_h * (scale - 1) / 2.0
-		nw = field_w * scale
-		nh = field_h * scale
-	
-		new_wcs = Tan(self.wcs)
-		new_wcs.set_width(nw)
-		new_wcs.set_height(nh)
-		(crpix1, crpix2) = new_wcs.crpix
-		new_wcs.set_crpix(crpix1 + xoff, crpix2 + yoff)
-		new_wcs.write_to(tmp_dir + '/nfield.wcs')
-
-		#thumbnail size and pos
-		tw = int(field_w * downscale)
-		th = int(field_h * downscale)
-		tx = int(xoff * downscale)
-		ty = int(yoff * downscale)
-
-		plot = Plotstuff(outformat=PLOTSTUFF_FORMAT_PPM, wcsfn = tmp_dir + '/nfield.wcs')
-
-		plot.scale_wcs(downscale)
-		plot.set_size_from_wcs()
-
-		plot.color = 'black'
-		plot.alpha = 1.0
-		plot.plot('fill')
-
-		plot.color = 'gray'
-		grid_step = float(10 ** round (np.log10(self.wcs.pixel_scale() /3600) + 3))
-		plot.plot_grid(grid_step, grid_step, grid_step * 2, grid_step * 2)
-		
-		ann = plot.annotations
-		ann.NGC = True
-		ann.constellations = True
-		ann.constellation_labels = True
-		ann.constellation_labels_long = False
-		ann.bright = True
-		ann.ngc_fraction = 0.001
-
-		ann.HD = (self.wcs.pixel_scale() * scale < 5)
-		ann.HD_labels = True
-		ann.hd_catalog = "hd.fits"
-
-		plot.color = 'green'
-		plot.lw = 2
-		plot.valign = 'B'
-		plot.halign = 'C'
-		plot.label_offset_x = 0;
-		plot.label_offset_y = -20;
-
-		plot.plot('annotations')
-
-		plot.color = 'blue'
-		plot.polygon([(tx, ty), (tx + tw, ty), (tx + tw, ty + th), (tx, ty + th)])
-            	plot.close_path()
-            	plot.stroke()
-            	
-		plot_image = plot.get_image_as_numpy()
-
-		thumb = cv2.resize(img, (tw, th))
-		bg = np.zeros_like(plot_image)
-		bg[ty:ty+th, tx:tx+tw, 0] = bg[ty:ty+th, tx:tx+tw, 1] = bg[ty:ty+th, tx:tx+tw, 2] = thumb
-		
-		res=cv2.add(plot_image, bg)
-		return res
 
 
 if __name__ == "__main__":
 	img = cv2.imread("field.tif")
 	img = np.amin(img, axis = 2)
 
-	solver = Solver(sources_img = img, field_deg=0.57)
+	solver = Solver(sources_img = img)
 	solver.start()
 	solver.join()
 	
 	plotter=Plotter(solver.wcs)
-	plot = plotter.plot_viewfinder(img, 25)
+	plot = plotter.plot(img, scale = 5)
 	cv2.imshow("plot", plot)
 	cv2.waitKey(0)
-	
