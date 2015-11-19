@@ -6,7 +6,7 @@ import subprocess
 import signal
 
 import pyfits
-from astrometry.util.util import Tan
+from astrometry.util.util import Tan, anwcs_new_tan
 from astrometry.blind.plotstuff import *
 import threading
 import math
@@ -104,7 +104,6 @@ class Plotter:
 		self.wcs = wcs
 
 	def plot(self, img = None, off = [0., 0.], extra = [], grid = True, scale = 1):
-		tmp_dir = tempfile.mkdtemp()
 		field_w = self.wcs.get_width()
 		field_h = self.wcs.get_height()
 
@@ -134,7 +133,6 @@ class Plotter:
 		new_wcs.set_height(nh)
 		
 		new_wcs.set_crpix(crpix1 + xborder, crpix2 + yborder)
-		new_wcs.write_to(tmp_dir + '/nfield.wcs')
 
 		#thumbnail size and pos
 		tw = int(field_w / scale)
@@ -144,7 +142,8 @@ class Plotter:
 
 
 		
-		plot = Plotstuff(outformat=PLOTSTUFF_FORMAT_PPM, wcsfn = tmp_dir + '/nfield.wcs')
+		plot = Plotstuff(outformat=PLOTSTUFF_FORMAT_PPM)
+		plot.wcs = anwcs_new_tan(new_wcs)
 		plot.scale_wcs(1.0 / scale)
 
 		plot.set_size_from_wcs()
@@ -213,7 +212,6 @@ class Plotter:
 		
 		res=cv2.add(plot_image, bg)
 
-		shutil.rmtree(tmp_dir)
 		return res
 
 
