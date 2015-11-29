@@ -91,7 +91,7 @@ class Median:
 
 
 
-def find_max(img, d, noise = 4):
+def find_max(img, d, n = 40):
 	img = cv2.medianBlur(img, 5)
 	bg = cv2.blur(img, (30, 30))
 	bg = cv2.blur(bg, (30, 30))
@@ -102,8 +102,6 @@ def find_max(img, d, noise = 4):
 
 	(mean, stddev) = cv2.meanStdDev(img)
 
-	img = cv2.subtract(img, mean + stddev * noise)
-
 	dilkernel = np.ones((d,d),np.uint8)
 	dil = cv2.dilate(img, dilkernel)
 
@@ -112,20 +110,17 @@ def find_max(img, d, noise = 4):
 	#r,dil = cv2.threshold(dil,0,255,cv2.THRESH_TOZERO)
 	#dil = np.maximum(dil, 0.0)
 	
-	locmax = cv2.bitwise_and(cv2.compare(img, dil, cv2.CMP_GE), cv2.compare(dil, 0, cv2.CMP_GE))
-
-	nonzero = None
-	if stddev > 0.0:
-		#nonzero = zip(*locmax.nonzero())
-		nonzero = cv2.findNonZero(locmax)
-	if nonzero is  not None:
-		nonzero = nonzero[:, 0, :]
-	else:
-		nonzero = []
+	locmax = np.where(img >= dil)
+	valmax = img[locmax]
+	ordmax = np.argsort(valmax)[::-1]
+	ordmax = ordmax[:40]
+	
+	nonzero = zip(locmax[0][ordmax], locmax[1][ordmax])
+	
 	ret = []
 	
 	#for (y, x) in nonzero:
-	for (x, y) in nonzero:
+	for (y, x) in nonzero:
 		if (x < 1):
 			continue
 		if (y < 1):
@@ -145,8 +140,8 @@ def find_max(img, d, noise = 4):
 		else:
 			ys = y
 		# y, x, flux, certainity: n_sigma
-		ret.append((y + ys, x + xs, img[y, x] + mean + stddev * noise, math.erf((img[y, x] / stddev + noise) / 2**0.5) ** (w * h) ))
-	ret = np.array(sorted(ret, key=lambda pt: pt[2], reverse=True)[:40])
+		ret.append((y + ys, x + xs, img[y, x], math.erf(((img[y, x] - mean) / stddev) / 2**0.5) ** (w * h) ))
+	ret = np.array(ret)
 	return ret
 
 def match_take(pt1, pt2, match, ord1 = None, ord2 = None):
@@ -329,8 +324,6 @@ class Stack:
 		self.prev_pt_verified = []
 		self.xy = None
 		self.ratio = ratio
-		self.stack_noise = 5.0
-		self.extract_noise = 2.0
 	
 	def add(self, im, show_match = False):
 		if im.dtype == np.uint8:
@@ -339,13 +332,8 @@ class Stack:
 			self.img = im
 			return (0.0, 0.0)
 			
-		pt2 = find_max(im, 20, noise= self.stack_noise)
+		pt2 = find_max(im, 20, n = 40)
 
-		if self.stack_noise > 2.0 and len(pt2) < 30:
-			self.stack_noise -= 0.2
-		if self.stack_noise < 8.0 and len(pt2) >= 30:
-			self.stack_noise -= 0.2
-		
 		pt1 = self.prev_pt_verified
 		pt1m, pt2m, match = match_triangle(pt1, pt2, 5, 15)
 		print "match1",match
@@ -413,11 +401,7 @@ class Stack:
 
 	def get_xy(self):
 		if self.xy is None:
-			self.xy = np.array(find_max(self.img, 20, noise=self.extract_noise))
-			if self.extract_noise > 1.0 and len(self.xy) < 20:
-				self.extract_noise -= 0.2
-			if self.extract_noise < 7.0 and len(self.xy) >= 20:
-				self.extract_noise -= 0.2
+			self.xy = np.array(find_max(self.img, 20, n = 20))
 
 		return self.xy
 	
@@ -640,7 +624,7 @@ class Guider:
 		elif self.mode==2:
 				
 			self.cnt += 1
-			pt = find_max(im_sub, 20, 1)
+			pt = find_max(im_sub, 20, n = 30)
 			
 			# ignore hotpixels
 			pt1m, pt2m, match = match_closest(self.pt0, pt, 5)
@@ -710,7 +694,7 @@ class Guider:
 
 		elif self.mode==3:
 			self.cnt += 1
-			pt = find_max(im_sub, 20, 1)
+			pt = find_max(im_sub, 20, n = 30)
 			print pt
 			pt1m, pt2m, match = match_triangle(self.pt0, pt, 5, 50, self.off)
 			if len(match) > 0:
@@ -757,7 +741,7 @@ class Guider:
 
 
 		elif self.mode==4:
-			pt = find_max(im_sub, 20, 1)
+			pt = find_max(im_sub, 20, n = 30)
 			pt1m, pt2m, match = match_triangle(self.pt0, pt, 5, 30, self.off)
 			if len(match) > 0:
 				off, weights = avg_pt(pt1m, pt2m)
