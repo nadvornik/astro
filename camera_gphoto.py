@@ -12,6 +12,12 @@ import numpy as np
 from gui import ui
 from cmd import cmdQueue
 
+def apply_gamma(img, gamma):
+	lut = np.fromiter( ( (x / 255.0)**gamma * 65535.0 for x in xrange(65536)), dtype=np.uint16 )
+	return np.take(lut, img)
+
+
+
 class Camera_gphoto:
 
 	def get_config_value(self, name):
@@ -190,7 +196,7 @@ class Camera_gphoto:
 			self.capture_bulb(3)
 		
 		if cmd == 'capture':
-			self.capture_bulb(5, card=True)
+			self.capture_bulb(300, card=True)
 			cmdQueue.put('capture-finished')
 		
 	
@@ -211,6 +217,7 @@ class Camera_gphoto:
 				pil_image = Image.open(io.BytesIO(file_data))
 				#pil_image.save("testimg2_" + str(i) + ".tif")
 				im = np.array(pil_image)
+				im = apply_gamma(im, 2.2)
 	
 				return im, None
 	
