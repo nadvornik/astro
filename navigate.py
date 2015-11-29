@@ -92,11 +92,9 @@ class Median:
 
 
 def find_max(img, d, n = 40):
-	img = cv2.medianBlur(img, 5)
-	bg = cv2.blur(img, (30, 30))
-	bg = cv2.blur(bg, (30, 30))
-	img = cv2.subtract(img, bg, dtype=cv2.CV_32FC1)
 
+	img = np.array(img, dtype = np.float32)
+	
 	img = cv2.GaussianBlur(img, (9, 9), 0)
 
 
@@ -332,7 +330,7 @@ class Stack:
 			self.img = im
 			return (0.0, 0.0)
 			
-		pt2 = find_max(im, 20, n = 40)
+		pt2 = find_max(im, 12, n = 40)
 
 		pt1 = self.prev_pt_verified
 		pt1m, pt2m, match = match_triangle(pt1, pt2, 5, 15)
@@ -363,9 +361,8 @@ class Stack:
 			             [0.0, 1.0, off[0]]])
 
 
-			bg = cv2.blur(self.img, (30, 30))
-			self.img = cv2.warpAffine(self.img, M[0:2,0:3], (im.shape[1], im.shape[0]), bg, borderMode=cv2.BORDER_TRANSPARENT);
-		
+			self.img = cv2.warpAffine(self.img, M[0:2,0:3], (im.shape[1], im.shape[0]));
+			
 			self.img = cv2.addWeighted(self.img, 1.0 - self.ratio, im, self.ratio, 0, dtype=cv2.CV_16UC1)
 
 		
@@ -401,7 +398,7 @@ class Stack:
 
 	def get_xy(self):
 		if self.xy is None:
-			self.xy = np.array(find_max(self.img, 20, n = 20))
+			self.xy = np.array(find_max(self.img, 12, n = 20))
 
 		return self.xy
 	
@@ -435,10 +432,13 @@ class Navigator:
 			t = time.time()
 		if (self.dark.len() > 2):
 			im_sub = cv2.subtract(im, self.dark.get())
-			minVal, maxVal, minLoc, maxLoc = cv2.minMaxLoc(im_sub)
-			im_sub = cv2.add(im_sub, -minVal)
 		else:
 			im_sub = im
+			
+		bg = cv2.blur(im_sub, (30, 30))
+		bg = cv2.blur(bg, (30, 30))
+		im_sub = cv2.subtract(im_sub, bg)
+
 
 		if (self.dark.len() == 0):
 			self.dark.add(im)
@@ -604,11 +604,14 @@ class Guider:
 		if (self.dark.len() >= 4):
 			print "dark"
 			im_sub = cv2.subtract(im, self.dark.get())
-			minVal, maxVal, minLoc, maxLoc = cv2.minMaxLoc(im)
-			im_sub = cv2.add(im_sub, -minVal)
 		else:
 			print "no dark"
 			im_sub = im
+
+
+		bg = cv2.blur(im_sub, (30, 30))
+		bg = cv2.blur(bg, (30, 30))
+		im_sub = cv2.subtract(im_sub, bg)
 
 		debug = normalize(im_sub)
 
@@ -971,7 +974,7 @@ class Camera_test_g:
 		corr = self.go.recent_avg()
 		i = int((corr - self.go.recent_avg(1))  + self.err)
 		print self.err, corr * 3, i
-		im = cv2.imread("testimg12_" + str(i + 50) + ".tif")
+		im = cv2.imread("testimg16_" + str(i + 50) + ".tif")
 		return im, None
 
 
@@ -1133,7 +1136,7 @@ if __name__ == "__main__":
     #run_v4l2()
     with ui:
     	#run_gphoto()
-    	run_test()
+    	run_test_2()
     	#run_v4l2()
     	#run_test_2_gphoto()
     	#run_v4l2_g()
