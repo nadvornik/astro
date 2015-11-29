@@ -92,7 +92,7 @@ class Median:
 
 
 def find_max(img, d, noise = 4):
-	#img = cv2.medianBlur(img, 5)
+	img = cv2.medianBlur(img, 5)
 	bg = cv2.blur(img, (30, 30))
 	bg = cv2.blur(bg, (30, 30))
 	img = cv2.subtract(img, bg, dtype=cv2.CV_32FC1)
@@ -146,30 +146,138 @@ def find_max(img, d, noise = 4):
 			ys = y
 		# y, x, flux, certainity: n_sigma
 		ret.append((y + ys, x + xs, img[y, x] + mean + stddev * noise, math.erf((img[y, x] / stddev + noise) / 2**0.5) ** (w * h) ))
-	ret = sorted(ret, key=lambda pt: pt[2], reverse=True)[:40]
-	ret = sorted(ret, key=lambda pt: pt[0])
-	
+	ret = np.array(sorted(ret, key=lambda pt: pt[2], reverse=True)[:40])
 	return ret
 
-def match_idx(pt1, pt2, d, off = (0.0, 0.0)):
+def match_take(pt1, pt2, match, ord1 = None, ord2 = None):
+	match = np.array(match)
+	if match.shape[0] == 0:
+		return np.array([]), np.array([]), np.array([])
+	
+	pt1m = np.array(np.take(pt1, match[:, 0], axis=0), np.float)
+	pt2m = np.array(np.take(pt2, match[:, 1], axis=0), np.float)
+	
+	if ord1 is not None:
+		match[:, 0] = ord1[match[:, 0]]
+	if ord2 is not None:
+		match[:, 1] = ord2[match[:, 1]]
+
+	return pt1m, pt2m, match
+
+def check_drift(pt1, pt2, match, maxdif, maxdrift, off):
+	pt1m, pt2m, match = match_take(pt1, pt2, match)
+	
+	dist = pt2m[:, 0:2] - pt1m[:, 0:2]
+	med = np.median(dist, axis = 0)
+	dif = np.max(np.abs(dist - [[med] * dist.shape[0]] ))
+	if (dif > maxdif):
+		return False
+	drift = np.linalg.norm(dist[0, 0:2] - off)
+	return drift < maxdrift
+		
+
+def find_nearest(array, val):
+	diff = np.abs(array.flatten() - val)
+	idx = diff.argmin()
+	return np.unravel_index(idx, array.shape), diff[idx]
+
+def match_triangle(pt1, pt2, maxdif = 5.0, maxdrift = 10, off = (0.0, 0.0)):
 	if len(pt1) == 0 or len(pt2) == 0:
-		return np.array([])
-	maxflux1 = max(1, np.amax(np.array(pt1)[:, 2]))
-	maxflux2 = max(1, np.amax(np.array(pt2)[:, 2]))
+		return match_take(pt1, pt2, [])
+	
+	ord1 = np.argsort(pt1[:, 2])[::-1]
+	ord2 = np.argsort(pt2[:, 2])[::-1]
+	
+	pt1s = pt1[ord1][:20]
+	pt2s = pt2[ord2][:20]
+	
+	dist1 = np.array([ [ ((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2) ** 0.5 for p1 in pt1s ] for p2 in pt1s ])
+	dist2 = np.array([ [ ((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2) ** 0.5 for p1 in pt2s ] for p2 in pt2s ])
+
+	bestmatch = []
+
+	for a1 in range(0, len(pt1) - 2):
+		for b1 in range(a1 + 1, len(pt1s) - 1):
+			ab1 = dist1[a1, b1]
+			((a2, b2), dif) = find_nearest(dist2, ab1)
+			if dif > maxdif:
+				continue
+			match = []
+			if len(bestmatch) < 2:
+				if check_drift(pt1s, pt2s, [[a1, a2], [b1, b2]], maxdif, maxdrift, off):
+					bestmatch = [[a1, a2], [b1, b2]]
+				elif check_drift(pt1s, pt2s, [[a1, b2], [b1, a2]], maxdif, maxdrift, off):
+					bestmatch = [[a1, b2], [b1, a2]]
+			
+			for c1 in range(b1 + 1, len(pt1s)):
+				ac1 = dist1[a1, c1]
+				bc1 = dist1[b1, c1]
+				
+				((c2_1,), dif1) = find_nearest(dist2[a2], ac1)
+				((c2_2,), dif2) = find_nearest(dist2[b2], bc1)
+				if c2_1 == c2_2 and dif1 < maxdif and dif2 < maxdif:
+					#print "  match c1", a1, b1, c1, ac1, bc1, c2_1, c2_2, dif1, dif2
+					match = [[a1, a2], [b1, b2], [c1, c2_1]]
+					c2 = c2_1
+					break
+
+				((c2_1,), dif1) = find_nearest(dist2[a2], bc1)
+				((c2_2,), dif2) = find_nearest(dist2[b2], ac1)
+				if c2_1 == c2_2 and dif1 < maxdif and dif2 < maxdif:
+					#print "  match c2", a1, b1, c1, ac1, bc1, c2_1, c2_2, dif1, dif2
+					match = [[a1, b2], [b1, a2], [c1, c2_1]]
+					tmp = a2
+					a2 = b2
+					b2 = tmp
+					c2 = c2_1
+					break
+			
+			if len(match) == 3 and len(bestmatch) < 3 and check_drift(pt1s, pt2s, match, maxdif, maxdrift, off):
+				bestmatch = match
+			
+			for d1 in range(c1 + 1, len(pt1s)):
+				ad1 = dist1[a1, d1]
+				bd1 = dist1[b1, d1]
+				cd1 = dist1[c1, d1]
+				
+				((d2_1,), dif1) = find_nearest(dist2[a2], ad1)
+				((d2_2,), dif2) = find_nearest(dist2[b2], bd1)
+				((d2_3,), dif3) = find_nearest(dist2[c2], cd1)
+				if d2_1 == d2_2 and d2_2 == d2_3 and dif1 < maxdif and dif2 < maxdif and dif3 < maxdif:
+					match.append([d1, d2_1])
+			
+			if len(match) > 3:
+				# 2 triangles are enough
+				return match_take(pt1s, pt2s, match, ord1, ord2)
+	
+	if len(bestmatch) == 0 and len(pt1s) > 0 and len(pt2s) > 0:
+		for i in range(0, min(3, len(pt1s))):
+			for j in range(0, min(3, len(pt2s))):
+				if check_drift(pt1s, pt2s, [[i, j]], maxdif, maxdrift, off):
+					bestmatch.append([i, j])
+	return match_take(pt1s, pt2s, bestmatch, ord1, ord2)
+	
+
+def match_closest(pt1, pt2, d, off = (0.0, 0.0)):
+	if len(pt1) == 0 or len(pt2) == 0:
+		return match_take(pt1, pt2, [])
+	
+	ord2 = np.argsort(pt2[:, 0])
+	pt2s = pt2[ord2]
 	match = []
-	l = len(pt2)
+	l = len(pt2s)
 	for i1, (y1orig, x1orig, flux1, cert1) in enumerate(pt1):
 		y1 = y1orig + off[0]
 		x1 = x1orig + off[1]
-		i2 = bisect.bisect_left(pt2, (y1, x1))
-		closest_dist = d ** 2 * 2;
+		i2 = np.searchsorted(pt2s[:, 0], y1)
+		closest_dist = d ** 2;
 		closest_idx = -1
 		ii2 = i2;
 		while (ii2 >=0 and ii2 < l):
-			(y2, x2, flux2, cert2) = pt2[ii2]
+			(y2, x2, flux2, cert2) = pt2s[ii2]
 			if (y2 < y1 - d):
 				break
-			dist = (y1 - y2) ** 2 + (x1 - x2) ** 2 + ((flux1 / maxflux1 - flux2 / maxflux2) * d) ** 2
+			dist = (y1 - y2) ** 2 + (x1 - x2) ** 2
 			if (dist < closest_dist):
 				closest_dist = dist
 				closest_idx = ii2
@@ -178,30 +286,21 @@ def match_idx(pt1, pt2, d, off = (0.0, 0.0)):
 
 		ii2 = i2;
 		while (ii2 >=0 and ii2 < l):
-			(y2, x2, flux2, cert2) = pt2[ii2]
+			(y2, x2, flux2, cert2) = pt2s[ii2]
 			if (y2 > y1 + d):
 				break
-			dist = (y1 - y2) ** 2 + (x1 - x2) ** 2 + ((flux1 / maxflux1 - flux2 / maxflux2) * d) ** 2
+			dist = (y1 - y2) ** 2 + (x1 - x2) ** 2
 			if (dist < closest_dist):
 				closest_dist = dist
 				closest_idx = ii2
 			ii2 = ii2 + 1
 
 		if (closest_idx >= 0):
-			match.append((i1, closest_idx))
-	return np.array(match)
+			match.append((i1, ord2[closest_idx]))
+	return match_take(pt1, pt2, match)
 
-def filt_match_idx(pt1, pt2, d, off = (0.0, 0.0)):
-	match = match_idx(pt1, pt2, d, off)
 
-	if match.shape[0] == 0:
-		return np.array([]), np.array([]), np.array([])
-		
-	pt1m = np.array(np.take(pt1, match[:, 0], axis=0), np.float)
-	pt2m = np.array(np.take(pt2, match[:, 1], axis=0), np.float)
-	return pt1m, pt2m, match
-
-def avg_pt(pt1m, pt2m, noise = 1):
+def avg_pt(pt1m, pt2m, noise = 2):
 	if pt1m.shape[0] > 1:
 		dif = pt2m[:, 0:2] - pt1m[:, 0:2]
 		weights = pt2m[:, 3] * pt1m[:, 3]
@@ -224,13 +323,14 @@ def avg_pt(pt1m, pt2m, noise = 1):
 
 
 class Stack:
-	def __init__(self, dist = 20, ratio = 0.1):
+	def __init__(self, ratio = 0.1):
 		self.img = None
-		self.dist = dist
-		self.prev_pt = None
+		self.prev_pt = []
+		self.prev_pt_verified = []
 		self.xy = None
-		self.off = np.array([0.0, 0.0])
 		self.ratio = ratio
+		self.stack_noise = 5.0
+		self.extract_noise = 2.0
 	
 	def add(self, im, show_match = False):
 		if im.dtype == np.uint8:
@@ -239,30 +339,48 @@ class Stack:
 			self.img = im
 			return (0.0, 0.0)
 			
-		pt1 = self.prev_pt
-		if pt1 is None:
+		pt2 = find_max(im, 20, noise= self.stack_noise)
+
+		if self.stack_noise > 2.0 and len(pt2) < 30:
+			self.stack_noise -= 0.2
+		if self.stack_noise < 8.0 and len(pt2) >= 30:
+			self.stack_noise -= 0.2
+		
+		pt1 = self.prev_pt_verified
+		pt1m, pt2m, match = match_triangle(pt1, pt2, 5, 15)
+		print "match1",match
+		if len(match) == 0:
 			pt1 = self.get_xy()
-		pt2 = find_max(im, 30, noise=5)
-		self.prev_pt = pt2
+			pt1m, pt2m, match = match_triangle(pt1, pt2, 5, 15)
+			print "match2",match
 		
-	
-		pt1m, pt2m, match = filt_match_idx(pt1, pt2, self.dist, self.off)
-		off, weights = avg_pt(pt1m, pt2m)
 		
-		if np.max(weights) >= 0.99:
-			self.off = off
+		if len(match) == 0:
+			self.img = cv2.multiply(im, self.ratio, dtype=cv2.CV_16UC1)
+			self.prev_pt_verified = pt2
+			self.prev_pt = pt2
+			off = np.array([0., 0.])
 		else:
-			self.off = self.off * 0.9
+			off = np.median(pt2m[:, 0:2] - pt1m[:, 0:2], axis = 0)
+			pt1 = self.prev_pt
+	
+			pt1m, pt2m, match = match_closest(pt1, pt2, 5, off)
+			off, weights = avg_pt(pt1m, pt2m)
+			print "off2", off 
+			print match
+			self.prev_pt_verified = pt2m
+			self.prev_pt = pt2
+
+			M = np.array([[1.0, 0.0, off[1]],
+			             [0.0, 1.0, off[0]]])
+
+
+			bg = cv2.blur(self.img, (30, 30))
+			self.img = cv2.warpAffine(self.img, M[0:2,0:3], (im.shape[1], im.shape[0]), bg, borderMode=cv2.BORDER_TRANSPARENT);
 		
-		M = np.array([[1.0, 0.0, self.off[1]],
-		              [0.0, 1.0, self.off[0]]])
+			self.img = cv2.addWeighted(self.img, 1.0 - self.ratio, im, self.ratio, 0, dtype=cv2.CV_16UC1)
 
-
-		bg = cv2.blur(self.img, (30, 30))
-		self.img = cv2.warpAffine(self.img, M[0:2,0:3], (im.shape[1], im.shape[0]), bg, borderMode=cv2.BORDER_TRANSPARENT);
 		
-		self.img = cv2.addWeighted(self.img, 1.0 - self.ratio, im, self.ratio, 0, dtype=cv2.CV_16UC1)
-
 		self.xy = None
 
 		if show_match:
@@ -275,7 +393,7 @@ class Stack:
 			for p in pt2m:
 				cv2.circle(self.match, (int(p[1]), int(p[0])), 10, (255), 1)
 		
-		return self.off
+		return off
 
 	def add_simple(self, im):
 		if im.dtype == np.uint8:
@@ -295,15 +413,20 @@ class Stack:
 
 	def get_xy(self):
 		if self.xy is None:
-			self.xy = np.array(find_max(self.img, 20, noise=2))
+			self.xy = np.array(find_max(self.img, 20, noise=self.extract_noise))
+			if self.extract_noise > 1.0 and len(self.xy) < 20:
+				self.extract_noise -= 0.2
+			if self.extract_noise < 7.0 and len(self.xy) >= 20:
+				self.extract_noise -= 0.2
+
 		return self.xy
 	
 	def reset(self):
 		self.img = None
 
 class Navigator:
-	def __init__(self, ui_capture):
-		self.dark = Median(5)
+	def __init__(self, dark, ui_capture):
+		self.dark = dark
 		self.stack = Stack()
 		self.solver = None
 		self.solver_off = np.array([0.0, 0.0])
@@ -332,7 +455,7 @@ class Navigator:
 			im_sub = cv2.add(im_sub, -minVal)
 		else:
 			im_sub = im
-		
+
 		if (self.dark.len() == 0):
 			self.dark.add(im)
 	
@@ -445,8 +568,9 @@ def fit_line(xylist):
 	return np.polyfit(x, y, 1)
 
 class Guider:
-	def __init__(self, go, ui_capture):
+	def __init__(self, go, dark, ui_capture):
 		self.go = go
+		self.dark = dark
 		self.reset()
 		self.t0 = 0
 		self.resp0 = []
@@ -454,10 +578,9 @@ class Guider:
 		self.ui_capture = ui_capture
 
 	def reset(self):
-		self.mode = 0
-		self.dark = Median(10)
-		self.stack = Stack(4)
+		self.mode = 1
 		self.off = (0.0, 0.0)
+		self.off_t = None
 		self.go.out(0)
 		self.cnt = 0
 		self.pt0 = []
@@ -481,9 +604,6 @@ class Guider:
 		return self.dark.add_masked(im, pts)
 
 	def cmd(self, cmd):
-		if cmd == 'r':
-			self.reset()
-			self.mode = 1
 		if cmd == "capture":
 			self.capture_in_progress = True
 		if cmd == "capture-finished":
@@ -491,7 +611,11 @@ class Guider:
 
 	def proc_frame(self, im, i):
 		t = time.time()
+		print "mode", self.mode
 		
+		if len(self.pt0) == 0:
+			cmdQueue.put('navigator')
+			self.go.out(0)
 
 		if (self.dark.len() >= 4):
 			print "dark"
@@ -502,86 +626,100 @@ class Guider:
 			print "no dark"
 			im_sub = im
 
-		debug = normalize(im)
+		debug = normalize(im_sub)
 
 		if self.mode==1:
-			self.stack.add(im_sub)
-			self.cnt = self.cnt + 1
-			if self.cnt == 5:
-				self.pt0 = find_max(self.stack.get(), 50, 4)
-				if len(self.pt0) < 1:
-					print "not enough pt", len(self.pt0)
-					self.reset()
-					return
-				self.used_cnt = []
-				self.cnt = 0
-				self.dist = 1.0
-				self.go.out(1)
-				self.mode = 2
-				self.t0 = t
-				self.resp0 = []
+			self.used_cnt = []
+			self.cnt = 0
+			self.dist = 1.0
+			self.go.out(1)
+			self.mode = 2
+			self.t0 = t
+			self.resp0 = []
 
 		elif self.mode==2:
 				
-			self.dark.add(im)
 			self.cnt += 1
-			pt = find_max(im_sub, 50, 2)
-			pt0, pt, match = filt_match_idx(self.pt0, pt, 30, self.off)
-			if len(match) == 0:
-				return
+			pt = find_max(im_sub, 20, 1)
 			
-			distplus = np.where(np.linalg.norm(pt[:, 0:2] - pt0[:, 0:2], axis = 1) > 1)
+			# ignore hotpixels
+			pt1m, pt2m, match = match_closest(self.pt0, pt, 5)
+			if len(match) > 0:
+				pt = np.delete(pt, match[:, 1], axis = 0)
 			
-			off, weights = avg_pt(pt0[distplus], pt[distplus], noise = 2)
-			dist = np.linalg.norm(off)
+			if self.off_t is None:
+				off = (0., 0.)
+			else:
+				off = self.off * (t - self.t0) / (self.off_t - self.t0)
+			pt1m, pt2m, match = match_triangle(self.pt0, pt, 5, 50, off)
+			if len(match) > 0:
+				off, weights = avg_pt(pt1m, pt2m)
+				print "triangle", off, match
+			
+				pt0, pt, match = match_closest(self.pt0, pt, 5, off)
+			
+			if len(match) > 0:
+			
+				off, weights = avg_pt(pt0, pt, noise = 3)
+				print "weights", weights 
+				dist = np.linalg.norm(off)
 
-			if (dist > 20):
-				self.dark.add(im)
+				if (dist > 20):
+					self.dark.add(im)
 			
-			self.resp0.append((t - self.t0, dist))
+				self.resp0.append((t - self.t0, dist))
 			
-			if (dist > self.dist):
-				self.dist = dist
-				self.off = off
+				if (dist > self.dist):
+					self.dist = dist
+					self.off = off
+					self.off_t = t
 			
-			print self.off, dist
+				print off, dist
+				pt_ok = match[np.where(weights > 0), 0][0]
+				self.used_cnt.extend(pt_ok)
+
+				for i in pt_ok:
+					p = self.pt0[i]
+					cv2.circle(debug, (int(p[1] + self.off[1]), int(p[0] + self.off[0])), 13, (255), 1)
+
+				if (self.dist > 100 and self.cnt > 12):
+					self.t1 = t
+					dt = self.t1 - self.t0
+					self.go.out(-1)
+				
+					aresp = np.array(self.resp0)
+					aresp1 = aresp[aresp[:, 1] > 10]
+					m, c = np.polyfit(aresp1[:, 0], aresp1[:, 1], 1)
+
+					self.pixpersec = m
+					self.t_delay1 = -c / m
+					self.pixperframe = self.pixpersec * dt / self.cnt
+					self.dist = m * dt + c
+					self.ref_off = complex(*self.off) / dist
+				
+					print "pixpersec", self.pixpersec, "pixperframe", self.pixperframe, "t_delay1", self.t_delay1
+				
+					self.pt0 = np.array(self.pt0)[np.where(np.bincount(self.used_cnt) > self.cnt / 3)]
+				
+					self.cnt = 0
+					self.mode = 3
+				
+					self.go.out(-1, self.dist / self.pixpersec)
 			for p in pt:
 				cv2.circle(debug, (int(p[1]), int(p[0])), 10, (255), 1)
-			pt_ok = match[np.where(weights > 0), 0][0]
-			self.used_cnt.extend(pt_ok)
-
-			for i in pt_ok:
-				p = self.pt0[i]
-				cv2.circle(debug, (int(p[1] + self.off[1]), int(p[0] + self.off[0])), 13, (255), 1)
-
-			if (dist > 100 and self.cnt > 12):
-				self.t1 = t
-				dt = self.t1 - self.t0
-				self.go.out(-1)
-				
-				aresp = np.array(self.resp0)
-				aresp1 = aresp[aresp[:, 1] > 10]
-				m, c = np.polyfit(aresp1[:, 0], aresp1[:, 1], 1)
-
-				self.pixpersec = m
-				self.t_delay1 = -c / m
-				self.pixperframe = self.pixpersec * dt / self.cnt
-				self.dist = m * dt + c
-				self.ref_off = complex(*self.off) / dist
-				
-				print "pixpersec", self.pixpersec, "pixperframe", self.pixperframe, "t_delay1", self.t_delay1
-				
-				self.pt0 = np.array(self.pt0)[np.where(np.bincount(self.used_cnt) > self.cnt / 2)]
-				self.cnt = 0
-				self.mode = 3
-				
-				self.go.out(-1, self.dist / self.pixpersec)
 
 		elif self.mode==3:
 			self.cnt += 1
-			pt = find_max(im_sub, 50)
-			pt0, pt, match = filt_match_idx(self.pt0, pt, 30, self.off)
-			if match.shape[0] > 0:
+			pt = find_max(im_sub, 20, 1)
+			print pt
+			pt1m, pt2m, match = match_triangle(self.pt0, pt, 5, 50, self.off)
+			if len(match) > 0:
+				off, weights = avg_pt(pt1m, pt2m)
+				print "triangle", off, match
+			
+				pt0, pt, match = match_closest(self.pt0, pt, 5, off)
+				
+			if len(match) > 0:
 				self.off, weights = avg_pt(pt0, pt)
 				err = complex(*self.off) / self.ref_off
 				
@@ -619,9 +757,15 @@ class Guider:
 
 
 		elif self.mode==4:
-			pt = find_max(im_sub, 50)
-			pt0, pt, match = filt_match_idx(self.pt0, pt, 30, self.off)
-			if match.shape[0] > 0:
+			pt = find_max(im_sub, 20, 1)
+			pt1m, pt2m, match = match_triangle(self.pt0, pt, 5, 30, self.off)
+			if len(match) > 0:
+				off, weights = avg_pt(pt1m, pt2m)
+				print "triangle", off, match
+			
+				pt0, pt, match = match_closest(self.pt0, pt, 5, off)
+				
+			if len(match) > 0:
 				self.off, weights = avg_pt(pt0, pt)
 				err = complex(*self.off) / self.ref_off
 				self.resp0.append((t - self.t0, err.real))
@@ -726,6 +870,7 @@ class Runner(threading.Thread):
 		profiler.add_function(Median.add)
 		profiler.add_function(Median.add_masked)
 		profiler.add_function(find_max)
+		profiler.add_function(match_triangle)
 		profiler.add_function(Plotter.plot)
 		
 		profiler.enable_by_count()
@@ -751,6 +896,8 @@ class Runner(threading.Thread):
 				elif cmd == 'navigator' and self.navigator is not None:
 					mode = 'navigator'
 				elif cmd == 'guider' and self.guider is not None:
+					self.guider.reset()
+					self.guider.pt0 = self.navigator.stack.get_xy()
 					mode = 'guider'
 				elif cmd == 'z1':
 					if self.focuser is not None:
@@ -788,6 +935,7 @@ class Runner(threading.Thread):
 			i += 1
 from PIL import Image;
 
+
 class Camera_test:
 	def __init__(self):
 		self.i = 0
@@ -808,20 +956,21 @@ class Camera_test:
 			self.step = 1 - self.step
 	
 	def capture(self):
-		#time.sleep(0.5)
+		#time.sleep(0.9)
 		print self.i
 		#pil_image = Image.open("converted/IMG_%04d.jpg" % (146+self.i))
 		#pil_image.thumbnail((1000,1000), Image.ANTIALIAS)
 		#im = np.array(pil_image)
 		im = cv2.imread("testimg16_" + str(self.i) + ".tif")
+		#im = apply_gamma(im, 2.2)
 		M = np.array([[1.0, 0.0, self.x],
 		              [0.0, 1.0, self.y]])
 		bg = cv2.blur(im, (30, 30))
 		im = cv2.warpAffine(im, M[0:2,0:3], (im.shape[1], im.shape[0]), bg, borderMode=cv2.BORDER_TRANSPARENT);
 
-		t = os.path.getmtime("testimg16_" + str(self.i) + ".tif")
+		#t = os.path.getmtime("testimg16_" + str(self.i) + ".tif")
 		self.i += self.step
-		return im, t
+		return im, 0
 
 class Camera_test_g:
 	def __init__(self, go):
@@ -834,11 +983,11 @@ class Camera_test_g:
 	
 	def capture(self):
 		time.sleep(0.5)
-		self.err += random.random() * 2 - 1.01
+		self.err += random.random() * 2 - 1.1
 		corr = self.go.recent_avg()
 		i = int((corr - self.go.recent_avg(1))  + self.err)
 		print self.err, corr * 3, i
-		im = cv2.imread("testimg16_" + str(i + 50) + ".tif")
+		im = cv2.imread("testimg12_" + str(i + 50) + ".tif")
 		return im, None
 
 
@@ -846,7 +995,8 @@ def run_v4l2():
 	ui.namedWindow('capture')
 	cam = Camera("/dev/video1")
 	cam.prepare(1280, 960)
-	nav = Navigator('capture')
+	dark = Median(5)
+	nav = Navigator(dark, 'capture')
 
 	runner = Runner(cam, navigator = nav)
 	runner.start()
@@ -857,7 +1007,8 @@ def run_gphoto():
 	cam.prepare()
 	ui.namedWindow('capture')
 	ui.namedWindow('full_res')
-	nav = Navigator('capture')
+	dark = Median(5)
+	nav = Navigator(dark, 'capture')
 	focuser = Focuser('capture')
 
 	runner = Runner(cam, navigator = nav, focuser = focuser)
@@ -870,9 +1021,10 @@ def run_v4l2_g():
 	cam = Camera("/dev/video1")
 	cam.prepare(1280, 960)
 
-	nav = Navigator('capture')
+	dark = Median(5)
+	nav = Navigator(dark, 'capture')
 	go = GuideOut()
-	guider = Guider(go, 'capture')
+	guider = Guider(go, dark, 'capture')
 
 	runner = Runner(cam, navigator = nav, guider = guider)
 	runner.start()
@@ -880,9 +1032,10 @@ def run_v4l2_g():
 
 def run_test_g():
 	ui.namedWindow('capture')
-	nav = Navigator('capture')
+	dark = Median(5)
+	nav = Navigator(dark, 'capture')
 	go = GuideOutBase()
-	guider = Guider(go, 'capture')
+	guider = Guider(go, dark, 'capture')
 	cam = Camera_test_g(go)
 
 	runner = Runner(cam, navigator = nav, guider = guider)
@@ -893,7 +1046,8 @@ def run_test():
 	ui.namedWindow('capture')
 	
 	cam = Camera_test()
-	nav = Navigator('capture')
+	dark = Median(5)
+	nav = Navigator(dark, 'capture')
 
 	runner = Runner(cam, navigator = nav)
 	runner.start()
@@ -902,13 +1056,16 @@ def run_test():
 def run_test_2():
 	ui.namedWindow('capture_gphoto')
 	ui.namedWindow('capture_v4l')
-	
-	cam1 = Camera_test()
-	nav1 = Navigator('capture_gphoto')
 
-	nav = Navigator('capture_v4l')
+	dark1 = Median(5)
+	dark2 = Median(5)
+
+	cam1 = Camera_test()
+	nav1 = Navigator(dark1, 'capture_gphoto')
+
+	nav = Navigator(dark2, 'capture_v4l')
 	go = GuideOutBase()
-	guider = Guider(go, 'capture_v4l')
+	guider = Guider(go, dark2, 'capture_v4l')
 	cam = Camera_test_g(go)
 
 	runner = Runner(cam1, navigator = nav1)
@@ -925,10 +1082,14 @@ def run_test_2_gphoto():
 	
 	cam1 = Camera_gphoto()
 	cam1.prepare()
-	nav1 = Navigator('capture_gphoto')
+
+	dark1 = Median(5)
+	dark2 = Median(5)
+	
+	nav1 = Navigator(dark1, 'capture_gphoto')
 	focuser = Focuser('capture_gphoto')
 
-	nav = Navigator('capture_v4l')
+	nav = Navigator(dark2, 'capture_v4l')
 	go = GuideOutBase()
 	guider = Guider(go, 'capture_v4l')
 	cam = Camera_test_g(go)
@@ -953,12 +1114,16 @@ def run_2():
 	
 	cam1 = Camera_gphoto()
 	cam1.prepare()
-	nav1 = Navigator('capture_gphoto')
+
+	dark1 = Median(5)
+	dark2 = Median(5)
+	
+	nav1 = Navigator(dark1, 'capture_gphoto')
 	focuser = Focuser('capture_gphoto')
 
-	nav = Navigator('capture_v4l')
+	nav = Navigator(dark2, 'capture_v4l')
 	go = GuideOut()
-	guider = Guider(go, 'capture_v4l')
+	guider = Guider(go, dark2, 'capture_v4l')
 
 	ui.namedWindow('capture_gphoto')
 	ui.namedWindow('capture_v4l')
@@ -978,12 +1143,14 @@ def run_2():
 if __name__ == "__main__":
 #    sys.exit(run_gphoto())
     #sys.exit(test_g())
+    
 
     #run_v4l2_g()
     #run_v4l2()
     with ui:
     	#run_gphoto()
-    	run_test_g()
+    	run_test()
+    	#run_v4l2()
     	#run_test_2_gphoto()
     	#run_v4l2_g()
     	#run_2()
