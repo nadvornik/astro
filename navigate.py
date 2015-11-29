@@ -45,8 +45,9 @@ class Median:
 		self.i = 0
 		self.list = []
 		self.res = None
+		self.bg_thread = None
 	
-	def add(self, im):
+	def _add(self, im):
 		if (self.i < len(self.list)):
 			self.list[self.i] = im
 		else:
@@ -61,7 +62,7 @@ class Median:
 		#self.res = np.empty_like(self.list[0])
 		#self.res[:,:] = a
 
-	def add_masked(self, im, pts):
+	def _add_masked(self, im, pts):
 		mask = np.zeros_like(im)
 	
 		white = np.iinfo(im.dtype).max
@@ -74,17 +75,41 @@ class Median:
 		
 		res = cv2.add(cv2.multiply(im, inv_mask, scale = 1.0 / white), cv2.multiply(self.res, mask, scale = 1.0 / white))
 		
-		self.add(res)
+		self._add(res)
 		#ui.imshow("dark", normalize(inv_mask))
 
+	def add(self, *args):
+		if self.bg_thread is not None:
+			self.bg_thread.join()
+		
+		self.bg_thread = threading.Thread(target=self._add, args = args)
+		self.bg_thread.start()
 
+	def add_masked(self, *args):
+		if self.bg_thread is not None:
+			self.bg_thread.join()
+		
+		self.bg_thread = threading.Thread(target=self._add_masked, args = args)
+		self.bg_thread.start()
+
+		
 	def get(self):
+		if self.bg_thread is not None:
+			self.bg_thread.join()
+			self.bg_thread = None
+			
 		return self.res
 
 	def len(self):
+		if self.bg_thread is not None:
+			self.bg_thread.join()
+			self.bg_thread = None
 		return len(self.list)
 
 	def reset(self):
+		if self.bg_thread is not None:
+			self.bg_thread.join()
+			self.bg_thread = None
 		self.i = 0
 		self.list = []
 
@@ -1136,7 +1161,7 @@ if __name__ == "__main__":
     #run_v4l2()
     with ui:
     	#run_gphoto()
-    	run_test_2()
+    	run_test()
     	#run_v4l2()
     	#run_test_2_gphoto()
     	#run_v4l2_g()
