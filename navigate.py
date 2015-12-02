@@ -555,9 +555,10 @@ class Navigator:
 				self.solver_off = np.array([0.0, 0.0])
 		
 	def cmd(self, cmd):
-		if cmd == ' ' and self.solver is not None:
+		if cmd == 'solver-reset' and self.solver is not None:
 			self.solver.terminate(wait=True)
 			self.field_deg = None
+			self.solver = None
 
 		if cmd == 'dark':
 			self.dark.add(self.im)

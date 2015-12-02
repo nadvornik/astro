@@ -177,8 +177,8 @@ class Plotter:
 		ann.bright = (plot_area_deg < 60)
 		ann.ngc_fraction = 0.05 / scale
 
-		ann.HD = (plot_area_deg < 3)
-		ann.HD_labels = True
+		ann.HD = (plot_area_deg < 9)
+		ann.HD_labels = (plot_area_deg < 3)
 		ann.hd_catalog = "hd.fits"
 
 		for (r, d, name) in extra:

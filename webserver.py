@@ -58,7 +58,12 @@ class Handler(BaseHTTPRequestHandler):
 		base = os.path.basename(self.path)
 		name, ext = os.path.splitext(base)
 		print name, ext
-		if ext == '.mjpg':
+		if self.path == '/':
+			self.send_response(301)
+			self.send_header('Location', 'index.html')
+			self.end_headers()
+			return
+		elif ext == '.mjpg':
 			print name
 			mjpeg = mjpeglist.get(name)
 			if mjpeg is None:
@@ -71,7 +76,7 @@ class Handler(BaseHTTPRequestHandler):
 			self.end_headers()
 			mjpeg.serve(self)
 			return
-		elif base == 'index.html':
+		elif ext == '.html':
 			self.send_response(200)
 			self.send_header('Content-type','text/html')
 			self.end_headers()

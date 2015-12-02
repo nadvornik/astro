@@ -13,7 +13,7 @@ from gui import ui
 from cmd import cmdQueue
 
 def apply_gamma(img, gamma):
-	lut = np.fromiter( ( (x / 255.0)**gamma * 65535.0 for x in xrange(65536)), dtype=np.uint16 )
+	lut = np.fromiter( ( (x / 255.0)**gamma * 65535.0 for x in xrange(256)), dtype=np.uint16 )
 	return np.take(lut, img)
 
 

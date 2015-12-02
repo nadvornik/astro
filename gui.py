@@ -13,7 +13,7 @@ class MyGUI_CV2(threading.Thread):
 	cmds = {
 		ord('q') : 'exit',
 		27 : 'exit',
-		ord('r') : 'r',
+		ord(' ') : 'solver-reset',
 		ord('d') : 'dark',
 		ord('g') : 'guider',
 		ord('f') : 'navigator',
@@ -117,5 +117,5 @@ class MyGUI_Web:
 	def __exit__(self, type, value, traceback):
 		self.server.shutdown()
 
-ui = MyGUI_CV2()
-#ui = MyGUI_Web()
+#ui = MyGUI_CV2()
+ui = MyGUI_Web()
