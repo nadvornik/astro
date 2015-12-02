@@ -78,18 +78,18 @@ class Median:
 		self._add(res)
 		#ui.imshow("dark", normalize(inv_mask))
 
-	def add(self, *args):
+	def add(self, *args, **kwargs):
 		if self.bg_thread is not None:
 			self.bg_thread.join()
 		
-		self.bg_thread = threading.Thread(target=self._add, args = args)
+		self.bg_thread = threading.Thread(target=self._add, args = args, kwargs = kwargs)
 		self.bg_thread.start()
 
-	def add_masked(self, *args):
+	def add_masked(self, *args, **kwargs):
 		if self.bg_thread is not None:
 			self.bg_thread.join()
 		
-		self.bg_thread = threading.Thread(target=self._add_masked, args = args)
+		self.bg_thread = threading.Thread(target=self._add_masked, args = args, kwargs = kwargs)
 		self.bg_thread.start()
 
 		
@@ -430,6 +430,13 @@ class Stack:
 	def reset(self):
 		self.img = None
 
+def _plot_bg(window, func, *args, **kwargs):
+	ui.imshow(window, func(*args, **kwargs))
+
+def plot_bg(*args, **kwargs):
+	#_plot_bg(*args, **kwargs)
+	threading.Thread(target=_plot_bg, args = args, kwargs = kwargs).start()
+
 class Navigator:
 	def __init__(self, dark, ui_capture):
 		self.dark = dark
@@ -490,14 +497,13 @@ class Navigator:
 					extra = [ (ti[0], ti[1], "") for ti in transf_index ]
 					#print "extra: ", extra
 					
-				ui.imshow(self.ui_capture, self.plotter.plot(nm, self.plotter_off, extra = extra))
+				plot_bg(self.ui_capture, self.plotter.plot, nm, self.plotter_off, extra = extra)
 			else:
 				ui.imshow(self.ui_capture, normalize(filtered))
 		elif (self.dispmode.startswith('disp-zoom-')):
 			if self.plotter is not None:
 				zoom = self.dispmode[len('disp-zoom-'):]
-				plot = self.plotter.plot(normalize(filtered), self.plotter_off, scale=zoom)
-				ui.imshow(self.ui_capture, plot)
+				plot_bg(self.ui_capture, self.plotter.plot, normalize(filtered), self.plotter_off, scale=zoom)
 			else:
 				ui.imshow(self.ui_capture, normalize(filtered))
 				
@@ -521,12 +527,12 @@ class Navigator:
 					self.polar.add_tan(self.solver.wcs, self.solver_time)
 					if self.polar.compute()[0]:
 						self.polar_solved = True
-						ui.imshow(self.ui_capture + '_polar2', self.polar.plot2())
+						ui.imshow(self.ui_capture + '_polar', self.polar.plot2())
 						#ui.imshow(self.ui_capture + '_polar', self.polar.plot())
 				elif self.polar_mode == 2:
 					self.polar.phase2_set_tan(self.solver.wcs)
 					#ui.imshow(self.ui_capture + '_polar', self.polar.plot())
-					ui.imshow(self.ui_capture + '_polar2', self.polar.plot2())
+					ui.imshow(self.ui_capture + '_polar', self.polar.plot2())
 					
 				self.ii += 1
 				self.plotter = Plotter(self.solver.wcs)
@@ -826,15 +832,9 @@ class Focuser:
 	def cmd(self, cmd):
 		if cmd == 'dark':
 			self.dark.add(self.im)
-		if cmd == '1':
-			self.dispmode = 1
-		if cmd == '2':
-			self.dispmode = 2
-		if cmd == '3':
-			self.dispmode = 3
-		if cmd == '4':
-			self.dispmode = 4
-			
+		if cmd.startswith('disp-'):
+			self.dispmode = cmd
+
 	def proc_frame(self, im, i):
 		self.im = im
 
@@ -847,14 +847,13 @@ class Focuser:
 
 
 		self.stack.add_simple(im_sub)
-	
-		if (self.dispmode == 1):
+		if (self.dispmode == 'disp-orig'):
 			ui.imshow(self.ui_capture, normalize(im))
-		if (self.dispmode == 2):
+		elif (self.dispmode == 'disp-df-cor'):
 			ui.imshow(self.ui_capture, normalize(im_sub))
-		if (self.dispmode == 3):
+		elif (self.dispmode == 'disp-normal'):
 			ui.imshow(self.ui_capture, normalize(self.stack.get()))
-		if (self.dispmode == 4):
+		elif (self.dispmode == 'disp-match'):
 			filtered = self.stack.get()
 			filtered = normalize(filtered)
 	
@@ -945,6 +944,8 @@ class Runner(threading.Thread):
 			if mode == 'focuser':
 				self.focuser.proc_frame(im, i)
 			i += 1
+		cmdQueue.put('exit')
+		
 from PIL import Image;
 
 
@@ -1018,6 +1019,7 @@ def run_gphoto():
 	cam = Camera_gphoto()
 	cam.prepare()
 	ui.namedWindow('capture')
+	ui.namedWindow('capture_polar')
 	ui.namedWindow('full_res')
 	dark = Median(5)
 	nav = Navigator(dark, 'capture')
@@ -1030,6 +1032,7 @@ def run_gphoto():
 
 def run_v4l2_g():
 	ui.namedWindow('capture')
+	ui.namedWindow('capture_polar')
 	cam = Camera("/dev/video1")
 	cam.prepare(1280, 960)
 
@@ -1044,6 +1047,7 @@ def run_v4l2_g():
 
 def run_test_g():
 	ui.namedWindow('capture')
+	ui.namedWindow('capture_polar')
 	dark = Median(5)
 	nav = Navigator(dark, 'capture')
 	go = GuideOutBase()
@@ -1056,6 +1060,7 @@ def run_test_g():
 
 def run_test():
 	ui.namedWindow('capture')
+	ui.namedWindow('capture_polar')
 	
 	cam = Camera_test()
 	dark = Median(5)
@@ -1068,6 +1073,8 @@ def run_test():
 def run_test_2():
 	ui.namedWindow('capture_gphoto')
 	ui.namedWindow('capture_v4l')
+	ui.namedWindow('capture_gphoto_polar')
+	ui.namedWindow('capture_v4l_polar')
 
 	dark1 = Median(5)
 	dark2 = Median(5)
@@ -1108,6 +1115,9 @@ def run_test_2_gphoto():
 
 	ui.namedWindow('capture_gphoto')
 	ui.namedWindow('capture_v4l')
+	ui.namedWindow('capture_gphoto_polar')
+	ui.namedWindow('capture_v4l_polar')
+	ui.namedWindow('full_res')
 
 	runner = Runner(cam1, navigator = nav1, focuser=focuser)
 	runner.start()
@@ -1139,6 +1149,9 @@ def run_2():
 
 	ui.namedWindow('capture_gphoto')
 	ui.namedWindow('capture_v4l')
+	ui.namedWindow('capture_gphoto_polar')
+	ui.namedWindow('capture_v4l_polar')
+	ui.namedWindow('full_res')
 
 	runner = Runner(cam1, navigator = nav1, focuser=focuser)
 	runner.start()
@@ -1161,7 +1174,7 @@ if __name__ == "__main__":
     #run_v4l2()
     with ui:
     	#run_gphoto()
-    	run_test()
+    	run_test_2()
     	#run_v4l2()
     	#run_test_2_gphoto()
     	#run_v4l2_g()
