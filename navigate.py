@@ -902,6 +902,8 @@ class Runner(threading.Thread):
 				if cmd is None:
 					break
 				if cmd == 'exit':
+					if self.navigator.solver is not None and self.navigator.solver.is_alive():
+						self.navigator.solver.terminate()
 					profiler.print_stats()
 
 					return

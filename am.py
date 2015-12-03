@@ -92,9 +92,16 @@ class Solver(threading.Thread):
 
 	def terminate(self, wait = True):
 		if self.cmd is not None:
-			pgid = os.getpgid(self.cmd.pid)
-    			os.killpg(pgid, signal.SIGTERM)
-			self.cmd.terminate()
+			try:
+				pgid = os.getpgid(self.cmd.pid)
+				os.killpg(pgid, signal.SIGTERM)
+			except:
+				print "Unexpected error:", sys.exc_info()
+			try:
+				self.cmd.terminate()
+			except:
+				print "Unexpected error:", sys.exc_info()
+
 		if (wait):
 			self.join()
 	
