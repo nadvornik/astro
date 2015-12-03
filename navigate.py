@@ -1072,16 +1072,16 @@ def run_test():
 	runner.join()
 
 def run_test_2():
-	ui.namedWindow('capture_gphoto')
+	ui.namedWindow('capture')
 	ui.namedWindow('capture_v4l')
-	ui.namedWindow('capture_gphoto_polar')
+	ui.namedWindow('capture_polar')
 	ui.namedWindow('capture_v4l_polar')
 
 	dark1 = Median(5)
 	dark2 = Median(5)
 
 	cam1 = Camera_test()
-	nav1 = Navigator(dark1, 'capture_gphoto')
+	nav1 = Navigator(dark1, 'capture')
 
 	nav = Navigator(dark2, 'capture_v4l')
 	go = GuideOutBase()
@@ -1106,17 +1106,17 @@ def run_test_2_gphoto():
 	dark1 = Median(5)
 	dark2 = Median(5)
 	
-	nav1 = Navigator(dark1, 'capture_gphoto')
-	focuser = Focuser('capture_gphoto')
+	nav1 = Navigator(dark1, 'capture')
+	focuser = Focuser('capture')
 
 	nav = Navigator(dark2, 'capture_v4l')
 	go = GuideOutBase()
 	guider = Guider(go, 'capture_v4l')
 	cam = Camera_test_g(go)
 
-	ui.namedWindow('capture_gphoto')
+	ui.namedWindow('capture')
 	ui.namedWindow('capture_v4l')
-	ui.namedWindow('capture_gphoto_polar')
+	ui.namedWindow('capture_polar')
 	ui.namedWindow('capture_v4l_polar')
 	ui.namedWindow('full_res')
 
@@ -1141,16 +1141,16 @@ def run_2():
 	dark1 = Median(5)
 	dark2 = Median(5)
 	
-	nav1 = Navigator(dark1, 'capture_gphoto')
-	focuser = Focuser('capture_gphoto')
+	nav1 = Navigator(dark1, 'capture')
+	focuser = Focuser('capture')
 
 	nav = Navigator(dark2, 'capture_v4l')
 	go = GuideOut()
 	guider = Guider(go, dark2, 'capture_v4l')
 
-	ui.namedWindow('capture_gphoto')
+	ui.namedWindow('capture')
 	ui.namedWindow('capture_v4l')
-	ui.namedWindow('capture_gphoto_polar')
+	ui.namedWindow('capture_polar')
 	ui.namedWindow('capture_v4l_polar')
 	ui.namedWindow('full_res')
 
