@@ -359,11 +359,11 @@ class Stack:
 
 		pt1 = self.prev_pt_verified
 		pt1m, pt2m, match = match_triangle(pt1, pt2, 5, 15)
-		print "match1",match
+		#print "match1",match
 		if len(match) == 0:
 			pt1 = self.get_xy()
 			pt1m, pt2m, match = match_triangle(pt1, pt2, 5, 15)
-			print "match2",match
+			#print "match2",match
 		
 		
 		if len(match) == 0:
@@ -377,8 +377,8 @@ class Stack:
 	
 			pt1m, pt2m, match = match_closest(pt1, pt2, 5, off)
 			off, weights = avg_pt(pt1m, pt2m)
-			print "off2", off 
-			print match
+			#print "off2", off 
+			#print match
 			self.prev_pt_verified = pt2m
 			self.prev_pt = pt2
 
@@ -825,7 +825,7 @@ class Guider:
 class Focuser:
 	def __init__(self, ui_capture):
 		self.stack = Stack()
-		self.dark = Median(10)
+		self.dark = Median(3)
 		self.ui_capture = ui_capture
 		self.dispmode = 3
 
@@ -854,7 +854,7 @@ class Focuser:
 			ui.imshow(self.ui_capture, normalize(im_sub))
 		elif (self.dispmode == 'disp-normal'):
 			ui.imshow(self.ui_capture, normalize(self.stack.get()))
-		elif (self.dispmode == 'disp-match'):
+		else:
 			filtered = self.stack.get()
 			filtered = normalize(filtered)
 	
@@ -1111,7 +1111,7 @@ def run_test_2_gphoto():
 
 	nav = Navigator(dark2, 'capture_v4l')
 	go = GuideOutBase()
-	guider = Guider(go, 'capture_v4l')
+	guider = Guider(go, dark2, 'capture_v4l')
 	cam = Camera_test_g(go)
 
 	ui.namedWindow('capture')
@@ -1174,12 +1174,13 @@ if __name__ == "__main__":
     #run_v4l2_g()
     #run_v4l2()
     with ui:
-    	#run_gphoto()
-    	run_test_2()
+    	run_gphoto()
+    	#run_test_2()
     	#run_v4l2()
     	#run_test_2_gphoto()
     	#run_v4l2_g()
     	#run_2()
+    	#run_test()
 
 
 

@@ -13,26 +13,40 @@ from cmd import cmdQueue
 class MjpegBuf:
 	def __init__(self):
 		self.condition = threading.Condition()
-		self.buf = ''
+		self.buf = None
+		self.encoded = True
 
 	def update(self, pil_image):
-		tmpFile = StringIO.StringIO()
-		pil_image.save(tmpFile,'JPEG')
 		with self.condition:
-			self.buf = tmpFile.getvalue()
-			#lock.release()
+			self.buf = pil_image
+			self.encoded = False
+			self.condition.notify_all()
+
+	def update_jpg(self, jpg):
+		with self.condition:
+			self.buf = jpg.getvalue()
+			self.encoded = True
 			self.condition.notify_all()
 
 	def serve(self, handler):
 		with self.condition:
+			i = 0
 			while True:
 				handler.wfile.write("--jpegBoundary\r\n")
-				self.condition.wait()
+				if self.buf is None or i > 0:
+					self.condition.wait()
+				if not self.encoded:
+					tmpFile = StringIO.StringIO()
+					self.buf.save(tmpFile,'JPEG')
+					self.buf = tmpFile.getvalue()
+					self.encoded = True
+					
 				l = len(self.buf)
 				handler.send_header('Content-type','image/jpeg')
 				handler.send_header('Content-length',str(l))
 				handler.end_headers()
 				handler.wfile.write(self.buf)
+				i +=  1
 
 class MjpegList:
 	def __init__(self):
@@ -49,6 +63,9 @@ class MjpegList:
 	
 	def update(self, name, pil_image):
 		self.dict[name].update(pil_image)
+
+	def update_jpg(self, name, jpg):
+		self.dict[name].update_jpg(jpg)
 
 
 

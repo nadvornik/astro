@@ -68,7 +68,7 @@ class MyGUI_CV2(threading.Thread):
 		self.queue.put((name, img))
 
 	def imshow_jpg(self, name, jpg):
-		pil_image = Image.open(io.BytesIO(jpg))
+		pil_image = Image.open(jpg)
 		img = np.array(pil_image)
 		self.queue.put((name, img))
 	
@@ -109,7 +109,7 @@ class MyGUI_Web:
 		webserver.mjpeglist.update(name, pil_image)
 
 	def imshow_jpg(self, name, jpg):
-		webserver.mjpeglist.update(name,jpg)
+		webserver.mjpeglist.update_jpg(name,jpg)
 	
 	def __enter__(self):
 		pass
