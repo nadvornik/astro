@@ -36,7 +36,8 @@ from gui import ui
 from cmd import cmdQueue
 
 def normalize(img):
-	return cv2.normalize(img, alpha = 0, beta = 255, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_8UC1)
+	dst = np.empty_like(img)
+	return cv2.normalize(img, dst, alpha = 0, beta = 255, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_8UC1)
 	
 
 class Median:
@@ -947,6 +948,8 @@ class Runner(threading.Thread):
 			if mode == 'focuser':
 				self.focuser.proc_frame(im, i)
 			i += 1
+			#if i == 300:
+			#	cmdQueue.put('exit')
 		cmdQueue.put('exit')
 		
 from PIL import Image;
