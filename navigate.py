@@ -1169,20 +1169,16 @@ def run_2():
 
 
 if __name__ == "__main__":
-#    sys.exit(run_gphoto())
-    #sys.exit(test_g())
-    
-
-    #run_v4l2_g()
-    #run_v4l2()
-    with ui:
-    	run_gphoto()
-    	#run_test_2()
-    	#run_v4l2()
-    	#run_test_2_gphoto()
-    	#run_v4l2_g()
-    	#run_2()
-    	#run_test()
+	os.environ["LC_NUMERIC"] = "C"
+	
+	with ui:
+		#run_gphoto()
+	#run_test_2()
+	#run_v4l2()
+	#run_test_2_gphoto()
+	#run_v4l2_g()
+	#run_2()
+		run_test()
 
 
 

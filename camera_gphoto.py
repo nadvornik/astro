@@ -131,6 +131,9 @@ class Camera_gphoto:
 				time.sleep(2)
 				continue
 		
+		cur_time = self.get_config_value('datetime')
+		subprocess.call(['date', '--set', '@' + str(cur_time) ])
+		
 		# required configuration will depend on camera type!
 		self.set_config_choice('capturesizeclass', 2)
 	
