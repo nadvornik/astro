@@ -21,10 +21,11 @@ class GuideOut(GuideOutBase):
 
 	def __init__(self):
 		GuideOutBase.__init__(self)
+		gpio.init()
 		self.st4pins = [ port.PD14, port.PC4, port.PC7, port.PA7 ]
 
 		for p in self.st4pins:
-			gpio.setcfg(p, gpio.OUTPUT)  #Configure LED1 as output
+			gpio.setcfg(p, gpio.OUTPUT)
 
 		
 
