@@ -27,7 +27,8 @@ import threading
 from v4l2_camera import *
 from camera_gphoto import *
 
-from serial_control import GuideOutBase, GuideOut
+from guide_out import GuideOutBase
+from guide_out_serial import GuideOut
 
 import random
 from line_profiler import LineProfiler
