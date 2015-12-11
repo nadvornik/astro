@@ -115,58 +115,88 @@ class Median:
 		self.list = []
 
 
+class MaxDetector(threading.Thread):
+	def __init__(self, img, d, n, y1, y2):
+		threading.Thread.__init__(self)
+		self.d = d
+		self.n = n
+		self.y1 = y1
+		self.y2 = y2
+		
+		self.y1e = max(0, y1 - d)
+		self.y2e = min(img.shape[0], y2 + d)
+		
+		self.y1e0 = y1 - self.y1e
+		self.y2e0 = y2 - self.y1e
+		
+		self.img = img
+	
+	def run(self):
+		(h, w) = self.img.shape
+		imge = np.array(self.img[self.y1e:self.y2e, : ], dtype = np.float32)
+	
+		imge = cv2.GaussianBlur(imge, (9, 9), 0)
 
+
+		dilkernel = np.ones((self.d,self.d),np.uint8)
+		dil = cv2.dilate(imge, dilkernel)
+		img = imge[self.y1e0:self.y2e0, : ]
+		dil = dil[self.y1e0:self.y2e0, : ]
+		
+		locmax = np.where(img >= dil)
+		valmax = img[locmax]
+		ordmax = np.argsort(valmax)[::-1]
+		ordmax = ordmax[:self.n]
+
+		self.found = []
+	
+		for (y, x, v) in zip(locmax[0][ordmax], locmax[1][ordmax], valmax[ordmax]):
+			if (x < 1):
+				continue
+			if (y + self.y1 < 1):
+				continue
+			if (x > w - 2):
+				continue
+			if (y + self.y1 > h - 2):
+				continue
+			dx = imge[y + self.y1e0, x - 1] - 2 * v + imge[y + self.y1e0, x + 1]
+			dy = imge[y + self.y1e0 - 1, x] - 2 * v + imge[y + self.y1e0 + 1, x]
+			if dx != 0:
+				xs = 0.5*(imge[y + self.y1e0, x - 1] - imge[y + self.y1e0, x + 1]) / dx
+			else:
+				xs = 0
+			if dy != 0:
+				ys = 0.5*(imge[y + self.y1e0 - 1, x] - imge[y + self.y1e0 + 1, x]) / dy
+			else:
+				ys = 0
+			# y, x, flux
+			self.found.append((y + self.y1 + ys, x + xs, v))
+
+	
 
 def find_max(img, d, n = 40):
-
-	img = np.array(img, dtype = np.float32)
-	
-	img = cv2.GaussianBlur(img, (9, 9), 0)
-
-
-	(mean, stddev) = cv2.meanStdDev(img)
-
-	dilkernel = np.ones((d,d),np.uint8)
-	dil = cv2.dilate(img, dilkernel)
-
 	(h, w) = img.shape
+	par = 4
+	step = (h + par - 1) / par
+	mds = []
+	for y in range(0, h, step):
+		md = MaxDetector(img, d, n / par + 1, y, min(y + step, h))
+		mds.append(md)
+		#md.run()
+		md.start()
+		
 
-	#r,dil = cv2.threshold(dil,0,255,cv2.THRESH_TOZERO)
-	#dil = np.maximum(dil, 0.0)
+	joined = []
+	for md in mds:
+		md.join()
+		joined += md.found
 	
-	locmax = np.where(img >= dil)
-	valmax = img[locmax]
-	ordmax = np.argsort(valmax)[::-1]
-	ordmax = ordmax[:40]
+	joined = np.array(joined)
+	ordmax = np.argsort(joined[:, 2])[::-1]
+	ordmax = ordmax[:n]
+	joined = joined[ordmax]
 	
-	nonzero = zip(locmax[0][ordmax], locmax[1][ordmax])
-	
-	ret = []
-	
-	#for (y, x) in nonzero:
-	for (y, x) in nonzero:
-		if (x < 1):
-			continue
-		if (y < 1):
-			continue
-		if (x > w - 2):
-			continue
-		if (y > h - 2):
-			continue
-		dx = img[y, x - 1] - 2 * img[y, x] + img[y, x + 1]
-		dy = img[y - 1, x] - 2 * img[y, x] + img[y + 1, x]
-		if dx != 0:
-			xs = 0.5*(img[y, x - 1] - img[y, x + 1]) / dx
-		else:
-			xs = x
-		if dy != 0:
-			ys = 0.5*(img[y - 1, x] - img[y + 1, x]) / dy
-		else:
-			ys = y
-		# y, x, flux, certainity: n_sigma
-		ret.append((y + ys, x + xs, img[y, x], math.erf(((img[y, x] - mean) / stddev) / 2**0.5) ** (w * h) ))
-	ret = np.array(ret)
-	return ret
+	return joined
 
 def match_take(pt1, pt2, match, ord1 = None, ord2 = None):
 	match = np.array(match)
@@ -285,7 +315,7 @@ def match_closest(pt1, pt2, d, off = (0.0, 0.0)):
 	pt2s = pt2[ord2]
 	match = []
 	l = len(pt2s)
-	for i1, (y1orig, x1orig, flux1, cert1) in enumerate(pt1):
+	for i1, (y1orig, x1orig, flux1) in enumerate(pt1):
 		y1 = y1orig + off[0]
 		x1 = x1orig + off[1]
 		i2 = np.searchsorted(pt2s[:, 0], y1)
@@ -293,7 +323,7 @@ def match_closest(pt1, pt2, d, off = (0.0, 0.0)):
 		closest_idx = -1
 		ii2 = i2;
 		while (ii2 >=0 and ii2 < l):
-			(y2, x2, flux2, cert2) = pt2s[ii2]
+			(y2, x2, flux2) = pt2s[ii2]
 			if (y2 < y1 - d):
 				break
 			dist = (y1 - y2) ** 2 + (x1 - x2) ** 2
@@ -305,7 +335,7 @@ def match_closest(pt1, pt2, d, off = (0.0, 0.0)):
 
 		ii2 = i2;
 		while (ii2 >=0 and ii2 < l):
-			(y2, x2, flux2, cert2) = pt2s[ii2]
+			(y2, x2, flux2) = pt2s[ii2]
 			if (y2 > y1 + d):
 				break
 			dist = (y1 - y2) ** 2 + (x1 - x2) ** 2
@@ -322,7 +352,7 @@ def match_closest(pt1, pt2, d, off = (0.0, 0.0)):
 def avg_pt(pt1m, pt2m, noise = 2):
 	if pt1m.shape[0] > 1:
 		dif = pt2m[:, 0:2] - pt1m[:, 0:2]
-		weights = pt2m[:, 3] * pt1m[:, 3]
+		weights = pt2m[:, 2] * pt1m[:, 2]
 		sumw = np.sum(weights)
 		if sumw > 0:
 			v = np.average(dif, axis = 0, weights = weights)
@@ -333,7 +363,7 @@ def avg_pt(pt1m, pt2m, noise = 2):
 			return v, weights
 	elif pt1m.shape[0] == 1:
 		v = (pt2m - pt1m)[0, 0:2]
-		weights = np.sqrt(pt2m[:, 3] * pt1m[:, 3])
+		weights = np.sqrt(pt2m[:, 2] * pt1m[:, 2])
 		return v, weights
 	
 	v = np.array([0.0, 0.0])
@@ -948,8 +978,8 @@ class Runner(threading.Thread):
 			if mode == 'focuser':
 				self.focuser.proc_frame(im, i)
 			i += 1
-			#if i == 300:
-			#	cmdQueue.put('exit')
+			if i == 300:
+				cmdQueue.put('exit')
 		cmdQueue.put('exit')
 		
 from PIL import Image;
