@@ -463,8 +463,11 @@ class Stack:
 	def reset(self):
 		self.img = None
 
-def _plot_bg(window, func, *args, **kwargs):
-	ui.imshow(window, func(*args, **kwargs))
+def _plot_bg(window, status, func, *args, **kwargs):
+	disp = func(*args, **kwargs)
+	cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 0), 2)
+
+	ui.imshow(window, disp)
 
 def plot_bg(*args, **kwargs):
 	#_plot_bg(*args, **kwargs)
@@ -482,12 +485,14 @@ class Navigator:
 		self.field_deg = None
 		self.plotter = None
 		self.plotter_off = np.array([0.0, 0.0])
-		self.ii = 0
 		self.ui_capture = ui_capture
 		self.polar = Polar()
-		self.polar_mode = 1
+		self.polar_mode = 'polar-solve'
 		self.polar_solved = False
 		self.index_sources = []
+		self.i_solved = 0
+		self.i_solver = 0
+		self.prev_t = 0
 
 	def proc_frame(self,im, i, t = None):
 		if im.ndim > 2:
@@ -495,7 +500,7 @@ class Navigator:
 
 		self.im = im
 		
-		if t == None:
+		if t is None:
 			t = time.time()
 		if (self.dark.len() > 2):
 			im_sub = cv2.subtract(im, self.dark.get())
@@ -516,10 +521,20 @@ class Navigator:
 		self.solver_off += off
 		self.plotter_off += off
 
+		try:
+			fps = 1.0 / (t - self.prev_t)
+		except:
+			fps = 0
+		
+		status = "#%d %s %s (%.1f,%.1f) solved#%d fps:%.1f" % (i, self.dispmode, self.polar_mode, self.plotter_off[1], self.plotter_off[0], i - self.i_solved, fps)
 		if (self.dispmode == 'disp-orig'):
-			ui.imshow(self.ui_capture, normalize(im))
+			disp = normalize(im)
+			cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
+			ui.imshow(self.ui_capture, disp)
 		elif (self.dispmode == 'disp-df-cor'):
-			ui.imshow(self.ui_capture, normalize(im_sub))
+			disp = normalize(im_sub)
+			cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
+			ui.imshow(self.ui_capture, disp)
 		elif (self.dispmode == 'disp-normal'):
 			if self.plotter is not None:
 				nm = normalize(filtered)
@@ -532,18 +547,24 @@ class Navigator:
 					extra = [ (ti[0], ti[1], "") for ti in transf_index ]
 					#print "extra: ", extra
 					
-				plot_bg(self.ui_capture, self.plotter.plot, nm, self.plotter_off, extra = extra)
+				plot_bg(self.ui_capture, status, self.plotter.plot, nm, self.plotter_off, extra = extra)
 			else:
-				ui.imshow(self.ui_capture, normalize(filtered))
+				disp = normalize(filtered)
+				cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
+				ui.imshow(self.ui_capture, disp)
 		elif (self.dispmode.startswith('disp-zoom-')):
 			if self.plotter is not None:
 				zoom = self.dispmode[len('disp-zoom-'):]
-				plot_bg(self.ui_capture, self.plotter.plot, normalize(filtered), self.plotter_off, scale=zoom)
+				plot_bg(self.ui_capture, status, self.plotter.plot, normalize(filtered), self.plotter_off, scale=zoom)
 			else:
-				ui.imshow(self.ui_capture, normalize(filtered))
+				disp = normalize(filtered)
+				cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
+				ui.imshow(self.ui_capture, disp)
 				
 		elif (self.dispmode == 'disp-match'):
-			ui.imshow(self.ui_capture, normalize(self.stack.match))
+			disp = self.stack.match
+			cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
+			ui.imshow(self.ui_capture, disp)
 	
 		if self.solver is not None and not self.solver.is_alive():
 			self.solver.join()
@@ -558,20 +579,20 @@ class Navigator:
 				#print "self.solver.ind_radec", self.solver.ind_radec
 				#self.solver.wcs.write_to("log_%d.wcs" % self.ii)
 				#subprocess.call(['touch', '-r', "testimg17_" + str(i) + ".tif", "log_%d.wcs" % self.ii])
-				if self.polar_mode == 1:
+				if self.polar_mode == 'polar-solve':
 					self.polar.add_tan(self.solver.wcs, self.solver_time)
 					if self.polar.compute()[0]:
 						self.polar_solved = True
 						ui.imshow(self.ui_capture + '_polar', self.polar.plot2())
 						#ui.imshow(self.ui_capture + '_polar', self.polar.plot())
-				elif self.polar_mode == 2:
+				elif self.polar_mode == 'polar-adjust':
 					self.polar.phase2_set_tan(self.solver.wcs)
 					#ui.imshow(self.ui_capture + '_polar', self.polar.plot())
 					ui.imshow(self.ui_capture + '_polar', self.polar.plot2())
 					
-				self.ii += 1
 				self.plotter = Plotter(self.solver.wcs)
 				self.plotter_off = self.solver_off
+				self.i_solved = self.i_solver
 			else:
 				self.ra = None
 				self.dec = None
@@ -583,11 +604,13 @@ class Navigator:
 			print "len", len(xy)
 			if len(xy) > 6:
 				self.solver_time = t
+				self.i_solver = i
 				self.solved_im = im
 				self.solver = Solver(sources_list = xy, field_w = im.shape[1], field_h = im.shape[0], ra = self.ra, dec = self.dec, field_deg = self.field_deg)
 				#self.solver = Solver(sources_img = filtered, field_w = im.shape[1], field_h = im.shape[0], ra = self.ra, dec = self.dec, field_deg = self.field_deg)
 				self.solver.start()
 				self.solver_off = np.array([0.0, 0.0])
+		self.prev_t = t
 		
 	def cmd(self, cmd):
 		if cmd == 'solver-reset' and self.solver is not None:
@@ -605,11 +628,11 @@ class Navigator:
 
 		if cmd == 'polar-reset':
 			self.polar = Polar()
-			self.polar_mode = 1
+			self.polar_mode = 'polar-solve'
 			self.polar_solved = False
 
 		if cmd == 'polar-align' and self.polar_solved:
-			self.polar_mode = 2
+			self.polar_mode = 'polar-adjust'
 
 
 def fit_line(xylist):
@@ -627,6 +650,7 @@ class Guider:
 		self.resp0 = []
 		self.pt0 = []
 		self.ui_capture = ui_capture
+		self.prev_t = 0
 
 	def reset(self):
 		self.mode = 1
@@ -662,7 +686,13 @@ class Guider:
 
 	def proc_frame(self, im, i):
 		t = time.time()
-		print "mode", self.mode
+
+		try:
+			fps = 1.0 / (t - self.prev_t)
+		except:
+			fps = 0
+		
+		status = "#%d Guider:%d fps:%.1f" % (i, self.mode, fps)
 
 		if im.ndim > 2:
 			im = cv2.min(cv2.min(im[:, :, 0], im[:, :, 1]), im[:, :, 2])
@@ -683,7 +713,7 @@ class Guider:
 		bg = cv2.blur(bg, (30, 30))
 		im_sub = cv2.subtract(im_sub, bg)
 
-		debug = normalize(im_sub)
+		disp = normalize(im_sub)
 
 		if self.mode==1:
 			self.used_cnt = []
@@ -737,7 +767,9 @@ class Guider:
 
 				for i in pt_ok:
 					p = self.pt0[i]
-					cv2.circle(debug, (int(p[1] + self.off[1]), int(p[0] + self.off[0])), 13, (255), 1)
+					cv2.circle(disp, (int(p[1] + self.off[1]), int(p[0] + self.off[0])), 13, (255), 1)
+
+				status += " dist:%.1f" % (dist)
 
 				if (self.dist > 100 and self.cnt > 12):
 					self.t1 = t
@@ -763,7 +795,7 @@ class Guider:
 				
 					self.go.out(-1, self.dist / self.pixpersec)
 			for p in pt:
-				cv2.circle(debug, (int(p[1]), int(p[0])), 10, (255), 1)
+				cv2.circle(disp, (int(p[1]), int(p[0])), 10, (255), 1)
 
 		elif self.mode==3:
 			self.cnt += 1
@@ -783,12 +815,13 @@ class Guider:
 				self.resp0.append((t - self.t0, err.real))
 			
 				print "err:", err, err.real
+				status += " err:%.1f t_delay1:%.1f" % (err.real, self.t_delay1)
 
 				if (err.real > 30):
 					self.dark_add_masked(im)
 
 				for p in pt:
-					cv2.circle(debug, (int(p[1]), int(p[0])), 10, (255), 1)
+					cv2.circle(disp, (int(p[1]), int(p[0])), 10, (255), 1)
 				self.go.out(-1, err.real / self.pixpersec)
 				
 				if err.real < self.pixpersec * self.t_delay1 + self.pixperframe:
@@ -831,7 +864,7 @@ class Guider:
 				
 				aggresivnes = 0.6
 				err_corr *= aggresivnes
-				print "err:", err, err.real, "corr:", err_corr, "t_delay: ", self.t_delay
+				status += " err:%.1f corr:%.1f t_delay:%.1f" % (err.real, err_corr, self.t_delay)
 				if err_corr > 0.1:
 					self.go.out(-1, -err_corr / self.pixpersec_neg)
 				elif err_corr < -0.1:
@@ -845,7 +878,7 @@ class Guider:
 					self.capture_in_progress = True
 				
 				for p in pt:
-					cv2.circle(debug, (int(p[1]), int(p[0])), 10, (255), 1)
+					cv2.circle(disp, (int(p[1]), int(p[0])), 10, (255), 1)
 				
 
 				if i % 100 == 0:
@@ -855,9 +888,11 @@ class Guider:
 				
 		if len(self.pt0) > 0:
 			for p in self.pt0:
-				cv2.circle(debug, (int(p[1]), int(p[0])), 13, (255), 1)
+				cv2.circle(disp, (int(p[1]), int(p[0])), 13, (255), 1)
 
-		ui.imshow(self.ui_capture, debug)
+		cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
+		ui.imshow(self.ui_capture, disp)
+		self.prev_t = t
 
 
 class Focuser:
@@ -865,7 +900,8 @@ class Focuser:
 		self.stack = Stack()
 		self.dark = Median(3)
 		self.ui_capture = ui_capture
-		self.dispmode = 3
+		self.dispmode = 'disp-orig'
+		self.prev_t = 0
 
 
 	def cmd(self, cmd):
@@ -875,6 +911,14 @@ class Focuser:
 			self.dispmode = cmd
 
 	def proc_frame(self, im, i):
+		t = time.time()
+
+		try:
+			fps = 1.0 / (t - self.prev_t)
+		except:
+			fps = 0
+		
+		status = "#%d Focuser: %s fps:%.1f" % (i, self.dispmode, fps)
 
 		if im.ndim > 2:
 			im = cv2.min(cv2.min(im[:, :, 0], im[:, :, 1]), im[:, :, 2])
@@ -891,23 +935,31 @@ class Focuser:
 
 		self.stack.add_simple(im_sub)
 		if (self.dispmode == 'disp-orig'):
-			ui.imshow(self.ui_capture, normalize(im))
+			disp = normalize(im)
+			cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
+			ui.imshow(self.ui_capture, disp)
 		elif (self.dispmode == 'disp-df-cor'):
-			ui.imshow(self.ui_capture, normalize(im_sub))
+			disp = normalize(im_sub)
+			cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
+			ui.imshow(self.ui_capture, disp)
 		elif (self.dispmode == 'disp-normal'):
-			ui.imshow(self.ui_capture, normalize(self.stack.get()))
+			disp = normalize(self.stack.get())
+			cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
+			ui.imshow(self.ui_capture, disp)
 		else:
 			filtered = self.stack.get()
 			filtered = normalize(filtered)
 	
 			mask = cv2.compare(filtered, 128, cv2.CMP_GE)
 	
-			print "Nonzero size: ", cv2.countNonZero(mask)
+			status += " Size: %d" % ( cv2.countNonZero(mask))
 	
-			rgb = cv2.cvtColor(filtered,cv2.COLOR_GRAY2RGB)
+			disp = cv2.cvtColor(filtered,cv2.COLOR_GRAY2RGB)
 	
-			rgb[:,:, 1] = cv2.bitwise_and(filtered, cv2.bitwise_not(mask))
-			ui.imshow(self.ui_capture, rgb)
+			disp[:,:, 1] = cv2.bitwise_and(filtered, cv2.bitwise_not(mask))
+			cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 0), 2)
+			ui.imshow(self.ui_capture, disp)
+		self.prev_t = t
 
 class Runner(threading.Thread):
 	def __init__(self, camera, navigator = None, guider = None, focuser = None):
@@ -1033,7 +1085,7 @@ class Camera_test:
 
 		#t = os.path.getmtime("testimg16_" + str(self.i) + ".tif")
 		self.i += self.step
-		return im, 0
+		return im, None
 
 class Camera_test_g:
 	def __init__(self, go):
@@ -1219,13 +1271,13 @@ if __name__ == "__main__":
 	os.environ["LC_NUMERIC"] = "C"
 	
 	with ui:
-		#run_gphoto()
-	#run_test_2()
-	#run_v4l2()
-	#run_test_2_gphoto()
-	#run_v4l2_g()
-	#run_2()
-		run_test()
+		run_gphoto()
+		#run_test_2()
+		#run_v4l2()
+		#run_test_2_gphoto()
+		#run_v4l2_g()
+		#run_2()
+		#run_test_g()
 
 
 
