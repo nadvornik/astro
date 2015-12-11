@@ -446,7 +446,7 @@ class Stack:
 		self.xy = None
 		return (0.0, 0.0)
 
-	def get(self, dtype = np.uint8):
+	def get(self, dtype = None):
 		if dtype == np.uint8:
 			return cv2.divide(self.img, 255, dtype=cv2.CV_8UC1)
 		else:
@@ -488,7 +488,9 @@ class Navigator:
 		self.index_sources = []
 
 	def proc_frame(self,im, i, t = None):
-	
+		if im.ndim > 2:
+			im = cv2.min(cv2.min(im[:, :, 0], im[:, :, 1]), im[:, :, 2])
+
 		self.im = im
 		
 		if t == None:
@@ -659,6 +661,9 @@ class Guider:
 	def proc_frame(self, im, i):
 		t = time.time()
 		print "mode", self.mode
+
+		if im.ndim > 2:
+			im = cv2.min(cv2.min(im[:, :, 0], im[:, :, 1]), im[:, :, 2])
 		
 		if len(self.pt0) == 0:
 			cmdQueue.put('navigator')
@@ -868,6 +873,10 @@ class Focuser:
 			self.dispmode = cmd
 
 	def proc_frame(self, im, i):
+
+		if im.ndim > 2:
+			im = cv2.min(cv2.min(im[:, :, 0], im[:, :, 1]), im[:, :, 2])
+
 		self.im = im
 
 		if (self.dark.len() > 0):
@@ -914,7 +923,8 @@ class Runner(threading.Thread):
 		profiler.add_function(Median.add_masked)
 		profiler.add_function(find_max)
 		profiler.add_function(match_triangle)
-		profiler.add_function(Plotter.plot)
+		profiler.add_function(Runner.run)
+		profiler.add_function(Camera_test.capture)
 		
 		profiler.enable_by_count()
 		
@@ -970,7 +980,6 @@ class Runner(threading.Thread):
 	
 			im, t = self.camera.capture()
 			#cv2.imwrite("testimg20_" + str(i) + ".tif", im)
-			im = np.amin(im, axis = 2)
 			if mode == 'navigator':
 				self.navigator.proc_frame(im, i, t)
 			if mode == 'guider':
@@ -1012,10 +1021,11 @@ class Camera_test:
 		#im = np.array(pil_image)
 		im = cv2.imread("testimg16_" + str(self.i) + ".tif")
 		#im = apply_gamma(im, 2.2)
-		M = np.array([[1.0, 0.0, self.x],
-		              [0.0, 1.0, self.y]])
-		bg = cv2.blur(im, (30, 30))
-		im = cv2.warpAffine(im, M[0:2,0:3], (im.shape[1], im.shape[0]), bg, borderMode=cv2.BORDER_TRANSPARENT);
+		if self.x != 0 or self.y != 0:
+			M = np.array([[1.0, 0.0, self.x],
+		        	      [0.0, 1.0, self.y]])
+			bg = cv2.blur(im, (30, 30))
+			im = cv2.warpAffine(im, M[0:2,0:3], (im.shape[1], im.shape[0]), bg, borderMode=cv2.BORDER_TRANSPARENT);
 
 		#t = os.path.getmtime("testimg16_" + str(self.i) + ".tif")
 		self.i += self.step
