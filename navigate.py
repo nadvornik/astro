@@ -35,6 +35,8 @@ from line_profiler import LineProfiler
 from gui import ui
 from cmd import cmdQueue
 
+from stacktraces import stacktraces
+
 def normalize(img):
 	dst = np.empty_like(img)
 	return cv2.normalize(img, dst, alpha = 0, beta = 255, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_8UC1)
@@ -946,6 +948,8 @@ class Runner(threading.Thread):
 					if self.navigator.solver is not None and self.navigator.solver.is_alive():
 						self.navigator.solver.terminate()
 					profiler.print_stats()
+					stacktraces()
+
 
 					return
 				elif cmd == 'navigator' and self.navigator is not None:
@@ -987,10 +991,10 @@ class Runner(threading.Thread):
 			if mode == 'focuser':
 				self.focuser.proc_frame(im, i)
 			i += 1
-			if i == 300:
-				cmdQueue.put('exit')
+			#if i == 300:
+			#	cmdQueue.put('exit')
 		cmdQueue.put('exit')
-		
+
 from PIL import Image;
 
 

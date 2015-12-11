@@ -30,9 +30,12 @@ class MjpegBuf:
 
 	def serve(self, handler):
 		with self.condition:
+			self.condition.release()
 			i = 0
 			while True:
 				handler.wfile.write("--jpegBoundary\r\n")
+				
+				self.condition.acquire()
 				if self.buf is None or i > 0:
 					self.condition.wait()
 				if not self.encoded:
@@ -40,12 +43,15 @@ class MjpegBuf:
 					self.buf.save(tmpFile,'JPEG')
 					self.buf = tmpFile.getvalue()
 					self.encoded = True
-					
-				l = len(self.buf)
+				
+				buf = self.buf
+				
+				self.condition.release()
+				l = len(buf)
 				handler.send_header('Content-type','image/jpeg')
 				handler.send_header('Content-length',str(l))
 				handler.end_headers()
-				handler.wfile.write(self.buf)
+				handler.wfile.write(buf)
 				i +=  1
 
 class MjpegList:
