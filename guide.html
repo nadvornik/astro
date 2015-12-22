@@ -1,0 +1,72 @@
+<html>
+<head>
+  <script type="text/javascript" src="jquery.min.js"></script>
+  <script type="text/javascript" src="jquery.touchSwipe.js"></script>
+  <script type="text/javascript" src="zoom.js"></script>
+ 
+  <link rel="stylesheet" type="text/css" href="style.css">
+  <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no">
+</head>
+
+<body>
+    <div class="viewportbox">
+        <div class='buttons'>
+            <select class='ajax' >
+            <option id='disp-normal'>disp-normal</option>
+            <option id='disp-zoom-2'>disp-zoom-2</option>
+            <option id='disp-zoom-3'>disp-zoom-3</option>
+            <option id='disp-zoom-4'>disp-zoom-4</option>
+            <option id='disp-zoom-8'>disp-zoom-8</option>
+            <option id='disp-zoom-16'>disp-zoom-16</option>
+            <option id='disp-zoom-deg50'>disp-zoom-deg50</option>
+            <option id='disp-zoom-deg100'>disp-zoom-deg100</option>
+            <option id='disp-zoom-deg180'>disp-zoom-deg180</option>
+            <option id='disp-match'>disp-match</option>
+            <option id='disp-orig'>disp-orig</option>
+            <option id='disp-df-cor'>disp-df-cor</option>
+            </select>
+            <button class='ajax' id='navigator'>navigator</button>
+            <button class='ajax' id='guider'>guider</button>
+            <button class="toggle" id='navigate' title="Navigate">Navigate</button>
+            <div class='overlay_buttons'>
+                <div class='toggle_buttons' id='navigate_buttons'>
+                    <button class='ajax' id='solver-reset'>solver-reset</button>
+                    <button class='ajax' id='dark'>dark</button>
+                    <button class='ajax' id='polar-reset'>polar-reset</button>
+                    <button class='ajax' id='polar-align'>polar-align</button>
+                    <button class='reflink' id='guide.html'>reload</button>
+                </div>
+            </div>
+        </div>
+        <div class="imgbox">
+            <img class='image' src="capture_v4l.mjpg"/>
+        </div>
+    </div>
+    <div class="viewportbox">
+        <div class="imgbox">
+            <img class='image' src="capture_v4l_polar.mjpg"/>
+        </div>
+    </div>
+    <div class="viewportbox">
+        <div class='buttons'>
+            <button class='ajax' id='test-capture'>test-capture</button>
+            <button class='ajax' id='capture'>capture</button>
+        </div>
+        <div class="imgbox">
+            <img class='image' src="full_res.mjpg"/>
+        </div>
+    </div>
+    <div class="viewportbox">
+        <div id='txt'>debug</div>
+        <div id='txt2'>debug</div>
+        <br/>
+        <button class='ajax' id='save'>save</button>
+        <button class='ajax' id='exit'>exit</button>
+        <button class='ajax' id='shutdown'>shutdown</button>
+        <br/>
+        <button class='reflink' id='log.html'>log</button>
+        <button class='reflink prevlink' id='navig.html'>Navigator</button>
+        <button class='reflink nextlink' id='capture.html'>Capture</button>
+    </div>
+</body>
+</html>

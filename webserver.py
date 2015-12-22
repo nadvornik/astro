@@ -9,6 +9,7 @@ import StringIO
 import time
 import os
 from cmd import cmdQueue
+import subprocess
 
 class MjpegBuf:
 	def __init__(self):
@@ -99,21 +100,33 @@ class Handler(BaseHTTPRequestHandler):
 			self.end_headers()
 			mjpeg.serve(self)
 			return
-		elif ext == '.html':
+		elif base == 'log.html':
 			self.send_response(200)
 			self.send_header('Content-type','text/html')
 			self.end_headers()
-			f = open(base)
-			self.wfile.write(f.read())
-			f.close()
+			self.wfile.write("<html><head><title>Log</title></head>")
+			self.wfile.write("<body><pre>")
+			self.wfile.write(subprocess.check_output(['journalctl', '-u', 'navigate.service', '-n', '300']))
+			self.wfile.write("</bre></body></html>")
 			return
-		elif base == 'jquery.min.js':
-			self.send_response(200)
-			self.send_header('Content-type','application/javascript')
-			self.end_headers()
-			f = open(base)
-			self.wfile.write(f.read())
+		elif ext == '.html' or ext == '.js' or  ext == '.css':
+			try:
+				f = open(base)
+			except:
+				self.send_response(404)
+				self.end_headers()
+				return
+			c = f.read()
 			f.close()
+			self.send_response(200)
+			if ext == '.html':
+				self.send_header('Content-type','text/html; charset=utf-8')
+			elif ext == '.js':
+				self.send_header('Content-type','application/javascript')
+			elif ext == '.css':
+				self.send_header('Content-type','text/css')
+			self.end_headers()
+			self.wfile.write(c)
 			return
 		self.send_response(404)
 		self.end_headers()
@@ -154,6 +167,7 @@ class ServerThread(threading.Thread):
 		self.server.serve_forever()
 
 	def shutdown(self):
+		time.sleep(10)
 		self.server.shutdown()
 		
 mjpeglist = MjpegList()
@@ -162,12 +176,12 @@ if __name__ == '__main__':
 	server = ServerThread()
 	server.start()
 	
-	mjpeglist.add('cam')
+	mjpeglist.add('capture')
 
 	i = 0
 	while True:
-		pil_image = Image.open("testimg12_" + str(i % 5 * 4 + 3) + ".tif")
-		mjpeglist.update('cam', pil_image)
-		time.sleep(1)
+		pil_image = Image.open("testimg2_" + str(i % 5 * 4 + 3) + ".tif")
+		mjpeglist.update('capture', pil_image)
+		time.sleep(10)
 
 		i += 1
