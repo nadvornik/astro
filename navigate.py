@@ -28,7 +28,6 @@ from v4l2_camera import *
 from camera_gphoto import *
 
 from guide_out import GuideOutBase
-from guide_out_serial import GuideOut
 
 import random
 from line_profiler import LineProfiler
@@ -240,8 +239,8 @@ def match_triangle(pt1, pt2, maxdif = 5.0, maxdrift = 10, off = (0.0, 0.0)):
 	ord1 = np.argsort(pt1[:, 2])[::-1]
 	ord2 = np.argsort(pt2[:, 2])[::-1]
 	
-	pt1s = pt1[ord1][:20]
-	pt2s = pt2[ord2][:20]
+	pt1s = pt1[ord1][:10]
+	pt2s = pt2[ord2][:10]
 	
 	dist1 = np.array([ [ ((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2) ** 0.5 for p1 in pt1s ] for p2 in pt1s ])
 	dist2 = np.array([ [ ((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2) ** 0.5 for p1 in pt2s ] for p2 in pt2s ])
@@ -997,13 +996,14 @@ class Runner(threading.Thread):
 				cmd=cmdQueue.get(self, 1)
 				if cmd is None:
 					break
-				if cmd == 'exit':
+				if cmd == 'exit' or cmd == 'shutdown':
 					if self.navigator.solver is not None and self.navigator.solver.is_alive():
 						self.navigator.solver.terminate()
 					profiler.print_stats()
 					stacktraces()
 
-
+					if cmd == 'shutdown':
+						subprocess.call(['shutdown', '-h', "now"])
 					return
 				elif cmd == 'navigator' and self.navigator is not None:
 					mode = 'navigator'
@@ -1076,7 +1076,7 @@ class Camera_test:
 		#pil_image = Image.open("converted/IMG_%04d.jpg" % (146+self.i))
 		#pil_image.thumbnail((1000,1000), Image.ANTIALIAS)
 		#im = np.array(pil_image)
-		im = cv2.imread("testimg16_" + str(self.i) + ".tif")
+		im = cv2.imread("testimg2_" + str(self.i) + ".tif")
 		#im = apply_gamma(im, 2.2)
 		if self.x != 0 or self.y != 0:
 			M = np.array([[1.0, 0.0, self.x],
@@ -1109,7 +1109,8 @@ class Camera_test_g:
 
 def run_v4l2():
 	ui.namedWindow('capture')
-	cam = Camera("/dev/video1")
+	ui.namedWindow('capture_polar')
+	cam = Camera("/dev/video0")
 	cam.prepare(1280, 960)
 	dark = Median(5)
 	nav = Navigator(dark, 'capture')
@@ -1134,9 +1135,10 @@ def run_gphoto():
 
 
 def run_v4l2_g():
+	from guide_out_gpio import GuideOut
 	ui.namedWindow('capture')
 	ui.namedWindow('capture_polar')
-	cam = Camera("/dev/video1")
+	cam = Camera("/dev/video0")
 	cam.prepare(1280, 960)
 
 	dark = Median(5)
@@ -1234,7 +1236,8 @@ def run_test_2_gphoto():
 
 
 def run_2():
-	cam = Camera("/dev/video1")
+	from guide_out_gpio import GuideOut
+	cam = Camera("/dev/video0")
 	cam.prepare(1280, 960)
 	
 	cam1 = Camera_gphoto()
@@ -1272,13 +1275,15 @@ if __name__ == "__main__":
 	os.environ["LC_NUMERIC"] = "C"
 	
 	with ui:
-		run_gphoto()
-		#run_test_2()
+		#run_gphoto()
+		run_test_2()
 		#run_v4l2()
 		#run_test_2_gphoto()
 		#run_v4l2_g()
 		#run_2()
 		#run_test_g()
+		#run_2()
+		#run_test()
 
 
 

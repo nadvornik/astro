@@ -224,7 +224,7 @@ class Camera:
 		os.close(self.vd)
 
 if __name__ == "__main__":
-	cam = Camera("/dev/video1")
+	cam = Camera("/dev/video0")
 	cam.prepare(1280, 960)
 
 	for i in range(0,20):
