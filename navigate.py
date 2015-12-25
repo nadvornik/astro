@@ -585,19 +585,23 @@ class Navigator:
 					self.polar.add_tan(self.solver.wcs, self.solver_time)
 					if self.polar.compute()[0]:
 						self.polar_solved = True
-						ui.imshow(self.ui_capture + '_polar', self.polar.plot2())
-						#ui.imshow(self.ui_capture + '_polar', self.polar.plot())
+						polar_plot = self.polar.plot2()
+						p_status = "#%d %s solved#%d fps:%.1f" % (i, self.polar_mode, i - self.i_solved, fps)
+						cv2.putText(polar_plot, p_status, (10, polar_plot.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255,255,0), 2)
+						ui.imshow(self.ui_capture + '_polar', polar_plot)
 				elif self.polar_mode == 'polar-adjust':
 					self.polar.phase2_set_tan(self.solver.wcs)
-					#ui.imshow(self.ui_capture + '_polar', self.polar.plot())
-					ui.imshow(self.ui_capture + '_polar', self.polar.plot2())
+					polar_plot = self.polar.plot2()
+					p_status = "#%d %s solved#%d fps:%.1f" % (i, self.polar_mode, i - self.i_solved, fps)
+					cv2.putText(polar_plot, p_status, (10, polar_plot.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2)
+					ui.imshow(self.ui_capture + '_polar', polar_plot)
 					
 				self.plotter = Plotter(self.solver.wcs)
 				self.plotter_off = self.solver_off
 				self.i_solved = self.i_solver
 			else:
 				if self.radius is not None and self.radius < 90:
-					self.radius *= 1.2
+					self.radius *= 1.5
 				else:
 					self.ra = None
 					self.dec = None
