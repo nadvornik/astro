@@ -15,7 +15,7 @@ import tempfile
 import shutil
 
 class Solver(threading.Thread):
-	def __init__(self, sources_img = None, sources_list = None, field_w = None, field_h = None, ra = None, dec = None, field_deg = None):
+	def __init__(self, sources_img = None, sources_list = None, field_w = None, field_h = None, ra = None, dec = None, field_deg = None, radius = None):
 		threading.Thread.__init__(self)
 		self.sources_img = sources_img
 		self.sources_list = sources_list
@@ -26,6 +26,9 @@ class Solver(threading.Thread):
 		self.ra = ra
 		self.dec = dec
 		self.field_deg = field_deg
+		self.radius = radius
+		if self.ra is not None and field_deg is not None and radius is None:
+			self.radius = field_deg * 2.0
 		self.solved = False
 		self.cmd = None
 		
@@ -51,11 +54,13 @@ class Solver(threading.Thread):
 		
 		if self.ra is not None:
 			cmd_s = cmd_s + ['--ra',  str(self.ra)]
+			if self.radius is not None:
+				cmd_s = cmd_s + ['--radius', str(self.radius)]
 		if self.dec is not None:
 			cmd_s = cmd_s + ['--dec', str(self.dec)]
 		
 		if self.field_deg is not None:
-			cmd_s = cmd_s + ['--radius', str(self.field_deg * 2), '--scale-low', str(self.field_deg * 0.95), '--scale-high', str(self.field_deg * 1.05), '--odds-to-solve', '1e6']
+			cmd_s = cmd_s + ['--scale-low', str(self.field_deg * 0.95), '--scale-high', str(self.field_deg * 1.05), '--odds-to-solve', '1e6']
 		else:
 			cmd_s = cmd_s + ['--odds-to-solve', '1e8']
 		
@@ -64,6 +69,7 @@ class Solver(threading.Thread):
 		else:
 			cmd_s = cmd_s + [tmp_dir + "/field.tif", '-z', '2']
 
+		print cmd_s
 		self.cmd = subprocess.Popen(cmd_s, preexec_fn=os.setpgrp)
 		self.cmd.wait()
 

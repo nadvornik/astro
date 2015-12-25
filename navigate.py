@@ -483,6 +483,7 @@ class Navigator:
 		self.ra = None
 		self.dec = None
 		self.field_deg = None
+		self.radius = None
 		self.plotter = None
 		self.plotter_off = np.array([0.0, 0.0])
 		self.ui_capture = ui_capture
@@ -572,6 +573,7 @@ class Navigator:
 				self.ra = self.solver.ra
 				self.dec = self.solver.dec
 				self.field_deg = self.solver.field_deg
+				self.radius = self.field_deg / 2.0
 			
 				self.dark.add_masked(self.solved_im, self.solver.ind_sources)
 				
@@ -594,8 +596,12 @@ class Navigator:
 				self.plotter_off = self.solver_off
 				self.i_solved = self.i_solver
 			else:
-				self.ra = None
-				self.dec = None
+				if self.radius is not None and self.radius < 90:
+					self.radius *= 1.2
+				else:
+					self.ra = None
+					self.dec = None
+					self.radius = None
 			self.solver = None
 			self.solved_im = None
 
@@ -606,7 +612,7 @@ class Navigator:
 				self.solver_time = t
 				self.i_solver = i
 				self.solved_im = im
-				self.solver = Solver(sources_list = xy, field_w = im.shape[1], field_h = im.shape[0], ra = self.ra, dec = self.dec, field_deg = self.field_deg)
+				self.solver = Solver(sources_list = xy, field_w = im.shape[1], field_h = im.shape[0], ra = self.ra, dec = self.dec, field_deg = self.field_deg, radius = self.radius)
 				#self.solver = Solver(sources_img = filtered, field_w = im.shape[1], field_h = im.shape[0], ra = self.ra, dec = self.dec, field_deg = self.field_deg)
 				self.solver.start()
 				self.solver_off = np.array([0.0, 0.0])
@@ -1076,7 +1082,7 @@ class Camera_test:
 		#pil_image = Image.open("converted/IMG_%04d.jpg" % (146+self.i))
 		#pil_image.thumbnail((1000,1000), Image.ANTIALIAS)
 		#im = np.array(pil_image)
-		im = cv2.imread("testimg2_" + str(self.i) + ".tif")
+		im = cv2.imread("testimg16_" + str(self.i % 100 * 3 + int(self.i / 100) * 10) + ".tif")
 		#im = apply_gamma(im, 2.2)
 		if self.x != 0 or self.y != 0:
 			M = np.array([[1.0, 0.0, self.x],
@@ -1276,14 +1282,14 @@ if __name__ == "__main__":
 	
 	with ui:
 		#run_gphoto()
-		run_test_2()
+		#run_test_2()
 		#run_v4l2()
 		#run_test_2_gphoto()
 		#run_v4l2_g()
 		#run_2()
 		#run_test_g()
 		#run_2()
-		#run_test()
+		run_test()
 
 
 
