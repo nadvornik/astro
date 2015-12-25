@@ -117,7 +117,7 @@ class Plotter:
 	def __init__(self, wcs):
 		self.wcs = wcs
 
-	def plot(self, img = None, off = [0., 0.], extra = [], grid = True, scale = 1):
+	def plot(self, img = None, off = [0., 0.], extra = [], extra_lines = [], grid = True, scale = 1):
 		field_w = self.wcs.get_width()
 		field_h = self.wcs.get_height()
 
@@ -197,6 +197,11 @@ class Plotter:
 
 		for (r, d, name) in extra:
 			ann.add_target(r, d, name)
+
+		for (r1, d1, r2, d2) in extra_lines:
+			plot.move_to_radec(r1, d1)
+			plot.line_to_radec(r2, d2)
+			plot.stroke()
 
 		plot.color = 'green'
 		plot.lw = 2

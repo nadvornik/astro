@@ -542,13 +542,13 @@ class Navigator:
 				for p in self.stack.get_xy():
 					cv2.circle(nm, (int(p[1]), int(p[0])), 13, (255), 1)
 		
-				extra = []
-				if self.polar_solved:
+				extra_lines = []
+				
+				if self.polar_solved and self.polar_mode == 'polar-adjust':
 					transf_index = self.polar.transform_ra_dec_list(self.index_sources)
-					extra = [ (ti[0], ti[1], "") for ti in transf_index ]
-					#print "extra: ", extra
+					extra_lines = [ (si[0], si[1], ti[0], ti[1]) for si, ti in zip(self.index_sources, transf_index) ]
 					
-				plot_bg(self.ui_capture, status, self.plotter.plot, nm, self.plotter_off, extra = extra)
+				plot_bg(self.ui_capture, status, self.plotter.plot, nm, self.plotter_off, extra_lines = extra_lines)
 			else:
 				disp = normalize(filtered)
 				cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
