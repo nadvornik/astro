@@ -116,6 +116,17 @@ class Median:
 		self.i = 0
 		self.list = []
 
+centroid_size = 5
+centroid_mat_x = np.array([[x for x in range(-centroid_size, centroid_size + 1) ] for y in range(-centroid_size, centroid_size + 1) ], dtype=np.float)
+centroid_mat_y = np.array([[y for x in range(-centroid_size, centroid_size + 1) ] for y in range(-centroid_size, centroid_size + 1) ], dtype=np.float)
+def centroid(a):
+	s = cv2.sumElems(a)[0]
+	if s == 0.0:
+		return 0, 0
+	x = cv2.sumElems(cv2.multiply(a, centroid_mat_x, dtype=cv2.CV_32FC1))[0] / s
+	y = cv2.sumElems(cv2.multiply(a, centroid_mat_y, dtype=cv2.CV_32FC1))[0] / s
+	return x, y
+	
 
 class MaxDetector(threading.Thread):
 	def __init__(self, img, d, n, y1, y2):
@@ -153,25 +164,17 @@ class MaxDetector(threading.Thread):
 		self.found = []
 	
 		for (y, x, v) in zip(locmax[0][ordmax], locmax[1][ordmax], valmax[ordmax]):
-			if (x < 1):
+			if (x < centroid_size):
 				continue
-			if (y + self.y1 < 1):
+			if (y + self.y1 < centroid_size):
 				continue
-			if (x > w - 2):
+			if (x > w - centroid_size - 1):
 				continue
-			if (y + self.y1 > h - 2):
+			if (y + self.y1 > h - centroid_size - 1):
 				continue
-			dx = imge[y + self.y1e0, x - 1] - 2 * v + imge[y + self.y1e0, x + 1]
-			dy = imge[y + self.y1e0 - 1, x] - 2 * v + imge[y + self.y1e0 + 1, x]
-			if dx != 0:
-				xs = 0.5*(imge[y + self.y1e0, x - 1] - imge[y + self.y1e0, x + 1]) / dx
-			else:
-				xs = 0
-			if dy != 0:
-				ys = 0.5*(imge[y + self.y1e0 - 1, x] - imge[y + self.y1e0 + 1, x]) / dy
-			else:
-				ys = 0
-			# y, x, flux
+			xs, ys = centroid(imge[y + self.y1e0 - centroid_size : y + self.y1e0 + centroid_size + 1, x - centroid_size : x + centroid_size + 1])
+			#print "centroid", xs, ys, xs2, ys2
+			
 			self.found.append((y + self.y1 + ys, x + xs, v))
 
 	
