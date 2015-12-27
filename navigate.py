@@ -116,10 +116,16 @@ class Median:
 		self.i = 0
 		self.list = []
 
-centroid_size = 5
-centroid_mat_x = np.array([[x for x in range(-centroid_size, centroid_size + 1) ] for y in range(-centroid_size, centroid_size + 1) ], dtype=np.float)
-centroid_mat_y = np.array([[y for x in range(-centroid_size, centroid_size + 1) ] for y in range(-centroid_size, centroid_size + 1) ], dtype=np.float)
-def centroid(a):
+centroid_mat_cache = {}
+def centroid(a, centroid_size):
+	if centroid_size not in centroid_mat_cache:
+		centroid_mat_x = np.array([[x for x in range(-centroid_size, centroid_size + 1) ] for y in range(-centroid_size, centroid_size + 1) ], dtype=np.float)
+		centroid_mat_y = np.array([[y for x in range(-centroid_size, centroid_size + 1) ] for y in range(-centroid_size, centroid_size + 1) ], dtype=np.float)
+		centroid_mat_cache[centroid_size] = (centroid_mat_x, centroid_mat_y)
+	else:
+		(centroid_mat_x, centroid_mat_y) = centroid_mat_cache[centroid_size]
+		
+
 	s = cv2.sumElems(a)[0]
 	if s == 0.0:
 		return 0, 0
@@ -162,6 +168,8 @@ class MaxDetector(threading.Thread):
 		ordmax = ordmax[:self.n]
 
 		self.found = []
+		
+		centroid_size = 7
 	
 		for (y, x, v) in zip(locmax[0][ordmax], locmax[1][ordmax], valmax[ordmax]):
 			if (x < centroid_size):
@@ -172,7 +180,7 @@ class MaxDetector(threading.Thread):
 				continue
 			if (y + self.y1 > h - centroid_size - 1):
 				continue
-			xs, ys = centroid(imge[y + self.y1e0 - centroid_size : y + self.y1e0 + centroid_size + 1, x - centroid_size : x + centroid_size + 1])
+			xs, ys = centroid(imge[y + self.y1e0 - centroid_size : y + self.y1e0 + centroid_size + 1, x - centroid_size : x + centroid_size + 1], centroid_size)
 			#print "centroid", xs, ys, xs2, ys2
 			
 			self.found.append((y + self.y1 + ys, x + xs, v))
@@ -462,7 +470,10 @@ class Stack:
 			self.xy = np.array(find_max(self.img, 12, n = 20))
 
 		return self.xy
-	
+
+	def get_xy_verified(self):
+		return self.prev_pt_verified
+
 	def reset(self):
 		self.img = None
 
@@ -907,14 +918,55 @@ class Guider:
 		ui.imshow(self.ui_capture, disp)
 		self.prev_t = t
 
+def smooth(x,window_len=11,window='hanning'):
+
+    if x.ndim != 1:
+        raise ValueError, "smooth only accepts 1 dimension arrays."
+
+    if x.size < window_len:
+        raise ValueError, "Input vector needs to be bigger than window size."
+
+
+    if window_len<3:
+        return x
+
+
+    if not window in ['flat', 'hanning', 'hamming', 'bartlett', 'blackman']:
+        raise ValueError, "Window is on of 'flat', 'hanning', 'hamming', 'bartlett', 'blackman'"
+
+
+    s=np.append(np.append([x[0] for i in range(0, window_len)], x),[x[-1] for i in range(0, window_len)])
+    #print(len(s))
+    if window == 'flat': #moving average
+        w=np.ones(window_len,'d')
+    else:
+        w=eval('np.'+window+'(window_len)')
+
+    y=np.convolve(w/w.sum(),s,mode='full')
+    return y[window_len + 1:-window_len - 1]
 
 class Focuser:
 	def __init__(self, ui_capture):
-		self.stack = Stack()
+		self.stack = Stack(ratio=0.3)
 		self.dark = Median(3)
 		self.ui_capture = ui_capture
 		self.dispmode = 'disp-orig'
+		self.phase = 'wait'
+		self.phase_wait = 0
+		self.hfr = Focuser.hfr_size
+		self.focus_yx = None
 		self.prev_t = 0
+
+	hfr_size = 30
+	hfr_mat_mask = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (hfr_size * 2 + 1, hfr_size * 2 + 1))
+	hfr_mat = cv2.multiply(np.array([[(x**2 + y**2)**0.5 for x in range(-hfr_size, hfr_size + 1) ] for y in range(-hfr_size, hfr_size + 1) ], dtype=np.float), hfr_mat_mask, dtype=cv2.CV_32FC1)
+	@staticmethod
+	def hfr(a):
+		s = cv2.sumElems(cv2.multiply(a,  Focuser.hfr_mat_mask, dtype=cv2.CV_32FC1))[0]
+		if s == 0.0:
+			return hfr_size
+		r = cv2.sumElems(cv2.multiply(a,  Focuser.hfr_mat, dtype=cv2.CV_32FC1))[0] / s
+		return r
 
 
 	def cmd(self, cmd):
@@ -922,6 +974,56 @@ class Focuser:
 			self.dark.add(self.im)
 		if cmd.startswith('disp-'):
 			self.dispmode = cmd
+		if cmd == 'focus':
+			self.phase = 'seek'
+
+	def reset(self):
+		self.phase = 'wait'
+
+	def get_max_flux(self):
+		ret = []
+		hfr = None
+		(h, w) = self.stack_im.shape
+		for p in self.stack.get_xy():
+			x = int(p[1])
+			y = int(p[0])
+			if (x < Focuser.hfr_size * 2):
+				continue
+			if (y < Focuser.hfr_size * 2):
+				continue
+			if (x > w - Focuser.hfr_size * 2 - 1):
+				continue
+			if (y > h - Focuser.hfr_size * 2 - 1):
+				continue
+			if hfr is None:
+				hfr = Focuser.hfr(self.im[y - Focuser.hfr_size : y + Focuser.hfr_size + 1, x - Focuser.hfr_size : x + Focuser.hfr_size + 1])
+				if hfr > Focuser.hfr_size * 0.5:
+					hfr = None
+					continue
+				ret.append(p)
+			else:
+				if Focuser.hfr(self.im[y - Focuser.hfr_size : y + Focuser.hfr_size + 1, x - Focuser.hfr_size : x + Focuser.hfr_size + 1]) < hfr + 1:
+					ret.append(p)
+				
+				
+		if len(ret) > 0:
+			return ret[0][2], hfr, ret
+		else:
+			return 0, None, None
+
+	def get_hfr(self):
+		hfr = 0
+		if self.focus_yx is None or len(self.focus_yx) == 0:
+			return Focuser.hfr_size
+		n = len(self.focus_yx)
+		for p in self.focus_yx:
+			(y, x, v) = p
+			centroid_size = Focuser.hfr_size
+			xs, ys = centroid(self.im[y  - centroid_size : y + centroid_size + 1, x - centroid_size : x + centroid_size + 1], centroid_size)
+			x = int(round(x + xs))
+			y = int(round(y + ys))
+			hfr += Focuser.hfr(self.im[y - Focuser.hfr_size : y + Focuser.hfr_size + 1, x - Focuser.hfr_size : x + Focuser.hfr_size + 1]) / n
+		return hfr
 
 	def proc_frame(self, im, i):
 		t = time.time()
@@ -931,8 +1033,6 @@ class Focuser:
 		except:
 			fps = 0
 		
-		status = "#%d Focuser: %s fps:%.1f" % (i, self.dispmode, fps)
-
 		if im.ndim > 2:
 			im = cv2.min(cv2.min(im[:, :, 0], im[:, :, 1]), im[:, :, 2])
 
@@ -940,36 +1040,159 @@ class Focuser:
 
 		if (self.dark.len() > 0):
 			im_sub = cv2.subtract(im, self.dark.get())
-			minVal, maxVal, minLoc, maxLoc = cv2.minMaxLoc(im_sub)
-			im_sub = cv2.add(im_sub, -minVal, dtype=cv2.CV_8UC1)
 		else:
 			im_sub = im
 
+		bg = cv2.blur(im_sub, (200, 200))
+		bg = cv2.blur(bg, (200, 200))
+		im_sub = cv2.subtract(im_sub, bg)
 
 		self.stack.add_simple(im_sub)
+		self.stack_im = self.stack.get()
+
+		if self.phase_wait > 0:
+			self.phase_wait -= 1
+		elif self.phase == 'seek':
+			for i in range (0, 3):
+				cmdQueue.put('f-3')
+			self.phase = 'dark'
+			self.phase_wait = 5
+			self.max_flux = 0
+			self.min_hfr = Focuser.hfr_size
+			self.dark_add = 3
+		elif self.phase == 'dark':
+			if self.dark_add > 0:
+				self.dark_add -= 1
+				self.dark.add(self.im)
+			else:
+				self.phase = 'search'
+		elif self.phase == 'search':
+			flux, hfr, yx = self.get_max_flux()
+			if flux < self.max_flux * 0.8 or (hfr is not None and hfr > self.min_hfr + 2):
+				self.phase = 'record_v'
+				self.v_curve = []
+				cmdQueue.put('f-1')
+			else:
+				if flux > self.max_flux:
+					self.focus_yx = yx
+					self.max_flux = flux
+					self.min_hfr = hfr
+				cmdQueue.put('f+2')
+			self.hfr = self.get_hfr()
+			#self.phase_wait = 2
+			print "max", flux, self.max_flux
+		elif self.phase == 'record_v':
+			self.hfr = self.get_hfr()
+			self.v_curve.append(self.hfr)
+			if len(self.v_curve) > 15 and self.hfr > self.v_curve[0]:
+				self.phase = 'focus_v'
+				print "v_curve", self.v_curve[::-1]
+				
+				self.v_curve = np.array(self.v_curve)[::-1] # reverse
+				self.v_curve = smooth(self.v_curve, len(self.v_curve) / 5)
+				
+				print "v_curve_s", self.v_curve.tolist()
+				
+				derived = np.gradient(self.v_curve)
+				print derived.tolist()
+				v_len = len(self.v_curve)
+				side_len = int(v_len * 0.4)
+				
+				i1 = np.argmin(derived)
+				i2 = np.argmax(derived)
+				
+				m1 = derived[i1]
+				m2 = derived[i2]
+				
+				c1 = self.v_curve[i1] - i1 * m1
+				c2 = self.v_curve[i2] - i2 * m2
+				
+				#m1, c1 = np.polyfit(range(0, side_len), self.v_curve[0:side_len], 1)
+				#m2, c2 = np.polyfit(range(v_len - side_len, v_len), self.v_curve[v_len - side_len: v_len], 1)
+				self.xmin =  (c2 - c1) / (m1 - m2)
+				self.m1 = m1
+				self.c1 = c1
+				self.side_len = side_len
+				print "v_len", v_len, "side_len", side_len, "m1", m1, "c1", c1, "m2", m2, "c2", c2, "xmin", self.xmin
+				self.v_curve2 = []
+				
+				cmdQueue.put('f+1')
+			else:
+				cmdQueue.put('f-1')
+		elif self.phase == 'focus_v':
+			self.hfr = self.get_hfr()
+			if len(self.v_curve2) < self.side_len:
+				self.v_curve2.append(self.hfr)
+				cmdQueue.put('f+1')
+			else:
+				self.v_curve2 = smooth(np.array(self.v_curve2), len(self.v_curve) / 5)
+				derived = np.gradient(self.v_curve2)
+				i1 = np.argmin(derived)
+				y = self.v_curve2[i1]
+				print "i1", i1
+				print self.v_curve2.tolist()
+				hyst = (y - self.c1) / self.m1 - i1
+				print "hyst", hyst
+				self.remaining_steps = round(self.xmin - self.side_len - hyst / 2 - 2)
+				print "remaining", self.remaining_steps
+				self.phase = 'focus_v2'
+		elif self.phase == 'focus_v2':
+			self.hfr = self.get_hfr()
+			if self.remaining_steps > 0:
+				self.remaining_steps -= 1
+				cmdQueue.put('f+1')
+			else:
+				self.phase = 'wait'
+			print "hfr", self.hfr
+
+		else:
+			if self.focus_yx is not None:
+				self.hfr = self.get_hfr()
+			
+			
+			
+
+		status = "#%d Focuser: %s %s fps:%.1f hfr:%.2f" % (i, self.phase, self.dispmode, fps, self.hfr)
+	
+
 		if (self.dispmode == 'disp-orig'):
 			disp = normalize(im)
 			cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
+			if self.focus_yx is not None:
+				for p in self.focus_yx:
+					cv2.circle(disp, (int(p[1]), int(p[0])), 20, (255), 1)
 			ui.imshow(self.ui_capture, disp)
 		elif (self.dispmode == 'disp-df-cor'):
 			disp = normalize(im_sub)
 			cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
 			ui.imshow(self.ui_capture, disp)
 		elif (self.dispmode == 'disp-normal'):
-			disp = normalize(self.stack.get())
+			disp = normalize(self.stack_im)
 			cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
 			ui.imshow(self.ui_capture, disp)
 		else:
-			filtered = self.stack.get()
-			filtered = normalize(filtered)
+			(h, w) = self.stack_im.shape
+			disp = cv2.cvtColor(normalize(self.stack_im), cv2.COLOR_GRAY2RGB)
+			for p in self.stack.get_xy():
+				x = int(p[1])
+				y = int(p[0])
+				if (x < Focuser.hfr_size):
+					continue
+				if (y < Focuser.hfr_size):
+					continue
+				if (x > w - Focuser.hfr_size - 1):
+					continue
+				if (y > h - Focuser.hfr_size - 1):
+					continue
+				
+				r = Focuser.hfr(self.stack_im[y - Focuser.hfr_size : y + Focuser.hfr_size + 1, x - Focuser.hfr_size : x + Focuser.hfr_size + 1])
+
+				cv2.circle(disp, (x, y), 13, (255, 255, 255), 1)
+				cv2.putText(disp, "%.1f" % (r), (x, y), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 0), 2)
+			if self.focus_yx is not None:
+				for p in self.focus_yx:
+					cv2.circle(disp, (int(p[1]), int(p[0])), 20, (255), 1)
 	
-			mask = cv2.compare(filtered, 128, cv2.CMP_GE)
-	
-			status += " Size: %d" % ( cv2.countNonZero(mask))
-	
-			disp = cv2.cvtColor(filtered,cv2.COLOR_GRAY2RGB)
-	
-			disp[:,:, 1] = cv2.bitwise_and(filtered, cv2.bitwise_not(mask))
 			cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 0), 2)
 			ui.imshow(self.ui_capture, disp)
 		self.prev_t = t
@@ -1027,6 +1250,7 @@ class Runner(threading.Thread):
 				elif cmd == 'z1':
 					if self.focuser is not None:
 						mode = 'focuser'
+						self.focuser.reset()
 						maxx = 300
 						maxy = 300
 						if self.navigator:
@@ -1288,7 +1512,7 @@ if __name__ == "__main__":
 	os.environ["LC_NUMERIC"] = "C"
 	
 	with ui:
-		#run_gphoto()
+		run_gphoto()
 		#run_test_2()
 		#run_v4l2()
 		#run_test_2_gphoto()
@@ -1296,7 +1520,7 @@ if __name__ == "__main__":
 		#run_2()
 		#run_test_g()
 		#run_2()
-		run_test()
+		#run_test()
 
 
 

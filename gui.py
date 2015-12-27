@@ -42,6 +42,7 @@ class MyGUI_CV2(threading.Thread):
 		ord('b') : 'f+1',
 		ord('n') : 'f+2',
 		ord('m') : 'f+3',
+		ord(',') : 'focus',
 
 		ord('j') : 'left',
 		ord('l') : 'right',
