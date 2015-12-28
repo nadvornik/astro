@@ -943,7 +943,7 @@ def smooth(x,window_len=11,window='hanning'):
         w=eval('np.'+window+'(window_len)')
 
     y=np.convolve(w/w.sum(),s,mode='full')
-    return y[window_len + 1:-window_len - 1]
+    return y[window_len + window_len / 2: window_len + window_len / 2 + x.size]
 
 class Focuser:
 	def __init__(self, ui_capture):
@@ -964,7 +964,7 @@ class Focuser:
 	def hfr(a):
 		s = cv2.sumElems(cv2.multiply(a,  Focuser.hfr_mat_mask, dtype=cv2.CV_32FC1))[0]
 		if s == 0.0:
-			return hfr_size
+			return Focuser.hfr_size
 		r = cv2.sumElems(cv2.multiply(a,  Focuser.hfr_mat, dtype=cv2.CV_32FC1))[0] / s
 		return r
 
@@ -1110,17 +1110,20 @@ class Focuser:
 		elif self.phase == 'record_v': # record v curve
 			self.hfr = self.get_hfr(im_sub)
 			self.v_curve.append(self.hfr)
-			if len(self.v_curve) > 15 and self.hfr > self.v_curve[0]:
+			if len(self.v_curve) > 10 and self.hfr > self.v_curve[0]:
 				self.phase = 'focus_v'
 				print "v_curve", self.v_curve[::-1]
 				
 				self.v_curve = np.array(self.v_curve)[::-1] # reverse
-				self.v_curve_s = smooth(self.v_curve, len(self.v_curve) / 5)
+
+				v_len = len(self.v_curve)
+				side_len = int(v_len * 0.4)
+
+				self.smooth_size = side_len / 3 * 2 + 1
+				self.v_curve_s = smooth(self.v_curve, self.smooth_size, 'flat')
 				
 				derived = np.gradient(self.v_curve_s)
 				print derived.tolist()
-				v_len = len(self.v_curve)
-				side_len = int(v_len * 0.4)
 				
 				i1 = np.argmin(derived)
 				i2 = np.argmax(derived)
@@ -1149,14 +1152,14 @@ class Focuser:
 				self.v_curve2.append(self.hfr)
 				cmdQueue.put('f+1')
 			else:
-				self.v_curve2_s = smooth(np.array(self.v_curve2), len(self.v_curve) / 5)
+				self.v_curve2_s = smooth(np.array(self.v_curve2), self.smooth_size, 'flat')
 				derived = np.gradient(self.v_curve2_s)
 				i1 = np.argmin(derived)
 				y = self.v_curve2_s[i1]
 				print "i1", i1
 				hyst = (y - self.c1) / self.m1 - i1
 				print "hyst", hyst
-				self.remaining_steps = round(self.xmin - self.side_len - hyst / 2 - 2)
+				self.remaining_steps = round(self.xmin - self.side_len - hyst / 2)
 				print "remaining", self.remaining_steps
 				self.phase = 'focus_v2'
 				self.v_curve2.append(self.hfr)
