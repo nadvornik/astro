@@ -54,7 +54,7 @@ class Solver(threading.Thread):
 		
 		if self.ra is not None:
 			cmd_s = cmd_s + ['--ra',  str(self.ra)]
-			if self.radius is not None:
+			if self.radius is not None and self.radius > 0:
 				cmd_s = cmd_s + ['--radius', str(self.radius)]
 		if self.dec is not None:
 			cmd_s = cmd_s + ['--dec', str(self.dec)]

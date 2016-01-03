@@ -497,7 +497,7 @@ class Navigator:
 		self.ra = None
 		self.dec = None
 		self.field_deg = None
-		self.radius = None
+		self.radius = 0
 		self.wcs = None
 		self.plotter = None
 		self.plotter_off = np.array([0.0, 0.0])
@@ -541,8 +541,68 @@ class Navigator:
 			fps = 1.0 / (t - self.prev_t)
 		except:
 			fps = 0
+
+		if self.solver is not None and not self.solver.is_alive():
+			self.solver.join()
+			if self.solver.solved:
+				self.ra = self.solver.ra
+				self.dec = self.solver.dec
+				self.field_deg = self.solver.field_deg
+				self.radius = self.field_deg
+				self.wcs = self.solver.wcs
+			
+				self.dark.add_masked(self.solved_im, self.solver.ind_sources)
+				
+				self.index_sources = self.solver.ind_radec
+				self.plotter = Plotter(self.wcs)
+				self.plotter_off = self.solver_off
+				self.i_solved = self.i_solver
+				#print "self.solver.ind_radec", self.solver.ind_radec
+				#self.solver.wcs.write_to("log_%d.wcs" % self.ii)
+				#subprocess.call(['touch', '-r', "testimg17_" + str(i) + ".tif", "log_%d.wcs" % self.ii])
+				if self.polar_mode == 'polar-solve':
+					self.polar.add_tan(self.wcs, self.solver_time)
+					if self.polar.compute()[0]:
+						self.polar_solved = True
+				elif self.polar_mode == 'polar-adjust':
+					self.polar.phase2_set_tan(self.wcs)
+					
+			else:
+				if self.radius is not None and self.radius < 90:
+					self.radius *= 2
+				else:
+					self.ra = None
+					self.dec = None
+					self.radius = None
+					self.wcs = None
+			self.solver = None
+			self.solved_im = None
+
+		if self.solver is None and i > 20 :
+			xy = self.stack.get_xy()
+			print "len", len(xy)
+			if len(xy) > 6:
+				self.solver_time = t
+				self.i_solver = i
+				self.solved_im = im
+				self.solver = Solver(sources_list = xy, field_w = im.shape[1], field_h = im.shape[0], ra = self.ra, dec = self.dec, field_deg = self.field_deg, radius = self.radius)
+				#self.solver = Solver(sources_img = filtered, field_w = im.shape[1], field_h = im.shape[0], ra = self.ra, dec = self.dec, field_deg = self.field_deg)
+				self.solver.start()
+				self.solver_off = np.array([0.0, 0.0])
+
+		if self.polar_mode == 'polar-solve' and self.polar_solved:
+			polar_plot = self.polar.plot2()
+			p_status = "#%d %s solv#%d r:%.1f fps:%.1f" % (i, self.polar_mode, i - self.i_solved, self.radius, fps)
+			cv2.putText(polar_plot, p_status, (10, polar_plot.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255,255,0), 2)
+			ui.imshow(self.ui_capture + '_polar', polar_plot)
+		elif self.polar_mode == 'polar-adjust' and self.wcs is not None and self.polar_solved:
+			self.polar.phase2_set_tan(self.wcs, off = self.plotter_off)
+			polar_plot = self.polar.plot2()
+			p_status = "#%d %s solv#%d r:%.1f fps:%.1f" % (i, self.polar_mode, i - self.i_solved, self.radius, fps)
+			cv2.putText(polar_plot, p_status, (10, polar_plot.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2)
+			ui.imshow(self.ui_capture + '_polar', polar_plot)
 		
-		status = "#%d %s %s (%.1f,%.1f) solved#%d fps:%.1f" % (i, self.dispmode, self.polar_mode, self.plotter_off[1], self.plotter_off[0], i - self.i_solved, fps)
+		status = "#%d %s %s  solv#%d r:%.1f fps:%.1f" % (i, self.dispmode, self.polar_mode, i - self.i_solved, self.radius, fps)
 		if (self.dispmode == 'disp-orig'):
 			disp = normalize(im)
 			cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
@@ -582,65 +642,6 @@ class Navigator:
 			cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
 			ui.imshow(self.ui_capture, disp)
 	
-		if self.solver is not None and not self.solver.is_alive():
-			self.solver.join()
-			if self.solver.solved:
-				self.ra = self.solver.ra
-				self.dec = self.solver.dec
-				self.field_deg = self.solver.field_deg
-				self.radius = self.field_deg / 2.0
-				self.wcs = self.solver.wcs
-			
-				self.dark.add_masked(self.solved_im, self.solver.ind_sources)
-				
-				self.index_sources = self.solver.ind_radec
-				#print "self.solver.ind_radec", self.solver.ind_radec
-				#self.solver.wcs.write_to("log_%d.wcs" % self.ii)
-				#subprocess.call(['touch', '-r', "testimg17_" + str(i) + ".tif", "log_%d.wcs" % self.ii])
-				if self.polar_mode == 'polar-solve':
-					self.polar.add_tan(self.wcs, self.solver_time)
-					if self.polar.compute()[0]:
-						self.polar_solved = True
-						polar_plot = self.polar.plot2()
-						p_status = "#%d %s solved#%d fps:%.1f" % (i, self.polar_mode, i - self.i_solved, fps)
-						cv2.putText(polar_plot, p_status, (10, polar_plot.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255,255,0), 2)
-						ui.imshow(self.ui_capture + '_polar', polar_plot)
-				elif self.polar_mode == 'polar-adjust':
-					self.polar.phase2_set_tan(self.wcs)
-					
-				self.plotter = Plotter(self.wcs)
-				self.plotter_off = self.solver_off
-				self.i_solved = self.i_solver
-			else:
-				if self.radius is not None and self.radius < 90:
-					self.radius *= 2
-				else:
-					self.ra = None
-					self.dec = None
-					self.radius = None
-					self.wcs = None
-			self.solver = None
-			self.solved_im = None
-
-		if self.solver is None and i > 20 :
-			xy = self.stack.get_xy()
-			print "len", len(xy)
-			if len(xy) > 6:
-				self.solver_time = t
-				self.i_solver = i
-				self.solved_im = im
-				self.solver = Solver(sources_list = xy, field_w = im.shape[1], field_h = im.shape[0], ra = self.ra, dec = self.dec, field_deg = self.field_deg, radius = self.radius)
-				#self.solver = Solver(sources_img = filtered, field_w = im.shape[1], field_h = im.shape[0], ra = self.ra, dec = self.dec, field_deg = self.field_deg)
-				self.solver.start()
-				self.solver_off = np.array([0.0, 0.0])
-
-
-		if self.polar_mode == 'polar-adjust' and self.wcs is not None:
-			self.polar.phase2_set_tan(self.wcs, off = self.plotter_off)
-			polar_plot = self.polar.plot2()
-			p_status = "#%d %s solved#%d fps:%.1f" % (i, self.polar_mode, i - self.i_solved, fps)
-			cv2.putText(polar_plot, p_status, (10, polar_plot.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2)
-			ui.imshow(self.ui_capture + '_polar', polar_plot)
 
 
 		self.prev_t = t
