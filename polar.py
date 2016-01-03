@@ -68,8 +68,12 @@ class Polar:
 		self.pos.append(qha * Quaternion([ra, dec, roll]))
 		#self.pos.append(Quaternion([ra, dec, roll]))
 
-	def tan_to_euler(self, tan):
+	def tan_to_euler(self, tan, off=(0,0)):
 		ra, dec = tan.radec_center()
+		# the field moved by given offset pixels from the position in self.wcs
+		(crpix1, crpix2) = tan.crpix
+		ra, dec = tan.pixelxy2radec(crpix1 - off[1], crpix2 - off[0])
+
 		cd11, cd12, cd21, cd22 = tan.cd
 		
 		det = cd11 * cd22 - cd12 * cd21
@@ -207,7 +211,7 @@ class Polar:
 		self.ref_ra = self.ra
 		self.ref_dec = self.dec
 		
-	def pase2_set_ref_tan(self, tan):
+	def phase2_set_ref_tan(self, tan):
 		ra, dec, orient = self.tan_to_euler(tan)
 		self.phase2_set_ref_pos(ra, dec, orient)
 	
@@ -219,8 +223,8 @@ class Polar:
 		t = pos / self.p2_from
 		self.ra, self.dec = t.transform_ra_dec([self.ref_ra, self.ref_dec])
 	
-	def phase2_set_tan(self, tan):
-		ra, dec, orient = self.tan_to_euler(tan)
+	def phase2_set_tan(self, tan, off = (0, 0)):
+		ra, dec, orient = self.tan_to_euler(tan, off)
 		self.phase2_set_pos(ra, dec, orient)
 
 

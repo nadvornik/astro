@@ -498,6 +498,7 @@ class Navigator:
 		self.dec = None
 		self.field_deg = None
 		self.radius = None
+		self.wcs = None
 		self.plotter = None
 		self.plotter_off = np.array([0.0, 0.0])
 		self.ui_capture = ui_capture
@@ -588,6 +589,7 @@ class Navigator:
 				self.dec = self.solver.dec
 				self.field_deg = self.solver.field_deg
 				self.radius = self.field_deg / 2.0
+				self.wcs = self.solver.wcs
 			
 				self.dark.add_masked(self.solved_im, self.solver.ind_sources)
 				
@@ -596,7 +598,7 @@ class Navigator:
 				#self.solver.wcs.write_to("log_%d.wcs" % self.ii)
 				#subprocess.call(['touch', '-r', "testimg17_" + str(i) + ".tif", "log_%d.wcs" % self.ii])
 				if self.polar_mode == 'polar-solve':
-					self.polar.add_tan(self.solver.wcs, self.solver_time)
+					self.polar.add_tan(self.wcs, self.solver_time)
 					if self.polar.compute()[0]:
 						self.polar_solved = True
 						polar_plot = self.polar.plot2()
@@ -604,22 +606,19 @@ class Navigator:
 						cv2.putText(polar_plot, p_status, (10, polar_plot.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255,255,0), 2)
 						ui.imshow(self.ui_capture + '_polar', polar_plot)
 				elif self.polar_mode == 'polar-adjust':
-					self.polar.phase2_set_tan(self.solver.wcs)
-					polar_plot = self.polar.plot2()
-					p_status = "#%d %s solved#%d fps:%.1f" % (i, self.polar_mode, i - self.i_solved, fps)
-					cv2.putText(polar_plot, p_status, (10, polar_plot.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2)
-					ui.imshow(self.ui_capture + '_polar', polar_plot)
+					self.polar.phase2_set_tan(self.wcs)
 					
-				self.plotter = Plotter(self.solver.wcs)
+				self.plotter = Plotter(self.wcs)
 				self.plotter_off = self.solver_off
 				self.i_solved = self.i_solver
 			else:
 				if self.radius is not None and self.radius < 90:
-					self.radius *= 1.5
+					self.radius *= 2
 				else:
 					self.ra = None
 					self.dec = None
 					self.radius = None
+					self.wcs = None
 			self.solver = None
 			self.solved_im = None
 
@@ -634,6 +633,16 @@ class Navigator:
 				#self.solver = Solver(sources_img = filtered, field_w = im.shape[1], field_h = im.shape[0], ra = self.ra, dec = self.dec, field_deg = self.field_deg)
 				self.solver.start()
 				self.solver_off = np.array([0.0, 0.0])
+
+
+		if self.polar_mode == 'polar-adjust' and self.wcs is not None:
+			self.polar.phase2_set_tan(self.wcs, off = self.plotter_off)
+			polar_plot = self.polar.plot2()
+			p_status = "#%d %s solved#%d fps:%.1f" % (i, self.polar_mode, i - self.i_solved, fps)
+			cv2.putText(polar_plot, p_status, (10, polar_plot.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2)
+			ui.imshow(self.ui_capture + '_polar', polar_plot)
+
+
 		self.prev_t = t
 		
 	def cmd(self, cmd):
@@ -1325,7 +1334,7 @@ class Camera_test:
 			self.step = 1 - self.step
 	
 	def capture(self):
-		#time.sleep(0.9)
+		time.sleep(0.9)
 		print self.i
 		#pil_image = Image.open("converted/IMG_%04d.jpg" % (146+self.i))
 		#pil_image.thumbnail((1000,1000), Image.ANTIALIAS)
@@ -1529,7 +1538,7 @@ if __name__ == "__main__":
 	os.environ["LC_NUMERIC"] = "C"
 	
 	with ui:
-		run_gphoto()
+		#run_gphoto()
 		#run_test_2()
 		#run_v4l2()
 		#run_test_2_gphoto()
@@ -1537,7 +1546,7 @@ if __name__ == "__main__":
 		#run_2()
 		#run_test_g()
 		#run_2()
-		#run_test()
+		run_test()
 
 
 
