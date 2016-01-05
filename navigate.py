@@ -1550,10 +1550,12 @@ def run_2():
 
 if __name__ == "__main__":
 	os.environ["LC_NUMERIC"] = "C"
+	sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
+	sys.stderr = sys.stdout
 	
 	with ui:
-		run_gphoto()
-		#run_test_2()
+		#run_gphoto()
+		run_test_2()
 		#run_v4l2()
 		#run_test_2_gphoto()
 		#run_v4l2_g()
