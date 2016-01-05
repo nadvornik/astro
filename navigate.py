@@ -203,7 +203,9 @@ def find_max(img, d, n = 40):
 	for md in mds:
 		md.join()
 		joined += md.found
-	
+	if len(joined) == 0:
+		return []
+
 	joined = np.array(joined)
 	ordmax = np.argsort(joined[:, 2])[::-1]
 	ordmax = ordmax[:n]
@@ -689,7 +691,7 @@ class Guider:
 		self.cnt = 0
 		self.pt0 = []
 		self.ok = False
-		self.capture_in_progress = False
+		self.capture_in_progress = True
 
 	def dark_add_masked(self, im):
 		h, w = im.shape
@@ -731,10 +733,8 @@ class Guider:
 			self.go.out(0)
 
 		if (self.dark.len() >= 4):
-			print "dark"
 			im_sub = cv2.subtract(im, self.dark.get())
 		else:
-			print "no dark"
 			im_sub = im
 
 
@@ -770,14 +770,14 @@ class Guider:
 			pt1m, pt2m, match = match_triangle(self.pt0, pt, 5, 50, off)
 			if len(match) > 0:
 				off, weights = avg_pt(pt1m, pt2m)
-				print "triangle", off, match
+				#print "triangle", off, match
 			
 				pt0, pt, match = match_closest(self.pt0, pt, 5, off)
 			
 			if len(match) > 0:
 			
 				off, weights = avg_pt(pt0, pt, noise = 3)
-				print "weights", weights 
+				#print "weights", weights 
 				dist = np.linalg.norm(off)
 
 				if (dist > 20):
@@ -790,7 +790,7 @@ class Guider:
 					self.off = off
 					self.off_t = t
 			
-				print off, dist
+				#print off, dist
 				pt_ok = match[np.where(weights > 0), 0][0]
 				self.used_cnt.extend(pt_ok)
 
@@ -829,7 +829,7 @@ class Guider:
 		elif self.mode==3:
 			self.cnt += 1
 			pt = find_max(im_sub, 20, n = 30)
-			print pt
+			#print pt
 			pt1m, pt2m, match = match_triangle(self.pt0, pt, 5, 50, self.off)
 			if len(match) > 0:
 				off, weights = avg_pt(pt1m, pt2m)
@@ -843,8 +843,7 @@ class Guider:
 				
 				self.resp0.append((t - self.t0, err.real))
 			
-				print "err:", err, err.real
-				status += " err:%.1f t_delay1:%.1f" % (err.real, self.t_delay1)
+				status += " err:%.1f %.1f t_delay1:%.1f" % (err.real, err.imag, self.t_delay1)
 
 				if (err.real > 30):
 					self.dark_add_masked(im)
@@ -880,7 +879,7 @@ class Guider:
 			pt1m, pt2m, match = match_triangle(self.pt0, pt, 5, 30, self.off)
 			if len(match) > 0:
 				off, weights = avg_pt(pt1m, pt2m)
-				print "triangle", off, match
+				#print "triangle", off, match
 			
 				pt0, pt, match = match_closest(self.pt0, pt, 5, off)
 				
@@ -891,9 +890,9 @@ class Guider:
 
 				err_corr = err.real + self.go.recent_avg(self.t_delay) * self.pixpersec
 				
-				aggresivnes = 0.6
+				aggresivnes = 0.4
 				err_corr *= aggresivnes
-				status += " err:%.1f corr:%.1f t_delay:%.1f" % (err.real, err_corr, self.t_delay)
+				status += " err:%.1f %.1f corr:%.1f t_delay:%.1f" % (err.real, err.imag, err_corr, self.t_delay)
 				if err_corr > 0.1:
 					self.go.out(-1, -err_corr / self.pixpersec_neg)
 				elif err_corr < -0.1:
@@ -1553,10 +1552,10 @@ if __name__ == "__main__":
 	sys.stderr = sys.stdout
 	
 	with ui:
-		run_gphoto()
+		#run_gphoto()
 		#run_test_2()
 		#run_v4l2()
-		#run_test_2_gphoto()
+		run_test_2_gphoto()
 		#run_v4l2_g()
 		#run_2()
 		#run_test_g()
