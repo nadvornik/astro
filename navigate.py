@@ -577,7 +577,7 @@ class Navigator:
 		if self.solver is None and i > 20 :
 			xy = self.stack.get_xy()
 			print "len", len(xy)
-			if len(xy) > 6:
+			if len(xy) > 8:
 				self.solver_time = t
 				self.i_solver = i
 				self.solved_im = im
@@ -608,10 +608,10 @@ class Navigator:
 			cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
 			ui.imshow(self.ui_capture, disp)
 		elif (self.dispmode == 'disp-normal'):
+			disp = normalize(filtered)
+			for p in self.stack.get_xy():
+				cv2.circle(disp, (int(p[1]), int(p[0])), 13, (255), 1)
 			if self.plotter is not None:
-				nm = normalize(filtered)
-				for p in self.stack.get_xy():
-					cv2.circle(nm, (int(p[1]), int(p[0])), 13, (255), 1)
 		
 				extra_lines = []
 				
@@ -619,9 +619,8 @@ class Navigator:
 					transf_index = self.polar.transform_ra_dec_list(self.index_sources)
 					extra_lines = [ (si[0], si[1], ti[0], ti[1]) for si, ti in zip(self.index_sources, transf_index) ]
 					
-				plot_bg(self.ui_capture, status, self.plotter.plot, nm, self.plotter_off, extra_lines = extra_lines)
+				plot_bg(self.ui_capture, status, self.plotter.plot, disp, self.plotter_off, extra_lines = extra_lines)
 			else:
-				disp = normalize(filtered)
 				cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
 				ui.imshow(self.ui_capture, disp)
 		elif (self.dispmode.startswith('disp-zoom-')):
@@ -1554,8 +1553,8 @@ if __name__ == "__main__":
 	sys.stderr = sys.stdout
 	
 	with ui:
-		#run_gphoto()
-		run_test_2()
+		run_gphoto()
+		#run_test_2()
 		#run_v4l2()
 		#run_test_2_gphoto()
 		#run_v4l2_g()
