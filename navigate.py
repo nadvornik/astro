@@ -527,10 +527,6 @@ class Navigator:
 		bg = cv2.blur(bg, (30, 30))
 		im_sub = cv2.subtract(im_sub, bg)
 
-
-		if (self.dark.len() == 0):
-			self.dark.add(im)
-	
 		off = self.stack.add(im_sub, show_match=(self.dispmode == 'disp-match'))
 		filtered = self.stack.get()
 		
@@ -573,7 +569,7 @@ class Navigator:
 				else:
 					self.ra = None
 					self.dec = None
-					self.radius = None
+					self.radius = 0
 					self.wcs = None
 			self.solver = None
 			self.solved_im = None
@@ -933,9 +929,6 @@ def smooth(x,window_len=11,window='hanning'):
     if x.ndim != 1:
         raise ValueError, "smooth only accepts 1 dimension arrays."
 
-    if x.size < window_len:
-        raise ValueError, "Input vector needs to be bigger than window size."
-
 
     if window_len<3:
         return x
@@ -956,9 +949,12 @@ def smooth(x,window_len=11,window='hanning'):
     return y[window_len + window_len / 2: window_len + window_len / 2 + x.size]
 
 class Focuser:
-	def __init__(self, ui_capture):
+	def __init__(self, ui_capture, dark = None):
 		self.stack = Stack(ratio=0.3)
-		self.dark = Median(3)
+		if dark is None:
+			self.dark = Median(3)
+		else:
+			self.dark = dark
 		self.ui_capture = ui_capture
 		self.dispmode = 'disp-orig'
 		self.phase = 'wait'
@@ -1081,25 +1077,26 @@ class Focuser:
 			self.phase_wait -= 1
 		elif self.phase == 'seek': # move near, out of focus
 			self.focus_yx = None
-			for i in range (0, 6):
+			for i in range (0, 12):
 				cmdQueue.put('f-3')
 			self.phase = 'dark'
 			self.phase_wait = 5
 			self.max_flux = 0
 			self.min_hfr = Focuser.hfr_size
-			self.dark_add = 3
+			self.dark_add = self.dark.n
 		elif self.phase == 'dark': # use current image as darkframes
 			if self.dark_add > 0:
 				self.dark_add -= 1
 				self.dark.add(self.im)
 			else:
-				for i in range (0, 4):
+				for i in range (0, 10):
 					cmdQueue.put('f+3')
 				self.phase_wait = 5
+				self.search_steps = 0
 				self.phase = 'search'
 		elif self.phase == 'search': # step far, record max flux
 			flux, hfr, yx = self.get_max_flux(self.stack_im)
-			if flux < self.max_flux * 0.8:
+			if (flux < self.max_flux * 0.8 and hfr > Focuser.hfr_size / 3) or self.search_steps > 120:
 				self.phase = 'prep_record_v'
 				cmdQueue.put('f-1')
 			else:
@@ -1108,6 +1105,7 @@ class Focuser:
 					self.max_flux = flux
 					self.min_hfr = hfr
 				cmdQueue.put('f+2')
+				self.search_steps += 1
 			self.hfr = self.get_hfr(im_sub)
 			#self.phase_wait = 2
 			print "max", flux, self.max_flux
@@ -1131,6 +1129,7 @@ class Focuser:
 
 				self.smooth_size = side_len / 3 * 2 + 1
 				self.v_curve_s = smooth(self.v_curve, self.smooth_size, 'flat')
+				self.v_curve_s = smooth(self.v_curve_s, self.smooth_size, 'flat')
 				
 				derived = np.gradient(self.v_curve_s)
 				print derived.tolist()
@@ -1149,7 +1148,7 @@ class Focuser:
 				self.xmin =  (c2 - c1) / (m1 - m2)
 				self.m1 = m1
 				self.c1 = c1
-				self.side_len = side_len
+				self.side_len = self.xmin * 0.8
 				print "v_len", v_len, "side_len", side_len, "m1", m1, "c1", c1, "m2", m2, "c2", c2, "xmin", self.xmin
 				self.v_curve2 = []
 				
@@ -1161,15 +1160,17 @@ class Focuser:
 			if len(self.v_curve2) < self.side_len:
 				self.v_curve2.append(self.hfr)
 				cmdQueue.put('f+1')
+				self.phase_wait = 1
 			else:
 				self.v_curve2_s = smooth(np.array(self.v_curve2), self.smooth_size, 'flat')
+				self.v_curve2_s = smooth(self.v_curve2_s, self.smooth_size, 'flat')
 				derived = np.gradient(self.v_curve2_s)
 				i1 = np.argmin(derived)
 				y = self.v_curve2_s[i1]
 				print "i1", i1
 				hyst = (y - self.c1) / self.m1 - i1
 				print "hyst", hyst
-				self.remaining_steps = round(self.xmin - self.side_len - hyst / 2)
+				self.remaining_steps = round(self.xmin - self.side_len - hyst)
 				print "remaining", self.remaining_steps
 				self.phase = 'focus_v2'
 				self.v_curve2.append(self.hfr)
@@ -1225,11 +1226,12 @@ class Focuser:
 		self.prev_t = t
 
 class Runner(threading.Thread):
-	def __init__(self, camera, navigator = None, guider = None, focuser = None):
+	def __init__(self, camera, navigator = None, guider = None, zoom_focuser = None, focuser = None):
                 threading.Thread.__init__(self)
 		self.camera = camera
 		self.navigator = navigator
 		self.guider = guider
+		self.zoom_focuser = zoom_focuser
 		self.focuser = focuser
 		
 	def run(self):
@@ -1275,20 +1277,24 @@ class Runner(threading.Thread):
 					self.guider.pt0 = self.navigator.stack.get_xy()
 					mode = 'guider'
 				elif cmd == 'z1':
-					if self.focuser is not None:
-						mode = 'focuser'
-						self.focuser.reset()
+					if self.zoom_focuser is not None:
+						self.zoom_focuser.reset()
 						maxx = 300
 						maxy = 300
-						if self.navigator:
+						if mode == 'navigator':
 							(maxy, maxx, maxv) = self.navigator.stack.get_xy()[0]
+						elif mode == 'focuser':
+							(maxy, maxx, maxv) = self.focuser.stack.get_xy()[0]
 						self.camera.cmd(cmd, x=maxx, y=maxy)
+						mode = 'zoom_focuser'
 				elif cmd == 'z0' and self.navigator is not None:
 					mode = 'navigator'
 					self.camera.cmd(cmd)
 				elif cmd == 'z0' and self.guider is not None:
 					mode = 'guider'
 					self.camera.cmd(cmd)
+				elif cmd == 'focus' and mode != 'zoom_focuser' and self.focuser is not None:
+					mode = 'focuser'
 				else:
 					self.camera.cmd(cmd)
 					
@@ -1298,6 +1304,8 @@ class Runner(threading.Thread):
 					self.guider.cmd(cmd)
 				if mode == 'focuser':
 					self.focuser.cmd(cmd)
+				if mode == 'zoom_focuser':
+					self.zoom_focuser.cmd(cmd)
 	
 			im, t = self.camera.capture()
 			#cv2.imwrite("testimg20_" + str(i) + ".tif", im)
@@ -1307,6 +1315,8 @@ class Runner(threading.Thread):
 				self.guider.proc_frame(im, i)
 			if mode == 'focuser':
 				self.focuser.proc_frame(im, i)
+			if mode == 'zoom_focuser':
+				self.zoom_focuser.proc_frame(im, i)
 			i += 1
 			#if i == 300:
 			#	cmdQueue.put('exit')
@@ -1391,9 +1401,10 @@ def run_gphoto():
 	ui.namedWindow('full_res')
 	dark = Median(5)
 	nav = Navigator(dark, 'capture')
-	focuser = Focuser('capture')
+	focuser = Focuser('capture', dark = dark)
+	zoom_focuser = Focuser('capture')
 
-	runner = Runner(cam, navigator = nav, focuser = focuser)
+	runner = Runner(cam, navigator = nav, focuser = focuser, zoom_focuser = zoom_focuser)
 	runner.start()
 	runner.join()
 
@@ -1475,7 +1486,8 @@ def run_test_2_gphoto():
 	dark2 = Median(5)
 	
 	nav1 = Navigator(dark1, 'capture')
-	focuser = Focuser('capture')
+	focuser = Focuser('capture', dark = dark1)
+	zoom_focuser = Focuser('capture')
 
 	nav = Navigator(dark2, 'capture_v4l')
 	go = GuideOutBase()
@@ -1488,7 +1500,7 @@ def run_test_2_gphoto():
 	ui.namedWindow('capture_v4l_polar')
 	ui.namedWindow('full_res')
 
-	runner = Runner(cam1, navigator = nav1, focuser=focuser)
+	runner = Runner(cam1, navigator = nav1, focuser=focuser, zoom_focuser = zoom_focuser)
 	runner.start()
 	
 	runner2 = Runner(cam, navigator = nav, guider = guider)
@@ -1511,7 +1523,8 @@ def run_2():
 	dark2 = Median(5)
 	
 	nav1 = Navigator(dark1, 'capture')
-	focuser = Focuser('capture')
+	focuser = Focuser('capture', dark = dark1)
+	zoom_focuser = Focuser('capture')
 
 	nav = Navigator(dark2, 'capture_v4l')
 	go = GuideOut()
@@ -1523,7 +1536,7 @@ def run_2():
 	ui.namedWindow('capture_v4l_polar')
 	ui.namedWindow('full_res')
 
-	runner = Runner(cam1, navigator = nav1, focuser=focuser)
+	runner = Runner(cam1, navigator = nav1, focuser=focuser, zoom_focuser = zoom_focuser)
 	runner.start()
 	
 	runner2 = Runner(cam, navigator = nav, guider = guider)
@@ -1539,7 +1552,7 @@ if __name__ == "__main__":
 	os.environ["LC_NUMERIC"] = "C"
 	
 	with ui:
-		#run_gphoto()
+		run_gphoto()
 		#run_test_2()
 		#run_v4l2()
 		#run_test_2_gphoto()
@@ -1547,7 +1560,7 @@ if __name__ == "__main__":
 		#run_2()
 		#run_test_g()
 		#run_2()
-		run_test()
+		#run_test()
 
 
 
