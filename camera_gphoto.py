@@ -172,6 +172,7 @@ class Camera_gphoto:
 			time.sleep(.1)
 			self.set_config_choice('output', 0)
 			time.sleep(12)
+			self.capture()
 
 		if cmd == "z0":
 			zoom = 1
@@ -181,6 +182,7 @@ class Camera_gphoto:
 			time.sleep(.1)
 			self.set_config_choice('output', 0)
 			time.sleep(12)
+			self.capture()
 	
 		if cmd == 'left':
 			self.x = max(100, self.x - 100)
