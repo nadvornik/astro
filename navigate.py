@@ -972,6 +972,47 @@ class Focuser:
 		r = cv2.sumElems(cv2.multiply(a,  Focuser.hfr_mat, dtype=cv2.CV_32FC1))[0] / s
 		return r
 
+	@staticmethod
+	def v_param(v_curve):
+		v_len = len(v_curve)
+		side_len = int(v_len * 0.4)
+
+		smooth_size = side_len / 3 * 2 + 1
+		v_curve_s = smooth(v_curve, smooth_size, 'flat')
+		v_curve_s = smooth(v_curve_s, smooth_size, 'flat')
+		
+		derived = np.gradient(v_curve_s)
+		print derived.tolist()
+				
+		i1 = np.argmin(derived)
+		i2 = np.argmax(derived)
+				
+		m1 = derived[i1]
+		m2 = derived[i2]
+				
+		c1 = v_curve_s[i1] - i1 * m1
+		c2 = v_curve_s[i2] - i2 * m2
+				
+		#m1, c1 = np.polyfit(range(0, side_len), self.v_curve[0:side_len], 1)
+		#m2, c2 = np.polyfit(range(v_len - side_len, v_len), self.v_curve[v_len - side_len: v_len], 1)
+		xmin =  (c2 - c1) / (m1 - m2)
+		side_len = xmin * 0.8
+		print "v_len", v_len, "side_len", side_len, "m1", m1, "c1", c1, "m2", m2, "c2", c2, "xmin", xmin
+		
+		return xmin, side_len, smooth_size, c1, m1, c2, m2, v_curve_s
+	
+	@staticmethod
+	def v_shift(v_curve2, smooth_size, c1, m1):
+		v_curve2_s = smooth(np.array(v_curve2), smooth_size, 'flat')
+		v_curve2_s = smooth(v_curve2_s, smooth_size, 'flat')
+		derived = np.gradient(v_curve2_s)
+		i1 = np.argmin(derived)
+		y = v_curve2_s[i1]
+		print "i1", i1
+		hyst = (y - c1) / m1 - i1
+		print "hyst", hyst
+		return hyst, v_curve2_s
+	
 
 	def cmd(self, cmd):
 		if cmd == 'dark':
@@ -1116,38 +1157,14 @@ class Focuser:
 		elif self.phase == 'record_v': # record v curve
 			self.hfr = self.get_hfr(im_sub)
 			self.v_curve.append(self.hfr)
-			if len(self.v_curve) > 10 and self.hfr > self.v_curve[0]:
+			if len(self.v_curve) > 20 and self.hfr > self.v_curve[0]:
 				self.phase = 'focus_v'
 				print "v_curve", self.v_curve[::-1]
 				
 				self.v_curve = np.array(self.v_curve)[::-1] # reverse
 
-				v_len = len(self.v_curve)
-				side_len = int(v_len * 0.4)
+				self.xmin, self.side_len, self.smooth_size, self.c1, self.m1, c2, m2, v_curve_s = Focuser.v_param(self.v_curve)
 
-				self.smooth_size = side_len / 3 * 2 + 1
-				self.v_curve_s = smooth(self.v_curve, self.smooth_size, 'flat')
-				self.v_curve_s = smooth(self.v_curve_s, self.smooth_size, 'flat')
-				
-				derived = np.gradient(self.v_curve_s)
-				print derived.tolist()
-				
-				i1 = np.argmin(derived)
-				i2 = np.argmax(derived)
-				
-				m1 = derived[i1]
-				m2 = derived[i2]
-				
-				c1 = self.v_curve_s[i1] - i1 * m1
-				c2 = self.v_curve_s[i2] - i2 * m2
-				
-				#m1, c1 = np.polyfit(range(0, side_len), self.v_curve[0:side_len], 1)
-				#m2, c2 = np.polyfit(range(v_len - side_len, v_len), self.v_curve[v_len - side_len: v_len], 1)
-				self.xmin =  (c2 - c1) / (m1 - m2)
-				self.m1 = m1
-				self.c1 = c1
-				self.side_len = self.xmin * 0.8
-				print "v_len", v_len, "side_len", side_len, "m1", m1, "c1", c1, "m2", m2, "c2", c2, "xmin", self.xmin
 				self.v_curve2 = []
 				
 				cmdQueue.put('f+1')
@@ -1160,14 +1177,7 @@ class Focuser:
 				cmdQueue.put('f+1')
 				self.phase_wait = 1
 			else:
-				self.v_curve2_s = smooth(np.array(self.v_curve2), self.smooth_size, 'flat')
-				self.v_curve2_s = smooth(self.v_curve2_s, self.smooth_size, 'flat')
-				derived = np.gradient(self.v_curve2_s)
-				i1 = np.argmin(derived)
-				y = self.v_curve2_s[i1]
-				print "i1", i1
-				hyst = (y - self.c1) / self.m1 - i1
-				print "hyst", hyst
+				hyst, v_curve2_s = Focuser.v_shift(np.array(self.v_curve2), self.smooth_size, self.c1, self.m1)
 				self.remaining_steps = round(self.xmin - self.side_len - hyst)
 				print "remaining", self.remaining_steps
 				self.phase = 'focus_v2'
