@@ -118,5 +118,5 @@ class MyGUI_Web:
 	def __exit__(self, type, value, traceback):
 		self.server.shutdown()
 
-ui = MyGUI_CV2()
-#ui = MyGUI_Web()
+#ui = MyGUI_CV2()
+ui = MyGUI_Web()
