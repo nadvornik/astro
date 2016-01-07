@@ -66,6 +66,8 @@ class Median:
 		#self.res[:,:] = a
 
 	def _add_masked(self, im, pts):
+		if self.res is None:
+			return
 		mask = np.zeros_like(im)
 	
 		white = np.iinfo(im.dtype).max
@@ -528,6 +530,9 @@ class Navigator:
 		bg = cv2.blur(im_sub, (30, 30))
 		bg = cv2.blur(bg, (30, 30))
 		im_sub = cv2.subtract(im_sub, bg)
+
+		if i < 6:
+			self.dark.add(im)
 
 		off = self.stack.add(im_sub, show_match=(self.dispmode == 'disp-match'))
 		filtered = self.stack.get()
@@ -1317,6 +1322,7 @@ class Runner(threading.Thread):
 					self.zoom_focuser.cmd(cmd)
 	
 			im, t = self.camera.capture()
+			
 			#cv2.imwrite("testimg20_" + str(i) + ".tif", im)
 			if mode == 'navigator':
 				self.navigator.proc_frame(im, i, t)
@@ -1509,6 +1515,8 @@ def run_test_2_gphoto():
 	ui.namedWindow('capture_v4l_polar')
 	ui.namedWindow('full_res')
 
+	go.out(1, 10) # move aside for 10s to collect darkframes
+
 	runner = Runner(cam1, navigator = nav1, focuser=focuser, zoom_focuser = zoom_focuser)
 	runner.start()
 	
@@ -1544,6 +1552,8 @@ def run_2():
 	ui.namedWindow('capture_polar')
 	ui.namedWindow('capture_v4l_polar')
 	ui.namedWindow('full_res')
+
+	go.out(1, 10) # move aside for 10s to collect darkframes
 
 	runner = Runner(cam1, navigator = nav1, focuser=focuser, zoom_focuser = zoom_focuser)
 	runner.start()
