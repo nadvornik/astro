@@ -1286,8 +1286,12 @@ class Runner(threading.Thread):
 						subprocess.call(['shutdown', '-h', "now"])
 					return
 				elif cmd == 'navigator' and self.navigator is not None:
+					if mode == 'zoom_focuser':
+						self.camera.cmd('z0')
 					mode = 'navigator'
 				elif cmd == 'guider' and self.guider is not None:
+					if mode == 'zoom_focuser':
+						self.camera.cmd('z0')
 					self.guider.reset()
 					self.guider.pt0 = self.navigator.stack.get_xy()
 					mode = 'guider'
@@ -1302,14 +1306,19 @@ class Runner(threading.Thread):
 							(maxy, maxx, maxv) = self.focuser.stack.get_xy()[0]
 						self.camera.cmd(cmd, x=maxx, y=maxy)
 						mode = 'zoom_focuser'
-				elif cmd == 'z0' and self.navigator is not None:
-					mode = 'navigator'
-					self.camera.cmd(cmd)
-				elif cmd == 'z0' and self.guider is not None:
-					mode = 'guider'
-					self.camera.cmd(cmd)
+				elif cmd == 'z0':
+					if mode == 'zoom_focuser':
+						self.camera.cmd(cmd)
+						mode = 'navigator'
+					elif mode == 'focuser':
+						mode = 'navigator'
 				elif cmd == 'focus' and mode != 'zoom_focuser' and self.focuser is not None:
 					mode = 'focuser'
+				elif cmd == 'capture' or cmd == 'test-capture':
+					if mode == 'zoom_focuser':
+						self.camera.cmd('z0')
+						mode = 'navigator'
+					self.camera.cmd(cmd)
 				else:
 					self.camera.cmd(cmd)
 					
