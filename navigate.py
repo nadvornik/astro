@@ -174,6 +174,8 @@ class MaxDetector(threading.Thread):
 		centroid_size = 7
 	
 		for (y, x, v) in zip(locmax[0][ordmax], locmax[1][ordmax], valmax[ordmax]):
+			if (v <= 0.0):
+				continue
 			if (x < centroid_size):
 				continue
 			if (y + self.y1 < centroid_size):
