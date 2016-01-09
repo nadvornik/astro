@@ -107,14 +107,18 @@ class Camera_gphoto:
 				raise
 
 	
-		time.sleep(.1)
+		time.sleep(.2)
 		self.set_config_choice('output', 1)
+		time.sleep(.2)
 		self.set_config_choice('output', 0)
 		time.sleep(12)
 		
 	
 	
 	def prepare(self):
+		self.shape = (704, 1056)
+		self.zoom_shape = (680, 1024)
+	
 		subprocess.call(['killall', 'gvfsd-gphoto2'])
 		subprocess.call(['killall', 'gvfs-gphoto2-volume-monitor'])
 	
@@ -132,13 +136,20 @@ class Camera_gphoto:
 				time.sleep(2)
 				continue
 		
+		# wake up the camera
+		self.set_config_value('eosremoterelease', 'Press Half')
+		self.set_config_value('eosremoterelease', 'Release Half')
+		self.set_config_value('eosremoterelease', 'Release Full')
+		
 		cur_time = self.get_config_value('datetime')
 		subprocess.call(['date', '--set', '@' + str(cur_time) ])
 		
 		# required configuration will depend on camera type!
 		self.set_config_choice('capturesizeclass', 2)
 	
+		time.sleep(.2)
 		self.set_config_choice('output', 1)
+		time.sleep(.2)
 		self.set_config_choice('output', 0)
 	
 		self.zoom = 1
@@ -164,13 +175,13 @@ class Camera_gphoto:
 
 			zoom = 5
 						
-			self.x = x * zoom - 300
-			self.y = y * zoom - 300
+			self.x = x * zoom - self.zoom_shape[1] / 2
+			self.y = y * zoom - self.zoom_shape[0] / 2
 			self.set_config_value('eoszoomposition', "%d,%d" % (self.x, self.y))
 			self.set_config_value('eoszoom', '5')
-			time.sleep(.1)
+			time.sleep(.2)
 			self.set_config_choice('output', 1)
-			time.sleep(.1)
+			time.sleep(.2)
 			self.set_config_choice('output', 0)
 			time.sleep(12)
 			self.capture()
@@ -178,9 +189,9 @@ class Camera_gphoto:
 		if cmd == "z0":
 			zoom = 1
 			self.set_config_value('eoszoom', '1')
-			time.sleep(.1)
+			time.sleep(.2)
 			self.set_config_choice('output', 1)
-			time.sleep(.1)
+			time.sleep(.2)
 			self.set_config_choice('output', 0)
 			time.sleep(12)
 			self.capture()
@@ -229,10 +240,14 @@ class Camera_gphoto:
 	
 			except KeyboardInterrupt:
 				break
-			except:
+			except gp.GPhoto2Error as ex:
 				print "Unexpected error:", sys.exc_info()
+				print "code:", ex.code
 				stacktraces()
 				time.sleep(1)
+				if ex.code == -7 or ex.code == -1:
+					gp.gp_camera_exit(self.camera, self.context)
+					self.prepare()
 
 	
 	def __del__(self):
