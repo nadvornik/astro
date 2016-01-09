@@ -8,6 +8,7 @@ from PIL import Image
 import StringIO
 import time
 import os
+import sys
 from cmd import cmdQueue
 import subprocess
 
@@ -95,6 +96,7 @@ class Handler(BaseHTTPRequestHandler):
 				self.end_headers()
 				return
 			
+			self.wfile._sock.settimeout(30)
 			self.send_response(200)
 			self.send_header('Content-type','multipart/x-mixed-replace; boundary=--jpegBoundary')
 			self.end_headers()
@@ -152,9 +154,12 @@ class Handler(BaseHTTPRequestHandler):
 		self.send_response(404)
 		self.end_headers()
 
-
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
-    """Handle requests in a separate thread."""
+	"""Handle requests in a separate thread."""
+
+	def handle_error(self, request, client_address):
+		print "Error: ", sys.exc_info()
+
 
 class ServerThread(threading.Thread):
 	def __init__(self):
