@@ -572,7 +572,7 @@ class Navigator:
 					
 			else:
 				if self.radius is not None and self.radius < 90:
-					self.radius *= 2
+					self.radius = self.radius * 2 + 15
 				else:
 					self.ra = None
 					self.dec = None
@@ -654,6 +654,7 @@ class Navigator:
 			self.field_deg = None
 			self.solver = None
 			self.plotter = None
+			self.radius = 0
 
 		if cmd == 'dark':
 			self.dark.add(self.im)
