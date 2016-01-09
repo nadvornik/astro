@@ -593,7 +593,7 @@ class Navigator:
 				self.solver.start()
 				self.solver_off = np.array([0.0, 0.0])
 
-		if self.polar_mode == 'polar-solve' and self.polar_solved:
+		if self.polar_mode == 'polar-solve':
 			polar_plot = self.polar.plot2()
 			p_status = "#%d %s solv#%d r:%.1f fps:%.1f" % (i, self.polar_mode, i - self.i_solved, self.radius, fps)
 			cv2.putText(polar_plot, p_status, (10, polar_plot.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255,255,0), 2)
