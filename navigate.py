@@ -573,7 +573,7 @@ class Navigator:
 					self.polar.phase2_set_tan(self.wcs)
 					
 			else:
-				if self.radius is not None and self.radius < 90:
+				if self.radius > 0 and self.radius < 90:
 					self.radius = self.radius * 2 + 15
 				else:
 					self.ra = None
