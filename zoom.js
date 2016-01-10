@@ -17,15 +17,15 @@
     var iw = img.width() * transform.zoom;
   
     $("#txt2").text( JSON.stringify(iw + ' ' + bw) );
-    if (transform.y > Math.max(0, bh - ih)) transform.y = Math.max(0, bh - ih);
-    if (transform.y < Math.min(0, bh - ih)) transform.y = Math.min(0, bh - ih);
+    if (transform.y > Math.max(0, ih - bh)) transform.y = Math.max(0, ih - bh);
+    if (transform.y < Math.min(0, ih - bh)) transform.y = Math.min(0, ih - bh);
 
     if (transform.x > Math.max(0, bw - iw)) transform.x = Math.max(0, bw - iw);
     if (transform.x < Math.min(0, bw - iw)) transform.x = Math.min(0, bw - iw);
 
     if (initial) {
-      if (transform.x < bw - iw) transform.x = bw - iw;
-      if (transform.y < bh - ih) transform.y = bh - ih;
+      if (transform.x > 0) transform.x = 0;
+      if (transform.y < ih - bh) transform.y = ih - bh;
     }
 
   }
@@ -82,7 +82,8 @@
         var startpos;
         if (phase == 'start') {
           var offset = $(this).offset();
-          startpos = {x: fingerData[0].start.x - offset.left, y: fingerData[0].start.y - offset.top};
+          var height = $(this).height();
+          startpos = {x: fingerData[0].start.x - offset.left, y: fingerData[0].start.y - offset.top - height};
           $(this).data('startpos', startpos);
         }
         else {
@@ -117,8 +118,10 @@
           var img = $(this)[0];
           var fingerData = $(this).data('fingerData');
           var offset = $(this).offset();
+          var height = $(this).height();
           
-          update_transform(transform, img.naturalWidth / img.clientWidth, 0, 0, fingerData[0].start.x - offset.left, fingerData[0].start.y - offset.top)
+          update_transform(transform, img.naturalWidth / img.clientWidth, 0, 0, fingerData[0].start.x - offset.left, fingerData[0].start.y - offset.top - height);
+          
 
         }
         fix_borders(transform, $(this), $(this).parent(".imgbox"), true);
@@ -162,7 +165,7 @@
        swipeDown:function(event, direction, distance, duration, fingerCount) {
           $('html, body').animate({scrollTop: $(this).prev(".viewportbox").offset().top}, 200);  
         },
-      threshold:  Math.min($(this).width(), $(this).height()) / 2,
+      threshold: 100,
       maxTimeThreshold:500,
       allowPageScroll:"none",
       preventDefaultEvents: true
@@ -185,5 +188,6 @@
     });
     
     //document.body.addEventListener('touchstart', function(e){ e.preventDefault(); });
+    $('html, body').animate({scrollTop: $(".viewportbox").first().offset().top}, 200);  
   });
  
