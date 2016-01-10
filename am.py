@@ -13,6 +13,7 @@ import threading
 import math
 import tempfile
 import shutil
+import time
 
 class Solver(threading.Thread):
 	def __init__(self, sources_img = None, sources_list = None, field_w = None, field_h = None, ra = None, dec = None, field_deg = None, radius = None):
@@ -30,7 +31,7 @@ class Solver(threading.Thread):
 		if self.ra is not None and field_deg is not None and radius is None:
 			self.radius = field_deg * 2.0
 		self.solved = False
-		self.cmd = None
+		self.cmd = []
 		
 	
 	def run(self):
@@ -69,23 +70,43 @@ class Solver(threading.Thread):
 		else:
 			cmd_s = cmd_s + [tmp_dir + "/field.tif", '-z', '2']
 
-		print cmd_s
-		self.cmd = subprocess.Popen(cmd_s, preexec_fn=os.setpgrp)
-		self.cmd.wait()
+		conf_list = ['conf-41', 'conf-42-1', 'conf-42-2' ]
+		for conf in conf_list:
+			cmd_s1 = cmd_s + [ '--config', conf + '.cfg', '--out', conf ]
+			print cmd_s1
+			cmd = subprocess.Popen(cmd_s1, preexec_fn=os.setpgrp)
+			self.cmd.append(cmd)
+		
+		solved = None
+		while solved is None:
+			running = False
+			for cmd, conf in zip(self.cmd, conf_list):
+				if cmd.poll() is not None:
+					if os.path.exists(tmp_dir + '/' + conf + '.solved'):
+						solved = tmp_dir + '/' + conf
+						break
+				else:
+					running = True
+			if not running:
+				break
+			if solved is not None:
+				break
+			time.sleep(0.1)
+		
+		self.terminate(wait = False)
 
-		if not os.path.exists(tmp_dir + "/field.solved"):
+		if solved is None or not os.path.exists(solved + ".solved"):
 			self.ra = None
 			self.dec = None
 			self.field_deg = None
 			shutil.rmtree(tmp_dir)
 			return
 	
-		self.solved = True
-		self.wcs = Tan(tmp_dir + "/field.wcs", 0)
+		self.wcs = Tan(solved + ".wcs", 0)
 		self.ra, self.dec = self.wcs.radec_center()
 		self.field_deg = self.field_w * self.wcs.pixel_scale() / 3600
 		
-		ind = pyfits.open(tmp_dir + '/field-indx.xyls')
+		ind = pyfits.open(solved + '-indx.xyls')
 		tbdata = ind[1].data
 		self.ind_sources = []
 		self.ind_radec = []
@@ -95,22 +116,28 @@ class Solver(threading.Thread):
 			self.ind_sources.append((x,y))
 			self.ind_radec.append(self.wcs.pixelxy2radec(l['X'], l['Y']))
 		shutil.rmtree(tmp_dir)
+		self.solved = True
 
 
 	def terminate(self, wait = True):
-		if self.cmd is not None:
+		for cmd in self.cmd:
+			if cmd.poll() is not None:
+				continue
+		
 			try:
-				pgid = os.getpgid(self.cmd.pid)
+				pgid = os.getpgid(cmd.pid)
 				os.killpg(pgid, signal.SIGTERM)
 			except:
 				print "Unexpected error:", sys.exc_info()
 			try:
-				self.cmd.terminate()
+				cmd.terminate()
 			except:
 				print "Unexpected error:", sys.exc_info()
-
-		if (wait):
+				
+		if wait:
 			self.join()
+				
+
 	
 
 class Plotter:
