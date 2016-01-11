@@ -11,6 +11,7 @@ import os
 import sys
 from cmd import cmdQueue
 import subprocess
+from stacktraces import stacktraces
 
 class MjpegBuf:
 	def __init__(self):
@@ -149,7 +150,10 @@ class Handler(BaseHTTPRequestHandler):
 			self.send_header('Content-type','text/text')
 			self.end_headers()
 			self.wfile.write("ok")
-			cmdQueue.put(postvars['key'][0])
+			cmd = postvars['key'][0]
+			if cmd == 'exit' or cmd == 'shutdowm' or cmd == 'stacktrace':
+				stacktraces()
+			cmdQueue.put(cmd)
 			return
 		self.send_response(404)
 		self.end_headers()
