@@ -597,7 +597,7 @@ class Navigator:
 
 		if self.polar_mode == 'polar-solve':
 			polar_plot = self.polar.plot2()
-			p_status = "#%d %s solv#%d r:%.1f fps:%.1f" % (i, self.polar_mode, i - self.i_solved, self.radius, fps)
+			p_status = "#%d %s solv#%d r:%.1f fps:%.1f" % (i, self.polar_mode, i - self.i_solver, self.radius, fps)
 			cv2.putText(polar_plot, p_status, (10, polar_plot.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255,255,0), 2)
 			ui.imshow(self.ui_capture + '_polar', polar_plot)
 		elif self.polar_mode == 'polar-adjust' and self.wcs is not None and self.polar_solved:
@@ -607,7 +607,7 @@ class Navigator:
 			cv2.putText(polar_plot, p_status, (10, polar_plot.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2)
 			ui.imshow(self.ui_capture + '_polar', polar_plot)
 		
-		status = "#%d %s %s  solv#%d r:%.1f fps:%.1f" % (i, self.dispmode, self.polar_mode, i - self.i_solved, self.radius, fps)
+		status = "#%d %s %s  solv#%d r:%.1f fps:%.1f" % (i, self.dispmode, self.polar_mode, i - self.i_solver, self.radius, fps)
 		if (self.dispmode == 'disp-orig'):
 			disp = normalize(im)
 			cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)

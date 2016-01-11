@@ -70,7 +70,11 @@ class Solver(threading.Thread):
 		else:
 			cmd_s = cmd_s + [tmp_dir + "/field.tif", '-z', '2']
 
-		conf_list = ['conf-41', 'conf-42-1', 'conf-42-2' ]
+		if self.radius is not None and self.radius > 0 and self.radius < 5:
+			conf_list = ['conf-all']
+		else:
+			conf_list = ['conf-41', 'conf-42-1', 'conf-42-2' ]
+			
 		for conf in conf_list:
 			cmd_s1 = cmd_s + [ '--config', conf + '.cfg', '--out', conf ]
 			print cmd_s1
