@@ -657,6 +657,8 @@ class Navigator:
 			self.solver = None
 			self.plotter = None
 			self.radius = 0
+			self.ra = None
+			self.dec = None
 
 		if cmd == 'dark':
 			self.dark.add(self.im)
