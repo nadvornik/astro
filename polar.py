@@ -203,8 +203,8 @@ class Polar:
 		return plot.plot(extra=extra)
 
 	def transform_ra_dec_list(self, l):
-		t = Quaternion.from_ra_dec_pair([self.ra, self.dec], [self.prec_ra, self.prec_dec])
-		print "transform_ra_dec_list", t.transform_ra_dec([self.ra, self.dec])
+		t = Quaternion.from_ra_dec_pair([self.prec_ra, self.prec_dec], [self.ra, self.dec])
+		#print "transform_ra_dec_list", t.transform_ra_dec([self.ra, self.dec])
 		res = []
 		for rd in l:
 			res.append(t.transform_ra_dec(rd))
