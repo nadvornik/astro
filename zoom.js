@@ -25,7 +25,7 @@
 
     if (initial) {
       if (transform.x > 0) transform.x = 0;
-      if (transform.y < ih - bh) transform.y = ih - bh;
+      if (transform.y < 0) transform.y = 0;
     }
 
   }
@@ -82,7 +82,7 @@
         var startpos;
         if (phase == 'start') {
           var offset = $(this).offset();
-          var height = $(this).height();
+          var height = $(this).height() * transform.zoom;
           startpos = {x: fingerData[0].start.x - offset.left, y: fingerData[0].start.y - offset.top - height};
           $(this).data('startpos', startpos);
         }
@@ -118,7 +118,7 @@
           var img = $(this)[0];
           var fingerData = $(this).data('fingerData');
           var offset = $(this).offset();
-          var height = $(this).height();
+          var height = $(this).height() * transform.zoom;
           
           update_transform(transform, img.naturalWidth / img.clientWidth, 0, 0, fingerData[0].start.x - offset.left, fingerData[0].start.y - offset.top - height);
           
