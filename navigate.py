@@ -500,10 +500,7 @@ class Navigator:
 		self.solver = None
 		self.solver_off = np.array([0.0, 0.0])
 		self.dispmode = 'disp-normal'
-		self.ra = None
-		self.dec = None
 		self.field_deg = None
-		self.radius = 0
 		self.wcs = None
 		self.plotter = None
 		self.plotter_off = np.array([0.0, 0.0])
@@ -515,6 +512,9 @@ class Navigator:
 		self.i_solved = 0
 		self.i_solver = 0
 		self.prev_t = 0
+		self.ra, self.dec = self.polar.zenith()
+		self.max_radius = 100
+		self.radius = self.max_radius
 
 	def proc_frame(self,im, i, t = None):
 		if im.ndim > 2:
@@ -573,12 +573,11 @@ class Navigator:
 					self.polar.phase2_set_tan(self.wcs)
 					
 			else:
-				if self.radius > 0 and self.radius < 90:
+				if self.radius > 0 and self.radius < 70:
 					self.radius = self.radius * 2 + 15
 				else:
-					self.ra = None
-					self.dec = None
-					self.radius = 0
+					self.ra, self.dec = self.polar.zenith()
+					self.radius = self.max_radius
 					self.wcs = None
 			self.solver = None
 			self.solved_im = None
@@ -656,9 +655,8 @@ class Navigator:
 			self.field_deg = None
 			self.solver = None
 			self.plotter = None
-			self.radius = 0
-			self.ra = None
-			self.dec = None
+			self.ra, self.dec = self.polar.zenith()
+			self.radius = self.max_radius
 
 		if cmd == 'dark':
 			self.dark.add(self.im)

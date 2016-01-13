@@ -35,8 +35,8 @@ def celestial_rot(t = None):
 	T = (jd0 - 2451545.0) / 36525
 	S0 = (6.697374558 + 2400.05133691 * T + 0.0000258622 * T ** 2 - 0.0000000017 * T**3) % 24
 	S = S0 + 1.0027379093 * jh
-	rot = S * 15 + 15
-	print "cel time", T, S0, jh, S
+	rot = S * 15.0
+	#print "cel time", T, S0, jh, S
 	return rot
 
 def precession():
@@ -59,6 +59,7 @@ class Polar:
 		self.prec_ra, self.prec_dec = self.prec_q.inv().transform_ra_dec([0, 90])
 		self.ra = None
 		self.dec = None
+		self.gps = (50.0, 15.0)
 		
 	def add(self, ra, dec, roll, t):
 		if self.t0 is None:
@@ -232,7 +233,7 @@ class Polar:
 
 
 	def plot2(self, size = 540, area = 0.1):
-		ha = celestial_rot()
+		ha = celestial_rot() + self.gps[1]
 		qha = Quaternion([90-ha, 0, 0])
 		
 		img = np.zeros((size, size, 3), dtype=np.uint8)
@@ -283,6 +284,11 @@ class Polar:
 				cv2.arrowedLine(img, (int(c + prec_xyz[0] / pole_dist * area / 3 * scale), int(c + prec_xyz[1] / pole_dist * area / 3 * scale)), (int(c + prec_xyz[0] / pole_dist * area / 2 * scale), int(c + prec_xyz[1] / pole_dist * area / 2 * scale)), (255, 255, 255), 2)
 
 		return img
+	
+	def zenith(self):
+		ha = (celestial_rot() + self.gps[1]) % 360.0
+		dec = self.gps[0]
+		return (ha, dec)
 
 if __name__ == "__main__":
 	
@@ -411,4 +417,7 @@ if __name__ == "__main__":
 		]])
 	plot = Plotter(wcs)
 	cv2.imshow("plot", plot.plot(extra=extra))
+	
+	print p.zenith()
+	
 	cv2.waitKey(0)
