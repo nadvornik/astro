@@ -725,14 +725,6 @@ class Guider:
 			self.capture_in_progress = False
 
 	def proc_frame(self, im, i):
-		t = time.time()
-
-		try:
-			fps = 1.0 / (t - self.prev_t)
-		except:
-			fps = 0
-		
-		status = "#%d Guider:%d fps:%.1f" % (i, self.mode, fps)
 
 		if im.ndim > 2:
 			im = cv2.min(cv2.min(im[:, :, 0], im[:, :, 1]), im[:, :, 2])
@@ -752,6 +744,16 @@ class Guider:
 		im_sub = cv2.subtract(im_sub, bg)
 
 		disp = normalize(im_sub)
+		pt = find_max(im_sub, 20, n = 30)
+
+		t = time.time()
+
+		try:
+			fps = 1.0 / (t - self.prev_t)
+		except:
+			fps = 0
+		
+		status = "#%d Guider:%d fps:%.1f" % (i, self.mode, fps)
 
 		if self.mode==1:
 			self.used_cnt = []
@@ -765,7 +767,6 @@ class Guider:
 		elif self.mode==2:
 				
 			self.cnt += 1
-			pt = find_max(im_sub, 20, n = 30)
 			
 			# ignore hotpixels
 			pt1m, pt2m, match = match_closest(self.pt0, pt, 5)
@@ -837,8 +838,6 @@ class Guider:
 
 		elif self.mode==3:
 			self.cnt += 1
-			pt = find_max(im_sub, 20, n = 30)
-			#print pt
 			pt1m, pt2m, match = match_triangle(self.pt0, pt, 5, 50, self.off)
 			if len(match) > 0:
 				off, weights = avg_pt(pt1m, pt2m)
@@ -884,7 +883,6 @@ class Guider:
 
 
 		elif self.mode==4:
-			pt = find_max(im_sub, 20, n = 30)
 			pt1m, pt2m, match = match_triangle(self.pt0, pt, 5, 30, self.off)
 			if len(match) > 0:
 				off, weights = avg_pt(pt1m, pt2m)
