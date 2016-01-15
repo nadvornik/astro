@@ -1032,11 +1032,14 @@ class Focuser:
 	def reset(self):
 		self.phase = 'wait'
 
-	def get_max_flux(self, im):
+	def get_max_flux(self):
 		ret = []
 		hfr = None
-		(h, w) = im.shape
+		(h, w) = self.stack_im.shape
 		for p in self.stack.get_xy():
+			if p[2] < self.stddev * 3:
+				print "under 3stddev:", p[2], self.stddev * 3
+				continue
 			x = int(p[1])
 			y = int(p[0])
 			if (x < Focuser.hfr_size * 2):
@@ -1048,13 +1051,13 @@ class Focuser:
 			if (y > h - Focuser.hfr_size * 2 - 1):
 				continue
 			if hfr is None:
-				hfr = Focuser.hfr(im[y - Focuser.hfr_size : y + Focuser.hfr_size + 1, x - Focuser.hfr_size : x + Focuser.hfr_size + 1])
+				hfr = Focuser.hfr(self.stack_im[y - Focuser.hfr_size : y + Focuser.hfr_size + 1, x - Focuser.hfr_size : x + Focuser.hfr_size + 1])
 				if hfr > Focuser.hfr_size * 0.5:
 					hfr = None
 					continue
 				ret.append(p)
 			else:
-				if Focuser.hfr(im[y - Focuser.hfr_size : y + Focuser.hfr_size + 1, x - Focuser.hfr_size : x + Focuser.hfr_size + 1]) < hfr + 1:
+				if Focuser.hfr(self.stack_im[y - Focuser.hfr_size : y + Focuser.hfr_size + 1, x - Focuser.hfr_size : x + Focuser.hfr_size + 1]) < hfr + 1:
 					ret.append(p)
 				
 				
@@ -1069,10 +1072,17 @@ class Focuser:
 		if self.focus_yx is None or len(self.focus_yx) == 0:
 			return Focuser.hfr_size
 		filtered = []
+		
+		centroid_size = Focuser.hfr_size
+		clist = []
 		for p in self.focus_yx:
 			(y, x, v) = p
-			centroid_size = Focuser.hfr_size
-			xs, ys = centroid(im[y  - centroid_size : y + centroid_size + 1, x - centroid_size : x + centroid_size + 1], centroid_size)
+			clist.append(( centroid(im[y  - centroid_size : y + centroid_size + 1, x - centroid_size : x + centroid_size + 1], centroid_size) ))
+		xs, ys = np.median(clist, axis = 0)
+
+		
+		for p in self.focus_yx:
+			(y, x, v) = p
 			x = int(round(x + xs))
 			y = int(round(y + ys))
 			if (x < Focuser.hfr_size):
@@ -1135,14 +1145,16 @@ class Focuser:
 				self.dark_add -= 1
 				self.dark.add(self.im)
 			else:
+				mean, self.stddev = cv2.meanStdDev(self.stack_im)
+				print "mean, stddev: ", mean, self.stddev
 				for i in range (0, 10):
 					cmdQueue.put('f+3')
 				self.phase_wait = 5
 				self.search_steps = 0
 				self.phase = 'search'
 		elif self.phase == 'search': # step far, record max flux
-			flux, hfr, yx = self.get_max_flux(self.stack_im)
-			if (flux < self.max_flux * 0.8 and hfr > Focuser.hfr_size / 3) or self.search_steps > 120:
+			flux, hfr, yx = self.get_max_flux()
+			if flux < self.max_flux * 0.7 or hfr > self.min_hfr * 2 or self.search_steps > 120:
 				self.phase = 'prep_record_v'
 				cmdQueue.put('f-1')
 			else:
@@ -1150,9 +1162,10 @@ class Focuser:
 					self.focus_yx = yx
 					self.max_flux = flux
 					self.min_hfr = hfr
-				cmdQueue.put('f+2')
+				else:
+					cmdQueue.put('f+2')
 				self.search_steps += 1
-			self.hfr = self.get_hfr(im_sub)
+				self.hfr = self.get_hfr(im_sub)
 			#self.phase_wait = 2
 			print "max", flux, self.max_flux
 		elif self.phase == 'prep_record_v': # record v curve

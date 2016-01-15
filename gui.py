@@ -33,7 +33,6 @@ class MyGUI_CV2(threading.Thread):
 		ord('0') : 'disp-match',
 		ord('-') : 'disp-orig',
 		ord('=') : 'disp-df-cor',
-		ord(' ') : ' ',
 		ord('a') : 'z0',
 		ord('z') : 'z1',
 		ord('x') : 'f-3',
