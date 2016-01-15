@@ -232,7 +232,7 @@ class Polar:
 		self.phase2_set_pos(ra, dec, orient)
 
 
-	def plot2(self, size = 540, area = 0.1):
+	def plot2(self, size = 960, area = 0.1):
 		ha = celestial_rot() + self.gps[1]
 		qha = Quaternion([90-ha, 0, 0])
 		
