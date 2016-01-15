@@ -32,7 +32,7 @@
   
   $(document).ready(function(){
     $("button.ajax").click(function(){
-        var btn = $(this)
+        var btn = $(this);
         btn.addClass("ajaxrun");
         btn.removeClass("ajaxerr");
         $.ajax({type: "POST", url: "button", data: {key: $(this).attr('id')},
@@ -46,16 +46,21 @@
         });
     });
     $("select.ajax").change(function(){
-        var sel = $(this)
+        var sel = $(this);
+        var value = this.value;
+        if ( sel.prop("selectedIndex") == 0 ) return;
         sel.addClass("ajaxrun");
         sel.removeClass("ajaxerr");
-        $.ajax({type: "POST", url: "button", data: {key: this.value},
+        $.ajax({type: "POST", url: "button", data: {key: value},
           success:function() {
             sel.removeClass("ajaxrun");
+            sel.prop("selectedIndex",0);
+            sel.children().first().text(value);
           },
           error:function() {
             sel.removeClass("ajaxrun");
             sel.addClass("ajaxerr");
+            sel.prop("selectedIndex",0);
           }
         });
     });

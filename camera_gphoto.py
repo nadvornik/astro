@@ -20,6 +20,11 @@ def apply_gamma(img, gamma):
 
 
 class Camera_gphoto:
+	def __init__(self):
+		self.iso = 400
+		self.test_iso = 3200
+		self.exp_sec = 120
+		self.test_exp_sec = 15
 
 	def get_config_value(self, name):
 		config = gp.check_result(gp.gp_camera_get_config(self.camera, self.context))
@@ -65,7 +70,10 @@ class Camera_gphoto:
 				time.sleep(0.1)
 				continue
 	
-	def capture_bulb(self, sec, card = False):
+	def capture_bulb(self, sec, iso = None, card = False):
+		if iso is not None:
+			self.set_config_value('iso', str(iso))
+			
 		if card:
 			self.set_config_choice('capturetarget', 1) #card
 			#self.set_config_choice('imageformat', 24) #RAW 
@@ -209,11 +217,26 @@ class Camera_gphoto:
 			self.y = self.y + 100
 			self.set_config_value('eoszoomposition', "%d,%d" % (self.x, self.y))
 	
+		if cmd.startswith('iso-'):
+			self.iso = cmd[len('iso-'):]
+
+		if cmd.startswith('test-iso-'):
+			self.test_iso = cmd[len('test-iso-'):]
+
+		if cmd.startswith('exp-sec-'):
+			self.exp_sec = int(cmd[len('exp-sec-'):])
+
+		if cmd.startswith('test-exp-sec-'):
+			self.test_exp_sec = int(cmd[len('test-exp-sec-'):])
+		
+		if cmd.startswith('f-number-'):
+			self.set_config_value('aperture', cmd[len('f-number-'):])
+
 		if cmd == 'test-capture':
-			self.capture_bulb(3)
+			self.capture_bulb(self.test_exp_sec, self.test_iso)
 		
 		if cmd == 'capture':
-			self.capture_bulb(300, card=True)
+			self.capture_bulb(self.exp_sec, self.iso, card=True)
 			cmdQueue.put('capture-finished')
 		
 	
