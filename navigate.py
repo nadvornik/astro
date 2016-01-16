@@ -326,17 +326,19 @@ def match_triangle(pt1, pt2, maxdif = 5.0, maxdrift = 10, off = (0.0, 0.0)):
 	return match_take(pt1s, pt2s, bestmatch, ord1, ord2)
 	
 
-def match_closest(pt1, pt2, d, off = (0.0, 0.0)):
+def match_closest(pt1, pt2, d, off = (0.0, 0.0), M = None):
 	if len(pt1) == 0 or len(pt2) == 0:
 		return match_take(pt1, pt2, [])
 	
+	if M is None:
+		M = np.matrix(np.concatenate((np.array([[1.0, 0], [0, 1.0]]), np.array([off]))))
+	
+	pt1t = np.hstack(( np.insert(pt1[:, 0:2], 2, 1.0, axis=1).dot(M).A , pt1[:, 2].reshape((-1,1)) ))
 	ord2 = np.argsort(pt2[:, 0])
 	pt2s = pt2[ord2]
 	match = []
 	l = len(pt2s)
-	for i1, (y1orig, x1orig, flux1) in enumerate(pt1):
-		y1 = y1orig + off[0]
-		x1 = x1orig + off[1]
+	for i1, (y1, x1, flux1) in enumerate(pt1t):
 		i2 = np.searchsorted(pt2s[:, 0], y1)
 		closest_dist = d ** 2;
 		closest_idx = -1
@@ -390,6 +392,87 @@ def avg_pt(pt1m, pt2m, noise = 2):
 	return v, weights
 
 
+def pt_translation(pt1, pt2, weights):
+	t = pt2[:, 0:2] - pt1[:, 0:2]
+	return np.matrix([[1., 0], 
+	                  [0, 1.],
+	                  np.average(t, axis = 0, weights = weights)])
+
+def pt_translation_scale(pt1, pt2, weights):
+	pt1 = pt1.reshape((-1, 2))
+	pt2 = pt2.reshape((-1, 2))
+	c1 = np.average(pt1[:, 0:2], axis = 0, weights = weights)
+	c2 = np.average(pt2[:, 0:2], axis = 0, weights = weights)
+
+	centered_pt1 = pt1[:, 0:2] - c1
+	centered_pt2 = pt2[:, 0:2] - c2
+	
+	s, z = np.polyfit(np.concatenate((centered_pt1[:, 0], centered_pt1[:, 1])),
+	                  np.concatenate((centered_pt2[:, 0], centered_pt2[:, 1])), 
+	                  1, 
+	                  w = np.concatenate((weights, weights)))
+
+	t = c2 - c1 * float(s)
+	
+	m = np.concatenate((np.array([[float(s), 0], [0, float(s)]]), t.reshape((1,2))))
+	m = np.matrix(m)
+	#print m
+	return m
+
+def pt_translation_rotate(pt1, pt2, weights):
+	c1 = np.average(pt1[:, 0:2], axis = 0, weights = weights)
+	c2 = np.average(pt2[:, 0:2], axis = 0, weights = weights)
+
+	centered_pt1 = pt1[:, 0:2] - c1
+	centered_pt2 = pt2[:, 0:2] - c2
+	
+	
+	c00 = np.array(centered_pt1[:,0]).reshape(-1)
+	c10 = np.array(centered_pt2[:,0]).reshape(-1)
+	c01 = np.array(centered_pt1[:,1]).reshape(-1)
+	c11 = np.array(centered_pt2[:,1]).reshape(-1)
+	
+	cov = np.array([
+	  [ np.average(c00 * c10, axis = 0, weights = weights),
+	    np.average(c01 * c10, axis = 0, weights = weights)],
+	  [ np.average(c00 * c11, axis = 0, weights = weights),
+	    np.average(c01 * c11, axis = 0, weights = weights)]])
+	w, u, vt = cv2.SVDecomp(cov)
+	
+	r = np.matrix(np.transpose(vt)).dot(np.transpose(u))
+	t = c2 - c1 * r
+	m = np.matrix(np.concatenate((r, t)))
+	#print m
+	return m
+
+def pt_transform_opt(pt1m, pt2m, noise = 2, pt_func = pt_translation):
+	if len(pt1m) == 0:
+		return np.matrix([[1., 0], [0, 1.], [0, 0]]), []
+	pt1m = np.array(pt1m)
+	pt2m = np.array(pt2m)
+	pt1 = pt1m[:, 0:2]
+	pt2 = pt2m[:, 0:2]
+	weights = pt2m[:, 2] * pt1m[:, 2] + 1
+	sumw = np.sum(weights)
+	
+	if pt_func == pt_translation_scale and len(pt1m) < 2:
+		pt_func = pt_translation
+
+	if pt_func == pt_translation_rotate and len(pt1m) < 4:
+		pt_func = pt_translation
+	
+	m = pt_func(pt1, pt2, weights)
+	
+	pt1t = np.insert(pt1, 2, 1.0, axis=1).dot(m).A
+	
+	d2 = np.sum((pt2 - pt1t)**2, axis = 1)
+	var = np.sum(d2 * weights) / sumw
+	weights[np.where(d2 > var * noise**2)] = 1.0
+	
+	m = pt_func(pt1, pt2, weights)
+	
+	return m, weights
+	
 class Stack:
 	def __init__(self, ratio = 0.1):
 		self.img = None
@@ -403,7 +486,7 @@ class Stack:
 			im = cv2.multiply(im, 255.0, dtype=cv2.CV_16UC1)
 		if (self.img is None):
 			self.img = im
-			return (0.0, 0.0)
+			return np.matrix([[1., 0], [0, 1.], [0, 0]])
 			
 		pt2 = find_max(im, 12, n = 40)
 
@@ -420,23 +503,25 @@ class Stack:
 			self.img = cv2.multiply(im, self.ratio, dtype=cv2.CV_16UC1)
 			self.prev_pt_verified = pt2
 			self.prev_pt = pt2
-			off = np.array([0., 0.])
+			M = np.matrix([[1., 0], [0, 1.], [0, 0]])
 		else:
-			off = np.median(pt2m[:, 0:2] - pt1m[:, 0:2], axis = 0)
+			M, weights = pt_transform_opt(pt1m, pt2m, pt_func = pt_translation_rotate)
+			
 			pt1 = self.prev_pt
 	
-			pt1m, pt2m, match = match_closest(pt1, pt2, 5, off)
-			off, weights = avg_pt(pt1m, pt2m)
+			pt1m, pt2m, match = match_closest(pt1, pt2, 5, M = M)
+			#off, weights = avg_pt(pt1m, pt2m)
 			#print "off2", off 
 			#print match
 			self.prev_pt_verified = pt2m
 			self.prev_pt = pt2
 
-			M = np.array([[1.0, 0.0, off[1]],
-			             [0.0, 1.0, off[0]]])
+			M, weights = pt_transform_opt(pt1m, pt2m, pt_func = pt_translation_rotate)
+			
+			Mt = np.array([[ M[0, 0], M[0, 1], M[2,1] ],
+			               [ M[1, 0], M[1, 1], M[2,0] ]])
 
-
-			self.img = cv2.warpAffine(self.img, M[0:2,0:3], (im.shape[1], im.shape[0]));
+			self.img = cv2.warpAffine(self.img, Mt, (im.shape[1], im.shape[0]));
 			
 			self.img = cv2.addWeighted(self.img, 1.0 - self.ratio, im, self.ratio, 0, dtype=cv2.CV_16UC1)
 
@@ -453,7 +538,7 @@ class Stack:
 			for p in pt2m:
 				cv2.circle(self.match, (int(p[1]), int(p[0])), 10, (255), 1)
 		
-		return off
+		return M
 
 	def add_simple(self, im):
 		if im.dtype == np.uint8:
@@ -536,11 +621,11 @@ class Navigator:
 		if i < 6:
 			self.dark.add(im)
 
-		off = self.stack.add(im_sub, show_match=(self.dispmode == 'disp-match'))
+		M = self.stack.add(im_sub, show_match=(self.dispmode == 'disp-match'))
 		filtered = self.stack.get()
 		
-		self.solver_off += off
-		self.plotter_off += off
+		self.solver_off = np.insert(self.solver_off, 2, 1.0).dot(M).A1
+		self.plotter_off = np.insert(self.plotter_off, 2, 1.0).dot(M).A1
 
 		try:
 			fps = 1.0 / (t - self.prev_t)
@@ -1062,7 +1147,7 @@ class Focuser:
 				
 				
 		if len(ret) > 0:
-			return ret[0][2], hfr, ret
+			return ret[0][2], hfr, np.array(ret)
 		else:
 			return 0, None, None
 
@@ -1071,20 +1156,21 @@ class Focuser:
 		(h, w) = im.shape
 		if self.focus_yx is None or len(self.focus_yx) == 0:
 			return Focuser.hfr_size
-		filtered = []
 		
 		centroid_size = Focuser.hfr_size
 		clist = []
 		for p in self.focus_yx:
 			(y, x, v) = p
-			clist.append(( centroid(im[y  - centroid_size : y + centroid_size + 1, x - centroid_size : x + centroid_size + 1], centroid_size) ))
-		xs, ys = np.median(clist, axis = 0)
-
+			xs, ys = centroid(im[y  - centroid_size : y + centroid_size + 1, x - centroid_size : x + centroid_size + 1], centroid_size)
+			clist.append( (y + ys, x + xs, v) )
 		
-		for p in self.focus_yx:
-			(y, x, v) = p
-			x = int(round(x + xs))
-			y = int(round(y + ys))
+		M, weights = pt_transform_opt(self.focus_yx, clist, pt_func = pt_translation_scale)
+		clist_t = np.insert(self.focus_yx[:, 0:2], 2, 1.0, axis=1).dot(M).A
+		
+		filtered = []
+		sum_w = 0.0
+		for p,v,w in zip(clist_t, self.focus_yx[:, 2], weights):
+			(y, x) = p
 			if (x < Focuser.hfr_size):
 				continue
 			if (y < Focuser.hfr_size):
@@ -1094,13 +1180,14 @@ class Focuser:
 			if (y > h - Focuser.hfr_size - 1):
 				continue
 			
-			hfr += Focuser.hfr(im[y - Focuser.hfr_size : y + Focuser.hfr_size + 1, x - Focuser.hfr_size : x + Focuser.hfr_size + 1])
+			hfr += Focuser.hfr(im[y - Focuser.hfr_size : y + Focuser.hfr_size + 1, x - Focuser.hfr_size : x + Focuser.hfr_size + 1]) * w
+			sum_w += w
 			filtered.append((y, x, v))
 		
 		self.focus_yx = np.array(filtered)
 		if len(filtered) == 0:
 			return Focuser.hfr_size
-		return hfr / len(filtered)
+		return hfr / sum_w
 
 	def proc_frame(self, im, i):
 		t = time.time()
@@ -1147,7 +1234,7 @@ class Focuser:
 			else:
 				mean, self.stddev = cv2.meanStdDev(self.stack_im)
 				print "mean, stddev: ", mean, self.stddev
-				for i in range (0, 10):
+				for i in range (0, 9):
 					cmdQueue.put('f+3')
 				self.phase_wait = 5
 				self.search_steps = 0
