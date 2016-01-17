@@ -1157,20 +1157,15 @@ class Focuser:
 		if self.focus_yx is None or len(self.focus_yx) == 0:
 			return Focuser.hfr_size
 		
-		centroid_size = Focuser.hfr_size
-		clist = []
+		centroid_size = 20
+		filtered = []
+		original = []
+		
+		hfr_list = []
+		
+		sum_w = 0.0
 		for p in self.focus_yx:
 			(y, x, v) = p
-			xs, ys = centroid(im[y  - centroid_size : y + centroid_size + 1, x - centroid_size : x + centroid_size + 1], centroid_size)
-			clist.append( (y + ys, x + xs, v) )
-		
-		M, weights = pt_transform_opt(self.focus_yx, clist, pt_func = pt_translation_scale)
-		clist_t = np.insert(self.focus_yx[:, 0:2], 2, 1.0, axis=1).dot(M).A
-		
-		filtered = []
-		sum_w = 0.0
-		for p,v,w in zip(clist_t, self.focus_yx[:, 2], weights):
-			(y, x) = p
 			if (x < Focuser.hfr_size):
 				continue
 			if (y < Focuser.hfr_size):
@@ -1179,15 +1174,35 @@ class Focuser:
 				continue
 			if (y > h - Focuser.hfr_size - 1):
 				continue
-			
-			hfr += Focuser.hfr(im[y - Focuser.hfr_size : y + Focuser.hfr_size + 1, x - Focuser.hfr_size : x + Focuser.hfr_size + 1]) * w
-			sum_w += w
-			filtered.append((y, x, v))
-		
-		self.focus_yx = np.array(filtered)
+			xs, ys = centroid(im[y  - centroid_size : y + centroid_size + 1, x - centroid_size : x + centroid_size + 1], centroid_size)
+			x += xs
+			y += ys
+			ix = int(x)
+			iy = int(y)
+			if (ix < Focuser.hfr_size):
+				continue
+			if (iy < Focuser.hfr_size):
+				continue
+			if (ix > w - Focuser.hfr_size - 1):
+				continue
+			if (iy > h - Focuser.hfr_size - 1):
+				continue
+
+			filtered.append( (y, x, v) )
+			original.append( p )
+			hfr_list.append( Focuser.hfr(im[iy - Focuser.hfr_size : iy + Focuser.hfr_size + 1, ix - Focuser.hfr_size : ix + Focuser.hfr_size + 1]) )
+
 		if len(filtered) == 0:
 			return Focuser.hfr_size
-		return hfr / sum_w
+
+		filtered = np.array(filtered)
+		original = np.array(original)
+		M, weights = pt_transform_opt(original, filtered, pt_func = pt_translation_scale)
+		filtered[:, 0:2] = np.insert(original[:, 0:2], 2, 1.0, axis=1).dot(M).A
+
+		self.focus_yx = filtered
+		print "hfr_lisr", hfr_list, weights
+		return np.average(hfr_list, weights = weights)
 
 	def proc_frame(self, im, i):
 		t = time.time()
