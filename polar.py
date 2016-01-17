@@ -122,7 +122,7 @@ class Polar:
 		self.dec = dec
 		return True, ra, dec
 
-	def compute(self):
+	def compute(self, noise=2):
 		if len(self.pos) < 2:
 			return False, None, None
 		qa = np.array([p.a for p in self.pos])
@@ -132,14 +132,22 @@ class Polar:
 		qarange = qamax - qamin
 		ao = np.argsort(qarange) #axis order, ao[0], ao[1] are computed from ao[2] and ao[3]
 
-		ones = np.ones(len(qa))
-		
 		A = np.column_stack((qa[:,ao[2]], qa[:,ao[3]]))
 		res0 = np.linalg.lstsq(A, qa[:,ao[0]])[0]
 		res1 = np.linalg.lstsq(A, qa[:,ao[1]])[0]
 		
-		#for q in qa:
-		#	print q[0] * res2[0] + q[1] * res2[1] + res2[2]  - q[2] , q[0] * res3[0] + q[1] * res3[1] + res3[2]  - q[3]
+		dif0 = qa[:,ao[0]] - (qa[:,ao[2]] * res0[0] + qa[:,ao[3]] * res0[1])
+		dif1 = qa[:,ao[1]] - (qa[:,ao[2]] * res1[0] + qa[:,ao[3]] * res1[1])
+
+		d2 = dif0**2 + dif1**2
+		var = np.mean(d2)
+		qa = qa[np.where(d2 < var * noise**2)]
+
+		# again, with filtered values
+		A = np.column_stack((qa[:,ao[2]], qa[:,ao[3]]))
+		res0 = np.linalg.lstsq(A, qa[:,ao[0]])[0]
+		res1 = np.linalg.lstsq(A, qa[:,ao[1]])[0]
+
 		qa1 = np.zeros(4)
 		qa1[ao[2]] = 1.
 		qa1[ao[0]] = res0[0]
