@@ -1117,13 +1117,13 @@ class Focuser:
 	def reset(self):
 		self.phase = 'wait'
 
-	def get_max_flux(self):
+	def get_max_flux(self, im, xy, stddev):
 		ret = []
 		hfr = None
-		(h, w) = self.stack_im.shape
-		for p in self.stack.get_xy():
-			if p[2] < self.stddev * 3:
-				print "under 3stddev:", p[2], self.stddev * 3
+		(h, w) = im.shape
+		for p in xy:
+			if p[2] < stddev * 3:
+				print "under 3stddev:", p[2], stddev * 3
 				continue
 			x = int(p[1])
 			y = int(p[0])
@@ -1136,15 +1136,15 @@ class Focuser:
 			if (y > h - Focuser.hfr_size * 2 - 1):
 				continue
 			if hfr is None:
-				hfr = Focuser.hfr(self.stack_im[y - Focuser.hfr_size : y + Focuser.hfr_size + 1, x - Focuser.hfr_size : x + Focuser.hfr_size + 1])
+				hfr = Focuser.hfr(im[y - Focuser.hfr_size : y + Focuser.hfr_size + 1, x - Focuser.hfr_size : x + Focuser.hfr_size + 1])
 				if hfr > Focuser.hfr_size * 0.5:
 					hfr = None
 					continue
 				ret.append(p)
 			else:
-				if Focuser.hfr(self.stack_im[y - Focuser.hfr_size : y + Focuser.hfr_size + 1, x - Focuser.hfr_size : x + Focuser.hfr_size + 1]) < hfr + 1:
+				if Focuser.hfr(im[y - Focuser.hfr_size : y + Focuser.hfr_size + 1, x - Focuser.hfr_size : x + Focuser.hfr_size + 1]) < hfr + 1:
 					ret.append(p)
-				
+		print "hfr", hfr, ret
 				
 		if len(ret) > 0:
 			return ret[0][2], hfr, np.array(ret)
@@ -1201,8 +1201,22 @@ class Focuser:
 		filtered[:, 0:2] = np.insert(original[:, 0:2], 2, 1.0, axis=1).dot(M).A
 
 		self.focus_yx = filtered
-		print "hfr_lisr", hfr_list, weights
-		return np.average(hfr_list, weights = weights)
+		print "hfr_list", hfr_list, weights
+		
+		hfr = np.average(hfr_list, weights = weights)
+		d2 = (np.array(hfr_list) - hfr) ** 2
+		var = np.average(d2, weights = weights)
+		noise = 2
+		weights[np.where(d2 > var * noise**2)] = 1.0
+		hfr = np.average(hfr_list, weights = weights)
+		print "hfr_list_filt", hfr_list, weights
+		return hfr
+
+
+	def set_xy_from_stack(self, stack):
+		im = stack.get()
+		mean, self.stddev = cv2.meanStdDev(im)
+		self.max_flux, self.min_hfr, self.focus_yx = self.get_max_flux(im, stack.get_xy(), 0)
 
 	def proc_frame(self, im, i):
 		t = time.time()
@@ -1234,14 +1248,21 @@ class Focuser:
 		if self.phase_wait > 0:
 			self.phase_wait -= 1
 		elif self.phase == 'seek': # move near, out of focus
-			self.focus_yx = None
-			for i in range (0, 12):
-				cmdQueue.put('f-3')
-			self.phase = 'dark'
-			self.phase_wait = 5
-			self.max_flux = 0
-			self.min_hfr = Focuser.hfr_size
-			self.dark_add = self.dark.n
+			self.hfr = self.get_hfr(im_sub)
+			print "in-focus hfr ", self.hfr
+			if self.hfr < Focuser.hfr_size / 3:
+				self.phase = 'prep_record_v'
+				self.phase_wait = 3
+				cmdQueue.put('f+3')
+			else:
+				self.focus_yx = None
+				for i in range (0, 12):
+					cmdQueue.put('f-3')
+				self.phase = 'dark'
+				self.phase_wait = 5
+				self.max_flux = 0
+				self.min_hfr = Focuser.hfr_size
+				self.dark_add = self.dark.n
 		elif self.phase == 'dark': # use current image as darkframes
 			if self.dark_add > 0:
 				self.dark_add -= 1
@@ -1255,7 +1276,7 @@ class Focuser:
 				self.search_steps = 0
 				self.phase = 'search'
 		elif self.phase == 'search': # step far, record max flux
-			flux, hfr, yx = self.get_max_flux()
+			flux, hfr, yx = self.get_max_flux(self.stack_im, self.stack.get_xy(), self.stddev)
 			if flux < self.max_flux * 0.7 or hfr > self.min_hfr * 2 or self.search_steps > 120:
 				self.phase = 'prep_record_v'
 				cmdQueue.put('f-1')
@@ -1428,6 +1449,8 @@ class Runner(threading.Thread):
 					elif mode == 'focuser':
 						mode = 'navigator'
 				elif cmd == 'focus' and mode != 'zoom_focuser' and self.focuser is not None:
+					if mode == 'navigator':
+						self.focuser.set_xy_from_stack(self.navigator.stack)
 					mode = 'focuser'
 				elif cmd == 'capture' or cmd == 'test-capture':
 					if mode == 'zoom_focuser':
