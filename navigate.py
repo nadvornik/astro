@@ -1457,6 +1457,7 @@ class Runner(threading.Thread):
 						self.camera.cmd('z0')
 						mode = 'navigator'
 					self.camera.cmd(cmd)
+					break
 				else:
 					self.camera.cmd(cmd)
 					
