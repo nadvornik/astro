@@ -87,8 +87,8 @@ class Camera_gphoto:
 		time.sleep(sec)
 		self.set_config_value('eosremoterelease', 'Release Full')
 		while True:
-			print >> sys.stderr, "wait for event"
 			e, file_path =  gp.check_result(gp.gp_camera_wait_for_event(self.camera, 1000,self.context))
+			print >> sys.stderr, "wait for event", e
 			if e == gp.GP_EVENT_FILE_ADDED:
 				print >> sys.stderr, "filepath:", file_path.folder, file_path.name
 				filename, file_extension = os.path.splitext(file_path.name)
@@ -114,12 +114,15 @@ class Camera_gphoto:
 						continue
 				raise
 
+		#stop review on display
+		self.set_config_value('eosremoterelease', 'Press Half')
+		self.set_config_value('eosremoterelease', 'Release Half')
 	
 		time.sleep(.2)
 		self.set_config_choice('output', 1)
 		time.sleep(.2)
 		self.set_config_choice('output', 0)
-		time.sleep(12)
+		time.sleep(3)
 		
 	
 	
@@ -167,79 +170,88 @@ class Camera_gphoto:
 		time.sleep(3)
 	
 	def cmd(self, cmd, x = None, y = None):
-		if cmd == "f-3":
-			self.set_config_choice('manualfocusdrive', 2)
-		if cmd == "f-2":
-			self.set_config_choice('manualfocusdrive', 1)
-		if cmd == "f-1":
-			self.set_config_choice('manualfocusdrive', 0)
-		if cmd == "f+1":
-			self.set_config_choice('manualfocusdrive', 4)
-		if cmd == "f+2":
-			self.set_config_choice('manualfocusdrive', 5)
-		if cmd == "f+3":
-			self.set_config_choice('manualfocusdrive', 6)
-		if cmd == "z1":
-
-			zoom = 5
-						
-			self.x = x * zoom - self.zoom_shape[1] / 2
-			self.y = y * zoom - self.zoom_shape[0] / 2
-			self.set_config_value('eoszoomposition', "%d,%d" % (self.x, self.y))
-			self.set_config_value('eoszoom', '5')
-			time.sleep(.2)
-			self.set_config_choice('output', 1)
-			time.sleep(.2)
-			self.set_config_choice('output', 0)
-			time.sleep(12)
-			self.capture()
-
-		if cmd == "z0":
-			zoom = 1
-			self.set_config_value('eoszoom', '1')
-			time.sleep(.2)
-			self.set_config_choice('output', 1)
-			time.sleep(.2)
-			self.set_config_choice('output', 0)
-			time.sleep(12)
-			self.capture()
-	
-		if cmd == 'left':
-			self.x = max(100, self.x - 100)
-			self.set_config_value('eoszoomposition', "%d,%d" % (self.x, self.y))
-		if cmd == 'right':
-			self.x = self.x + 100
-			self.set_config_value('eoszoomposition', "%d,%d" % (self.x, self.y))
-		if cmd == 'up':
-			self.y = max(100, self.y - 100)
-			self.set_config_value('eoszoomposition', "%d,%d" % (self.x, self.y))
-		if cmd == 'down':
-			self.y = self.y + 100
-			self.set_config_value('eoszoomposition', "%d,%d" % (self.x, self.y))
-	
-		if cmd.startswith('iso-'):
-			self.iso = cmd[len('iso-'):]
-
-		if cmd.startswith('test-iso-'):
-			self.test_iso = cmd[len('test-iso-'):]
-
-		if cmd.startswith('exp-sec-'):
-			self.exp_sec = int(cmd[len('exp-sec-'):])
-
-		if cmd.startswith('test-exp-sec-'):
-			self.test_exp_sec = int(cmd[len('test-exp-sec-'):])
+		try:
+			if cmd == "f-3":
+				self.set_config_choice('manualfocusdrive', 2)
+			if cmd == "f-2":
+				self.set_config_choice('manualfocusdrive', 1)
+			if cmd == "f-1":
+				self.set_config_choice('manualfocusdrive', 0)
+			if cmd == "f+1":
+				self.set_config_choice('manualfocusdrive', 4)
+			if cmd == "f+2":
+				self.set_config_choice('manualfocusdrive', 5)
+			if cmd == "f+3":
+				self.set_config_choice('manualfocusdrive', 6)
+			if cmd == "z1":
+        
+				zoom = 5
+							
+				self.x = x * zoom - self.zoom_shape[1] / 2
+				self.y = y * zoom - self.zoom_shape[0] / 2
+				self.set_config_value('eoszoomposition', "%d,%d" % (self.x, self.y))
+				self.set_config_value('eoszoom', '5')
+				time.sleep(.2)
+				self.set_config_choice('output', 1)
+				time.sleep(.2)
+				self.set_config_choice('output', 0)
+				time.sleep(12)
+				self.capture()
+        
+			if cmd == "z0":
+				zoom = 1
+				self.set_config_value('eoszoom', '1')
+				time.sleep(.2)
+				self.set_config_choice('output', 1)
+				time.sleep(.2)
+				self.set_config_choice('output', 0)
+				time.sleep(12)
+				self.capture()
 		
-		if cmd.startswith('f-number-'):
-			self.set_config_value('aperture', cmd[len('f-number-'):])
+			if cmd == 'left':
+				self.x = max(100, self.x - 100)
+				self.set_config_value('eoszoomposition', "%d,%d" % (self.x, self.y))
+			if cmd == 'right':
+				self.x = self.x + 100
+				self.set_config_value('eoszoomposition', "%d,%d" % (self.x, self.y))
+			if cmd == 'up':
+				self.y = max(100, self.y - 100)
+				self.set_config_value('eoszoomposition', "%d,%d" % (self.x, self.y))
+			if cmd == 'down':
+				self.y = self.y + 100
+				self.set_config_value('eoszoomposition', "%d,%d" % (self.x, self.y))
+		
+			if cmd.startswith('iso-'):
+				self.iso = cmd[len('iso-'):]
+        
+			if cmd.startswith('test-iso-'):
+				self.test_iso = cmd[len('test-iso-'):]
+        
+			if cmd.startswith('exp-sec-'):
+				self.exp_sec = int(cmd[len('exp-sec-'):])
+        
+			if cmd.startswith('test-exp-sec-'):
+				self.test_exp_sec = int(cmd[len('test-exp-sec-'):])
+			
+			if cmd.startswith('f-number-'):
+				self.set_config_value('aperture', cmd[len('f-number-'):])
+        
+			if cmd == 'test-capture':
+				self.capture_bulb(self.test_exp_sec, self.test_iso)
+			
+			if cmd == 'capture':
+				self.capture_bulb(self.exp_sec, self.iso, card=True)
+				cmdQueue.put('capture-finished')
+			
+		except gp.GPhoto2Error as ex:
+			print "Unexpected error:", sys.exc_info()
+			print "code:", ex.code
+			stacktraces()
+			time.sleep(1)
+			if ex.code == -7 or ex.code == -1:
+				gp.gp_camera_exit(self.camera, self.context)
+				self.prepare()
 
-		if cmd == 'test-capture':
-			self.capture_bulb(self.test_exp_sec, self.test_iso)
-		
-		if cmd == 'capture':
-			self.capture_bulb(self.exp_sec, self.iso, card=True)
-			cmdQueue.put('capture-finished')
-		
-	
 	def capture(self):
 		while True:
 			try:
