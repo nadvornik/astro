@@ -878,7 +878,7 @@ class Guider:
 				if (dist > 20):
 					self.dark.add(im)
 			
-				self.resp0.append((t - self.t0, dist))
+				self.resp0.append((t - self.t0, dist, 0))
 			
 				if (dist > self.dist):
 					self.dist = dist
@@ -934,7 +934,7 @@ class Guider:
 				self.off, weights = avg_pt(pt0, pt)
 				err = complex(*self.off) / self.ref_off
 				
-				self.resp0.append((t - self.t0, err.real))
+				self.resp0.append((t - self.t0, err.real, err.imag))
 			
 				status += " err:%.1f %.1f t_delay1:%.1f" % (err.real, err.imag, self.t_delay1)
 
@@ -978,7 +978,7 @@ class Guider:
 			if len(match) > 0:
 				self.off, weights = avg_pt(pt0, pt)
 				err = complex(*self.off) / self.ref_off
-				self.resp0.append((t - self.t0, err.real))
+				self.resp0.append((t - self.t0, err.real, err.imag))
 
 				err_corr = err.real + self.go.recent_avg(self.t_delay) * self.pixpersec
 				
