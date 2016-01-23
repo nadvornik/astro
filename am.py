@@ -78,7 +78,7 @@ class Solver(threading.Thread):
 		for conf in conf_list:
 			cmd_s1 = cmd_s + [ '--config', conf + '.cfg', '--out', conf ]
 			print cmd_s1
-			cmd = subprocess.Popen(cmd_s1, preexec_fn=os.setpgrp)
+			cmd = subprocess.Popen(cmd_s1, preexec_fn=os.setpgrp, close_fds=True)
 			self.cmd.append(cmd)
 		
 		solved = None
