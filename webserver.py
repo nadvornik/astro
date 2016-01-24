@@ -18,44 +18,43 @@ class MjpegBuf:
 		self.condition = threading.Condition()
 		self.buf = None
 		self.encoded = True
+		self.seq = -1
 
 	def update(self, pil_image):
 		with self.condition:
 			self.buf = pil_image
 			self.encoded = False
 			self.condition.notify_all()
+			self.seq += 1
 
 	def update_jpg(self, jpg):
 		with self.condition:
 			self.buf = jpg.getvalue()
 			self.encoded = True
 			self.condition.notify_all()
+			self.seq += 1
 
-	def serve(self, handler):
+	def serve(self, handler, seq):
 		with self.condition:
-			self.condition.release()
-			i = 0
-			while True:
-				handler.wfile.write("--jpegBoundary\r\n")
+			while self.buf is None or seq > self.seq:
+				self.condition.wait()
+			if not self.encoded:
+				tmpFile = StringIO.StringIO()
+				self.buf.save(tmpFile,'JPEG')
+				self.buf = tmpFile.getvalue()
+				self.encoded = True
 				
-				self.condition.acquire()
-				if self.buf is None or i > 0:
-					self.condition.wait()
-				if not self.encoded:
-					tmpFile = StringIO.StringIO()
-					self.buf.save(tmpFile,'JPEG')
-					self.buf = tmpFile.getvalue()
-					self.encoded = True
+			buf = self.buf
+			seq = self.seq
 				
-				buf = self.buf
-				
-				self.condition.release()
-				l = len(buf)
-				handler.send_header('Content-type','image/jpeg')
-				handler.send_header('Content-length',str(l))
-				handler.end_headers()
-				handler.wfile.write(buf)
-				i +=  1
+		l = len(buf)
+		handler.send_header('Content-type','image/jpeg')
+		handler.send_header('Content-length',str(l))
+		handler.send_header('X-seq',str(seq))
+		handler.end_headers()
+		handler.wfile.write(buf)
+		handler.wfile.flush()
+
 
 class MjpegList:
 	def __init__(self):
@@ -81,7 +80,13 @@ class MjpegList:
 class Handler(BaseHTTPRequestHandler):
     
 	def do_GET(self):
-		base = os.path.basename(self.path)
+		s_path = self.path.split('?')
+		path = self.path
+		args = ''
+		if len(s_path) == 2:
+			path, args = s_path
+		
+		base = os.path.basename(path)
 		name, ext = os.path.splitext(base)
 		print name, ext
 		if self.path == '/':
@@ -89,19 +94,23 @@ class Handler(BaseHTTPRequestHandler):
 			self.send_header('Location', 'index.html')
 			self.end_headers()
 			return
-		elif ext == '.mjpg':
-			print name
+		elif ext == '.jpg':
+			print name, ext, args
+			
+			s_args = args.split('=')
+			if len(s_args) == 2 and s_args[0] == 'seq':
+				seq = int(s_args[1])
+			else:
+				seq = 0
+			
 			mjpeg = mjpeglist.get(name)
 			if mjpeg is None:
 				self.send_response(404)
 				self.end_headers()
 				return
 			
-			self.wfile._sock.settimeout(30)
 			self.send_response(200)
-			self.send_header('Content-type','multipart/x-mixed-replace; boundary=--jpegBoundary')
-			self.end_headers()
-			mjpeg.serve(self)
+			mjpeg.serve(self, seq)
 			return
 		elif base == 'log.html':
 			self.send_response(200)
