@@ -83,7 +83,107 @@
     </div>
     <div class="viewportbox">
         <div class='buttons'>
+            <select class='ajax' >
+            <option>Zoom</option>
+            <option id='disp-normal'>disp-normal</option>
+            <option id='disp-zoom-2'>disp-zoom-2</option>
+            <option id='disp-zoom-3'>disp-zoom-3</option>
+            <option id='disp-zoom-4'>disp-zoom-4</option>
+            <option id='disp-zoom-8'>disp-zoom-8</option>
+            <option id='disp-zoom-16'>disp-zoom-16</option>
+            <option id='disp-zoom-deg50'>disp-zoom-deg50</option>
+            <option id='disp-zoom-deg100'>disp-zoom-deg100</option>
+            <option id='disp-zoom-deg180'>disp-zoom-deg180</option>
+            <option id='disp-match'>disp-match</option>
+            <option id='disp-orig'>disp-orig</option>
+            <option id='disp-df-cor'>disp-df-cor</option>
+            </select>
+            <button class='ajax' id='navigator'>navigator</button>
+            <button class='ajax' id='guider'>guider</button>
+            <button class="toggle" id='navigate' title="Navigate">Navigate</button>
+            <div class='overlay_buttons'>
+                <div class='toggle_buttons' id='navigate_buttons'>
+                    <button class='ajax' id='solver-reset'>solver-reset</button>
+                    <button class='ajax' id='dark'>dark</button>
+                    <button class='ajax' id='polar-reset'>polar-reset</button>
+                    <button class='ajax' id='polar-align'>polar-align</button>
+                    <button class='reflink' id='guide.html'>reload</button>
+                </div>
+            </div>
+        </div>
+        <div class="imgbox">
+            <img class='imagecanvas' src="capture_v4l.jpg"/>
+        </div>
+    </div>
+    <div class="viewportbox">
+        <div class="imgbox">
+            <img class='imagecanvas' src="capture_v4l_polar.jpg"/>
+        </div>
+    </div>
+    <div class="viewportbox">
+        <div class='buttons'>
+            <select class='ajax' >
+            <option>f-number</option>
+            <option id='disp-normal'>f-number-1.4</option>
+            <option id='disp-normal'>f-number-1.8</option>
+            <option id='disp-normal'>f-number-2.8</option>
+            <option id='disp-normal'>f-number-3.5</option>
+            <option id='disp-normal'>f-number-4.5</option>
+            <option id='disp-normal'>f-number-5.6</option>
+            <option id='disp-normal'>f-number-8</option>
+            <option id='disp-normal'>f-number-11</option>
+            </select>
+            <select class='ajax' >
+            <option>exp-sec</option>
+            <option id='disp-normal'>exp-sec-1</option>
+            <option id='disp-normal'>exp-sec-2</option>
+            <option id='disp-normal'>exp-sec-4</option>
+            <option id='disp-normal'>exp-sec-8</option>
+            <option id='disp-normal'>exp-sec-15</option>
+            <option id='disp-normal'>exp-sec-30</option>
+            <option id='disp-normal'>exp-sec-60</option>
+            <option id='disp-normal'>exp-sec-90</option>
+            <option id='disp-normal'>exp-sec-120</option>
+            <option id='disp-normal'>exp-sec-180</option>
+            <option id='disp-normal'>exp-sec-300</option>
+            <option id='disp-normal'>exp-sec-600</option>
+            </select>
+            <select class='ajax' >
+            <option>ISO</option>
+            <option id='disp-normal'>iso-100</option>
+            <option id='disp-normal'>iso-200</option>
+            <option id='disp-normal'>iso-400</option>
+            <option id='disp-normal'>iso-800</option>
+            <option id='disp-normal'>iso-1600</option>
+            <option id='disp-normal'>iso-3200</option>
+            </select>
+            <br/>
             <button class='ajax' id='test-capture'>test-capture</button>
+            <select class='ajax' >
+            <option>test-exp-sec</option>
+            <option id='disp-normal'>test-exp-sec-1</option>
+            <option id='disp-normal'>test-exp-sec-2</option>
+            <option id='disp-normal'>test-exp-sec-4</option>
+            <option id='disp-normal'>test-exp-sec-8</option>
+            <option id='disp-normal'>test-exp-sec-15</option>
+            <option id='disp-normal'>test-exp-sec-30</option>
+            <option id='disp-normal'>test-exp-sec-60</option>
+            <option id='disp-normal'>test-exp-sec-90</option>
+            <option id='disp-normal'>test-exp-sec-120</option>
+            <option id='disp-normal'>test-exp-sec-180</option>
+            <option id='disp-normal'>test-exp-sec-300</option>
+            <option id='disp-normal'>test-exp-sec-600</option>
+            </select>
+            <select class='ajax' >
+            <option>test-ISO</option>
+            <option id='disp-normal'>test-iso-100</option>
+            <option id='disp-normal'>test-iso-200</option>
+            <option id='disp-normal'>test-iso-400</option>
+            <option id='disp-normal'>test-iso-800</option>
+            <option id='disp-normal'>test-iso-1600</option>
+            <option id='disp-normal'>test-iso-3200</option>
+            </select>
+            <br/>
             <button class='ajax' id='capture'>capture</button>
         </div>
         <div class="imgbox">
