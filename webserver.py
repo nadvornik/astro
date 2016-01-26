@@ -36,7 +36,7 @@ class MjpegBuf:
 
 	def serve(self, handler, seq):
 		with self.condition:
-			while self.buf is None or seq > self.seq:
+			while self.buf is None or seq == self.seq + 1:
 				self.condition.wait()
 			if not self.encoded:
 				tmpFile = StringIO.StringIO()

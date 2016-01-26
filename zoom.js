@@ -7,27 +7,48 @@ function isElementInViewport(el) {
         rect.top < (window.innerHeight || document. documentElement.clientHeight) /*or $(window).height() */;
 }
 
-  function reloader(canvas, url, seq) {
+
+  function reloader(image, url, seq) {
+    console.log("reloader " + url + seq);
     
-    $(canvas).addClass("reloading");
-    var image = $(canvas).siblings('img.imagecanvas')[0];
+    $(image).unbind("load");
+    $(image).unbind("error");
+    $(image).addClass("reloading");
 
+    var canvas = $(image).siblings('canvas.imagecanvas')[0];
+  
+    if (!canvas && image.naturalWidth && image.naturalHeight) {
+      canvas = $("<canvas class='imagecanvas'/>").insertAfter(image)[0];
+      canvas.width = image.naturalWidth;
+      canvas.height = image.naturalHeight;
+      canvas.getContext("2d").drawImage(image, 0, 0);
 
-    $(window).on('DOMContentLoaded load resize scroll', function() {
-      if (isElementInViewport(canvas) && !$(canvas).hasClass("reloading")) {
-        reloader(canvas, url, seq);
-      }
-    }); 
+      image.style.display = 'none';
+        
+      register_swipe(canvas);
+
+      $(window).on('DOMContentLoaded load resize scroll', function() {
+        if (isElementInViewport(canvas) && !$(image).hasClass("reloading")) {
+          reloader(image, url, seq);
+        }
+      }); 
+    }
+  
+    if (canvas && image.naturalWidth && image.naturalHeight) canvas.getContext("2d").drawImage(image, 0, 0);
+
+    if (canvas && !isElementInViewport(canvas)) {
+      $(image).removeClass("reloading");
+      return;
+    }
 
     var xhr = new XMLHttpRequest();
     xhr.open('GET', url + "?seq=" + seq);
 //    xhr.responseType = 'arraybuffer';
     xhr.responseType = 'blob';
-    xhr.timeout = 5000;
+    xhr.timeout = 4000;
     xhr.onload = function() {
       if (this.status == 200) {
-        var newseq = this.getResponseHeader('X-seq');
-        seq = Math.max(seq, Number(newseq))
+        seq = Number(this.getResponseHeader('X-seq'));
 
         //var dataView = new DataView(this.response);
         //var blob = new Blob( [ dataView ], { type: "image/jpeg" } );
@@ -36,25 +57,29 @@ function isElementInViewport(el) {
         
         image.src = imageUrl;
         
-        image.onload = function() {
-            canvas.getContext("2d").drawImage(image, 0, 0);
-            if (isElementInViewport(canvas)) {
-              reloader(canvas, url, seq + 1);
-            }
-            else {
-              $(canvas).removeClass("reloading");
-            }
-        };
-
+        $(image).bind("load", function() {
+            reloader(image, url, seq + 1);
+        });
+        $(image).bind("error", function() {
+            reloader(image, url, seq);
+        });
 
       } else {
-        $(canvas).removeClass("reloading");
-//      reloader(canvas, url, seq)
+        console.log("failed " + url);
+        setTimeout(function(){
+          reloader(image, url, seq);
+        }, 4000);
       }
     };
     xhr.ontimeout = function() { 
-      console.log("reload");
-      reloader(canvas, url, seq);
+      console.log("timeout " + url);
+      reloader(image, url, seq);
+    };
+    xhr.onerror = function() { 
+      console.log("error " + url);
+      setTimeout(function(){
+        reloader(image, url, seq);
+      }, 4000);
     };
     xhr.send();
   };
@@ -253,24 +278,15 @@ function isElementInViewport(el) {
     });
     
     
-    $("img.imagecanvas").one("load", function() {
+    $("img.imagecanvas").bind("load", function() {
         var image = this;
         
-        var canvas = document.createElement("canvas");
-        
-        var canvas = $("<canvas class='imagecanvas'/>").insertAfter(image)[0];
-	canvas.width = image.naturalWidth;
-	canvas.height = image.naturalHeight;
-	canvas.getContext("2d").drawImage(image, 0, 0);
-        
-        image.style.display = 'none';
-        
-        register_swipe(canvas);
-        
         var url = image.src;
-        reloader(canvas, url, 1)
+        reloader(image, url, 1)
+    }).bind("error", function() {
+        $(this).load();
     }).each(function() {
-      if(this.complete) $(this).load();
+        if(this.complete) $(this).load();
     });
      
 
