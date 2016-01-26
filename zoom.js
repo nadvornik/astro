@@ -1,8 +1,23 @@
- 
+function isElementInViewport(el) {
+    var rect = el.getBoundingClientRect();
+
+    return rect.bottom > 0 &&
+        rect.right > 0 &&
+        rect.left < (window.innerWidth || document. documentElement.clientWidth) /*or $(window).width() */ &&
+        rect.top < (window.innerHeight || document. documentElement.clientHeight) /*or $(window).height() */;
+}
 
   function reloader(canvas, url, seq) {
-    //alert("reloader " + url + " " + seq);
+    
+    $(canvas).addClass("reloading");
     var image = $(canvas).siblings('img.imagecanvas')[0];
+
+
+    $(window).on('DOMContentLoaded load resize scroll', function() {
+      if (isElementInViewport(canvas) && !$(canvas).hasClass("reloading")) {
+        reloader(canvas, url, seq);
+      }
+    }); 
 
     var xhr = new XMLHttpRequest();
     xhr.open('GET', url + "?seq=" + seq);
@@ -23,12 +38,18 @@
         
         image.onload = function() {
             canvas.getContext("2d").drawImage(image, 0, 0);
-            reloader(canvas, url, seq + 1)
+            if (isElementInViewport(canvas)) {
+              reloader(canvas, url, seq + 1);
+            }
+            else {
+              $(canvas).removeClass("reloading");
+            }
         };
 
 
       } else {
-//          reloader(canvas, url, seq)
+        $(canvas).removeClass("reloading");
+//      reloader(canvas, url, seq)
       }
     };
     xhr.ontimeout = function() { 
