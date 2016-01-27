@@ -36,6 +36,28 @@ from gui import ui
 from cmd import cmdQueue
 
 from stacktraces import stacktraces
+import json
+
+class Status:
+	def __init__(self, conf_file):
+		try:
+			with open('data.json') as data_file:    
+    				self.status = json.load(conf_file)
+    			self.status["conf_file"] = conf_file
+		except:
+			self.status = {"conf_file" : conf_file}
+	def save(self):
+		with open(self.status["conf_file"], "w") as outfile:
+			json.dump(self.status, outfile, indent=4)
+	
+	def path(self, p):
+		def get_or_create(d, k):
+			if k not in d:
+				d[k] = {}
+			return d[k]
+			
+		return reduce(get_or_create, p, self.status)
+
 
 def normalize(img):
 	dst = np.empty_like(img)
@@ -579,27 +601,30 @@ def plot_bg(*args, **kwargs):
 	threading.Thread(target=_plot_bg, args = args, kwargs = kwargs).start()
 
 class Navigator:
-	def __init__(self, dark, ui_capture):
+	def __init__(self, status, dark, ui_capture):
+		self.status = status
 		self.dark = dark
 		self.stack = Stack()
 		self.solver = None
 		self.solver_off = np.array([0.0, 0.0])
-		self.dispmode = 'disp-normal'
-		self.field_deg = None
+		self.status.setdefault("dispmode", 'disp-normal')
+		self.status.setdefault('field_deg', None)
 		self.wcs = None
 		self.plotter = None
 		self.plotter_off = np.array([0.0, 0.0])
 		self.ui_capture = ui_capture
 		self.polar = Polar()
-		self.polar_mode = 'polar-solve'
+		self.status['polar_mode'] = 'polar-solve'
 		self.polar_solved = False
 		self.index_sources = []
-		self.i_solved = 0
-		self.i_solver = 0
+		self.status['i_solved'] = 0
+		self.status['i_solver'] = 0
+		self.status['t_solved'] = 0
+		self.status['t_solver'] = 0
 		self.prev_t = 0
-		self.ra, self.dec = self.polar.zenith()
-		self.max_radius = 100
-		self.radius = self.max_radius
+		self.status['ra'], self.status['dec'] = self.polar.zenith()
+		self.status['max_radius'] = 100
+		self.status['radius'] = self.status['max_radius']
 
 	def proc_frame(self,im, i, t = None):
 		if im.ndim > 2:
@@ -621,7 +646,7 @@ class Navigator:
 		if i < 6:
 			self.dark.add(im)
 
-		M = self.stack.add(im_sub, show_match=(self.dispmode == 'disp-match'))
+		M = self.stack.add(im_sub, show_match=(self.status['dispmode'] == 'disp-match'))
 		filtered = self.stack.get()
 		
 		self.solver_off = np.insert(self.solver_off, 2, 1.0).dot(M).A1
@@ -635,10 +660,10 @@ class Navigator:
 		if self.solver is not None and not self.solver.is_alive():
 			self.solver.join()
 			if self.solver.solved:
-				self.ra = self.solver.ra
-				self.dec = self.solver.dec
-				self.field_deg = self.solver.field_deg
-				self.radius = self.field_deg
+				self.status['ra'] = self.solver.ra
+				self.status['dec'] = self.solver.dec
+				self.status['field_deg'] = self.solver.field_deg
+				self.status['radius'] = self.status['field_deg']
 				self.wcs = self.solver.wcs
 			
 				self.dark.add_masked(self.solved_im, self.solver.ind_sources)
@@ -646,23 +671,24 @@ class Navigator:
 				self.index_sources = self.solver.ind_radec
 				self.plotter = Plotter(self.wcs)
 				self.plotter_off = self.solver_off
-				self.i_solved = self.i_solver
+				self.status['i_solved'] = self.status['i_solver']
+				self.status['t_solved'] = self.status['t_solver']
 				#print "self.solver.ind_radec", self.solver.ind_radec
 				#self.solver.wcs.write_to("log_%d.wcs" % self.ii)
 				#subprocess.call(['touch', '-r', "testimg17_" + str(i) + ".tif", "log_%d.wcs" % self.ii])
-				if self.polar_mode == 'polar-solve':
-					self.polar.add_tan(self.wcs, self.solver_time)
+				if self.status['polar_mode'] == 'polar-solve':
+					self.polar.add_tan(self.wcs, self.status['t_solver'])
 					if self.polar.compute()[0]:
 						self.polar_solved = True
-				elif self.polar_mode == 'polar-adjust':
+				elif self.status['polar_mode'] == 'polar-adjust':
 					self.polar.phase2_set_tan(self.wcs)
 					
 			else:
-				if self.radius > 0 and self.radius < 70:
-					self.radius = self.radius * 2 + 15
+				if self.status['radius'] > 0 and self.status['radius'] < 70:
+					self.status['radius'] = self.status['radius'] * 2 + 15
 				else:
-					self.ra, self.dec = self.polar.zenith()
-					self.radius = self.max_radius
+					self.status['ra'], self.status['dec'] = self.polar.zenith()
+					self.status['radius'] = self.status['max_radius']
 					self.wcs = None
 			self.solver = None
 			self.solved_im = None
@@ -671,36 +697,36 @@ class Navigator:
 			xy = self.stack.get_xy()
 			print "len", len(xy)
 			if len(xy) > 8:
-				self.solver_time = t
-				self.i_solver = i
+				self.status['i_solver'] = i
+				self.status['t_solver'] = t
 				self.solved_im = im
-				self.solver = Solver(sources_list = xy, field_w = im.shape[1], field_h = im.shape[0], ra = self.ra, dec = self.dec, field_deg = self.field_deg, radius = self.radius)
-				#self.solver = Solver(sources_img = filtered, field_w = im.shape[1], field_h = im.shape[0], ra = self.ra, dec = self.dec, field_deg = self.field_deg)
+				self.solver = Solver(sources_list = xy, field_w = im.shape[1], field_h = im.shape[0], ra = self.status['ra'], dec = self.status['dec'], field_deg = self.status['field_deg'], radius = self.status['radius'])
+				#self.solver = Solver(sources_img = filtered, field_w = im.shape[1], field_h = im.shape[0], ra = self.status['ra'], dec = self.status['dec'], field_deg = self.status['field_deg'])
 				self.solver.start()
 				self.solver_off = np.array([0.0, 0.0])
 
-		if self.polar_mode == 'polar-solve':
+		if self.status['polar_mode'] == 'polar-solve':
 			polar_plot = self.polar.plot2()
-			p_status = "#%d %s solv#%d r:%.1f fps:%.1f" % (i, self.polar_mode, i - self.i_solver, self.radius, fps)
+			p_status = "#%d %s solv#%d r:%.1f fps:%.1f" % (i, self.status['polar_mode'], i - self.status['i_solver'], self.status['radius'], fps)
 			cv2.putText(polar_plot, p_status, (10, polar_plot.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255,255,0), 2)
 			ui.imshow(self.ui_capture + '_polar', polar_plot)
-		elif self.polar_mode == 'polar-adjust' and self.wcs is not None and self.polar_solved:
+		elif self.status['polar_mode'] == 'polar-adjust' and self.wcs is not None and self.polar_solved:
 			self.polar.phase2_set_tan(self.wcs, off = self.plotter_off)
 			polar_plot = self.polar.plot2()
-			p_status = "#%d %s solv#%d r:%.1f fps:%.1f" % (i, self.polar_mode, i - self.i_solved, self.radius, fps)
+			p_status = "#%d %s solv#%d r:%.1f fps:%.1f" % (i, self.status['polar_mode'], i - self.status['i_solved'], self.status['radius'], fps)
 			cv2.putText(polar_plot, p_status, (10, polar_plot.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2)
 			ui.imshow(self.ui_capture + '_polar', polar_plot)
 		
-		status = "#%d %s %s  solv#%d r:%.1f fps:%.1f" % (i, self.dispmode, self.polar_mode, i - self.i_solver, self.radius, fps)
-		if (self.dispmode == 'disp-orig'):
+		status = "#%d %s %s  solv#%d r:%.1f fps:%.1f" % (i, self.status['dispmode'], self.status['polar_mode'], i - self.status['i_solver'], self.status['radius'], fps)
+		if (self.status['dispmode'] == 'disp-orig'):
 			disp = normalize(im)
 			cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
 			ui.imshow(self.ui_capture, disp)
-		elif (self.dispmode == 'disp-df-cor'):
+		elif (self.status['dispmode'] == 'disp-df-cor'):
 			disp = normalize(im_sub)
 			cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
 			ui.imshow(self.ui_capture, disp)
-		elif (self.dispmode == 'disp-normal'):
+		elif (self.status['dispmode'] == 'disp-normal'):
 			disp = normalize(filtered)
 			for p in self.stack.get_xy():
 				cv2.circle(disp, (int(p[1]), int(p[0])), 13, (255), 1)
@@ -708,7 +734,7 @@ class Navigator:
 		
 				extra_lines = []
 				
-				if self.polar_solved and self.polar_mode == 'polar-adjust':
+				if self.polar_solved and self.status['polar_mode'] == 'polar-adjust':
 					transf_index = self.polar.transform_ra_dec_list(self.index_sources)
 					extra_lines = [ (si[0], si[1], ti[0], ti[1]) for si, ti in zip(self.index_sources, transf_index) ]
 					
@@ -716,16 +742,16 @@ class Navigator:
 			else:
 				cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
 				ui.imshow(self.ui_capture, disp)
-		elif (self.dispmode.startswith('disp-zoom-')):
+		elif (self.status['dispmode'].startswith('disp-zoom-')):
 			if self.plotter is not None:
-				zoom = self.dispmode[len('disp-zoom-'):]
+				zoom = self.status['dispmode'][len('disp-zoom-'):]
 				plot_bg(self.ui_capture, status, self.plotter.plot, normalize(filtered), self.plotter_off, scale=zoom)
 			else:
 				disp = normalize(filtered)
 				cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
 				ui.imshow(self.ui_capture, disp)
 				
-		elif (self.dispmode == 'disp-match'):
+		elif (self.status['dispmode'] == 'disp-match'):
 			disp = self.stack.match
 			cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
 			ui.imshow(self.ui_capture, disp)
@@ -737,27 +763,27 @@ class Navigator:
 	def cmd(self, cmd):
 		if cmd == 'solver-reset' and self.solver is not None:
 			self.solver.terminate(wait=True)
-			self.field_deg = None
+			self.status['field_deg'] = None
 			self.solver = None
 			self.plotter = None
-			self.ra, self.dec = self.polar.zenith()
-			self.radius = self.max_radius
+			self.status['ra'], self.status['dec'] = self.polar.zenith()
+			self.status['radius'] = self.status['max_radius']
 
 		if cmd == 'dark':
 			self.dark.add(self.im)
 		
 		if cmd.startswith('disp-'):
-			self.dispmode = cmd
+			self.status['dispmode'] = cmd
 		if cmd == 'save':
 			cv2.imwrite(self.ui_capture + str(int(time.time())) + ".tif", self.stack.get())
 
 		if cmd == 'polar-reset':
 			self.polar = Polar()
-			self.polar_mode = 'polar-solve'
+			self.status['polar_mode'] = 'polar-solve'
 			self.polar_solved = False
 
 		if cmd == 'polar-align' and self.polar_solved:
-			self.polar_mode = 'polar-adjust'
+			self.status['polar_mode'] = 'polar-adjust'
 
 
 def fit_line(xylist):
@@ -767,7 +793,8 @@ def fit_line(xylist):
 	return np.polyfit(x, y, 1)
 
 class Guider:
-	def __init__(self, go, dark, ui_capture):
+	def __init__(self, status, go, dark, ui_capture):
+		self.status = status
 		self.go = go
 		self.dark = dark
 		self.reset()
@@ -778,7 +805,7 @@ class Guider:
 		self.prev_t = 0
 
 	def reset(self):
-		self.mode = 1
+		self.status['mode'] = 'start'
 		self.off = (0.0, 0.0)
 		self.off_t = None
 		self.go.out(0)
@@ -838,18 +865,18 @@ class Guider:
 		except:
 			fps = 0
 		
-		status = "#%d Guider:%d fps:%.1f" % (i, self.mode, fps)
+		status = "#%d Guider:%s fps:%.1f" % (i, self.status['mode'], fps)
 
-		if self.mode==1:
+		if self.status['mode'] == 'start':
 			self.used_cnt = []
 			self.cnt = 0
 			self.dist = 1.0
 			self.go.out(1)
-			self.mode = 2
+			self.status['mode'] = 'move'
 			self.t0 = t
 			self.resp0 = []
 
-		elif self.mode==2:
+		elif self.status['mode'] == 'move':
 				
 			self.cnt += 1
 			
@@ -915,13 +942,13 @@ class Guider:
 					self.pt0 = np.array(self.pt0)[np.where(np.bincount(self.used_cnt) > self.cnt / 3)]
 				
 					self.cnt = 0
-					self.mode = 3
+					self.status['mode'] = 'back'
 				
 					self.go.out(-1, self.dist / self.pixpersec)
 			for p in pt:
 				cv2.circle(disp, (int(p[1]), int(p[0])), 10, (255), 1)
 
-		elif self.mode==3:
+		elif self.status['mode'] == 'back':
 			self.cnt += 1
 			pt1m, pt2m, match = match_triangle(self.pt0, pt, 5, 50, self.off)
 			if len(match) > 0:
@@ -964,10 +991,10 @@ class Guider:
 					if (self.t_delay < 0):
 						self.t_delay = 0
 				
-					self.mode = 4
+					self.status['mode'] = 'track'
 
 
-		elif self.mode==4:
+		elif self.status['mode'] == 'track':
 			pt1m, pt2m, match = match_triangle(self.pt0, pt, 5, 30, self.off)
 			if len(match) > 0:
 				off, weights = avg_pt(pt1m, pt2m)
@@ -1490,7 +1517,7 @@ from PIL import Image;
 
 
 class Camera_test:
-	def __init__(self):
+	def __init__(self, status):
 		self.i = 0
 		self.step = 1
 		self.x = 0
@@ -1509,12 +1536,13 @@ class Camera_test:
 			self.step = 1 - self.step
 	
 	def capture(self):
-		time.sleep(0.9)
+		time.sleep(3)
 		print self.i
 		#pil_image = Image.open("converted/IMG_%04d.jpg" % (146+self.i))
 		#pil_image.thumbnail((1000,1000), Image.ANTIALIAS)
 		#im = np.array(pil_image)
-		im = cv2.imread("testimg16_" + str(self.i % 100 * 3 + int(self.i / 100) * 10) + ".tif")
+		#im = cv2.imread("testimg16_" + str(self.i % 100 * 3 + int(self.i / 100) * 10) + ".tif")
+		im = cv2.imread("testimg2_" + str(self.i) + ".tif")
 		#im = apply_gamma(im, 2.2)
 		if self.x != 0 or self.y != 0:
 			M = np.array([[1.0, 0.0, self.x],
@@ -1527,7 +1555,7 @@ class Camera_test:
 		return im, None
 
 class Camera_test_g:
-	def __init__(self, go):
+	def __init__(self, status, go):
 		self.i = 0
 		self.err = 0.0
 		self.go = go
@@ -1546,75 +1574,92 @@ class Camera_test_g:
 
 
 def run_v4l2():
+	global status
+	status = Status("run_v4l2.conf")
 	ui.namedWindow('capture')
 	ui.namedWindow('capture_polar')
-	cam = Camera("/dev/video0")
+	cam = Camera(status.path(["navigator", "camera"]))
 	cam.prepare(1280, 960)
 	dark = Median(5)
-	nav = Navigator(dark, 'capture')
+	nav = Navigator(status.path(["navigator"]), dark, 'capture')
 
 	runner = Runner(cam, navigator = nav)
 	runner.start()
 	runner.join()
+	status.save()
 
 def run_gphoto():
-	cam = Camera_gphoto()
+	global status
+	status = Status("run_gphoto.conf")
+	cam = Camera_gphoto(status.path(["navigator", "camera"]))
 	cam.prepare()
 	ui.namedWindow('capture')
 	ui.namedWindow('capture_polar')
 	ui.namedWindow('full_res')
 	dark = Median(5)
-	nav = Navigator(dark, 'capture')
+	nav = Navigator(status.path(["navigator"]), dark, 'capture')
 	focuser = Focuser('capture', dark = dark)
 	zoom_focuser = Focuser('capture')
 
 	runner = Runner(cam, navigator = nav, focuser = focuser, zoom_focuser = zoom_focuser)
 	runner.start()
 	runner.join()
+	status.save()
 
 
 def run_v4l2_g():
+	global status
+	status = Status("run_v4l2_g.conf")
 	from guide_out_gpio import GuideOut
 	ui.namedWindow('capture')
 	ui.namedWindow('capture_polar')
-	cam = Camera("/dev/video0")
+	cam = Camera(status.path(["guider", "camera"]))
 	cam.prepare(1280, 960)
 
 	dark = Median(5)
-	nav = Navigator(dark, 'capture')
+	nav = Navigator(status.path(["guider", "navigator"]), dark, 'capture')
 	go = GuideOut()
-	guider = Guider(go, dark, 'capture')
+	guider = Guider(status.path(["guider"]), go, dark, 'capture')
 
 	runner = Runner(cam, navigator = nav, guider = guider)
 	runner.start()
 	runner.join()
+	status.save()
 
 def run_test_g():
+	global status
+	status = Status("run_test_g.conf")
 	ui.namedWindow('capture')
 	ui.namedWindow('capture_polar')
 	dark = Median(5)
-	nav = Navigator(dark, 'capture')
+	nav = Navigator(status.path(["guider", "navigator"]), dark, 'capture')
 	go = GuideOutBase()
-	guider = Guider(go, dark, 'capture')
-	cam = Camera_test_g(go)
+	guider = Guider(status.path(["guider"]), go, dark, 'capture')
+	cam = Camera_test_g(status.path(["guider", "camera"]), go)
 
 	runner = Runner(cam, navigator = nav, guider = guider)
 	runner.start()
 	runner.join()
+	status.save()
 
 def run_test():
+	global status
+	status = Status("run_test.conf")
 	ui.namedWindow('capture')
 	ui.namedWindow('capture_polar')
 	
-	cam = Camera_test()
+	cam = Camera_test(status.path(["navigator", "camera"]))
 	dark = Median(5)
-	nav = Navigator(dark, 'capture')
+	nav = Navigator(status.path(["navigator"]), dark, 'capture')
 
 	runner = Runner(cam, navigator = nav)
 	runner.start()
 	runner.join()
+	status.save()
 
 def run_test_2():
+	global status
+	status = Status("run_test_2.conf")
 	ui.namedWindow('capture')
 	ui.namedWindow('capture_v4l')
 	ui.namedWindow('capture_polar')
@@ -1623,13 +1668,13 @@ def run_test_2():
 	dark1 = Median(5)
 	dark2 = Median(5)
 
-	cam1 = Camera_test()
-	nav1 = Navigator(dark1, 'capture')
+	cam1 = Camera_test(status.path(["navigator", "camera"]))
+	nav1 = Navigator(status.path(["navigator"]), dark1, 'capture')
 
-	nav = Navigator(dark2, 'capture_v4l')
+	nav = Navigator(status.path(["guider", "navigator"]), dark2, 'capture_v4l')
 	go = GuideOutBase()
-	guider = Guider(go, dark2, 'capture_v4l')
-	cam = Camera_test_g(go)
+	guider = Guider(status.path(["guider"]), go, dark2, 'capture_v4l')
+	cam = Camera_test_g(status.path(["guider", "camera"]), go)
 
 	runner = Runner(cam1, navigator = nav1)
 	runner.start()
@@ -1640,23 +1685,26 @@ def run_test_2():
 	
 	runner.join()
 	runner2.join()
+	status.save()
 
 def run_test_2_gphoto():
+	global status
+	status = Status("run_v4l2.conf")
 	
-	cam1 = Camera_gphoto()
+	cam1 = Camera_gphoto(status.path(["navigator", "camera"]))
 	cam1.prepare()
 
 	dark1 = Median(5)
 	dark2 = Median(5)
 	
-	nav1 = Navigator(dark1, 'capture')
+	nav1 = Navigator(status.path(["navigator"]), dark1, 'capture')
 	focuser = Focuser('capture', dark = dark1)
 	zoom_focuser = Focuser('capture')
 
-	nav = Navigator(dark2, 'capture_v4l')
+	nav = Navigator(status.path(["guider", "navigator"]), dark2, 'capture_v4l')
 	go = GuideOutBase()
-	guider = Guider(go, dark2, 'capture_v4l')
-	cam = Camera_test_g(go)
+	guider = Guider(status.path(["guider"]), go, dark2, 'capture_v4l')
+	cam = Camera_test_g(status.path(["guider", "camera"]), go)
 
 	ui.namedWindow('capture')
 	ui.namedWindow('capture_v4l')
@@ -1675,26 +1723,29 @@ def run_test_2_gphoto():
 	
 	runner.join()
 	runner2.join()
+	status.save()
 
 
 def run_2():
+	global status
 	from guide_out_gpio import GuideOut
-	cam = Camera("/dev/video0")
+	status = Status("run_v4l2.conf")
+	cam = Camera(status.path(["guider", "camera"]))
 	cam.prepare(1280, 960)
 	
-	cam1 = Camera_gphoto()
+	cam1 = Camera_gphoto(status.path(["navigator", "camera"]))
 	cam1.prepare()
 
 	dark1 = Median(5)
 	dark2 = Median(5)
 	
-	nav1 = Navigator(dark1, 'capture')
+	nav1 = Navigator(status.path(["navigator"]), dark1, 'capture')
 	focuser = Focuser('capture', dark = dark1)
 	zoom_focuser = Focuser('capture')
 
-	nav = Navigator(dark2, 'capture_v4l')
+	nav = Navigator(status.path(["guider", "navigator"]), dark2, 'capture_v4l')
 	go = GuideOut()
-	guider = Guider(go, dark2, 'capture_v4l')
+	guider = Guider(status.path(["guider"]), go, dark2, 'capture_v4l')
 
 	ui.namedWindow('capture')
 	ui.namedWindow('capture_v4l')
@@ -1713,6 +1764,7 @@ def run_2():
 	
 	runner.join()
 	runner2.join()
+	status.save()
 
 
 

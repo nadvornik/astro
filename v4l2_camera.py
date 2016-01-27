@@ -47,10 +47,11 @@ def sonix_read_asic(fd, addr):
 
 
 class Camera:
-    def __init__(self, dev_name):
+    def __init__(self, status):
+        self.status = status
         self.buffers = []
         self.i = 0
-        self.dev_name = dev_name
+        self.dev_name = self.status.setdefault("device", "/dev/video0")
         self.vd = None
 
     def _prepare(self, width, height, format = V4L2_PIX_FMT_SBGGR16):

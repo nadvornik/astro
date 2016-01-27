@@ -20,11 +20,13 @@ def apply_gamma(img, gamma):
 
 
 class Camera_gphoto:
-	def __init__(self):
-		self.iso = 400
-		self.test_iso = 3200
-		self.exp_sec = 120
-		self.test_exp_sec = 15
+	def __init__(self, status):
+		self.status = status
+		self.status.setdefault('iso', 400)
+		self.status.setdefault('test_iso', 3200)
+		self.status.setdefault('exp_sec', 120)
+		self.status.setdefault('test_exp_sec', 15)
+		self.status.setdefault('f-number', '5.6')
 
 	def get_config_value(self, name):
 		config = gp.check_result(gp.gp_camera_get_config(self.camera, self.context))
@@ -70,18 +72,24 @@ class Camera_gphoto:
 				time.sleep(0.1)
 				continue
 	
-	def capture_bulb(self, sec, iso = None, card = False):
-		if iso is not None:
-			self.set_config_value('iso', str(iso))
-			
-		if card:
+	def capture_bulb(self, sec, test = False):
+		if test:
+			self.set_config_value('iso', str(self.status['test_iso']))
+			try:
+				self.status['test_iso'] = int(self.set_config_value('iso'))
+			except:
+				pass
+			self.set_config_choice('capturetarget', 0) #mem
+			self.set_config_choice('imageformat', 1) #Large Normal JPEG
+		else:
+			self.set_config_value('iso', str(self.status['iso']))
+			try:
+				self.status['iso'] = int(self.set_config_value('iso'))
+			except:
+				pass
 			self.set_config_choice('capturetarget', 1) #card
 			#self.set_config_choice('imageformat', 24) #RAW 
 			self.set_config_choice('imageformat', 7) #RAW + Large Normal JPEG 
-			
-		else:
-			self.set_config_choice('capturetarget', 0) #mem
-			self.set_config_choice('imageformat', 1) #Large Normal JPEG
 		
 		self.set_config_value('eosremoterelease', 'Immediate')
 		time.sleep(sec)
@@ -155,6 +163,13 @@ class Camera_gphoto:
 		cur_time = self.get_config_value('datetime')
 		subprocess.call(['date', '--set', '@' + str(cur_time) ])
 		
+		self.set_config_value('aperture', self.status['f-number'])
+		self.status['f-number'] = self.get_config_value('aperture')
+		self.status['lensname'] = self.get_config_value('lensname')
+		
+		self.set_config_choice('drivemode', 0)
+		self.set_config_value('autoexposuremode', 'Bulb')
+		
 		# required configuration will depend on camera type!
 		self.set_config_choice('capturesizeclass', 2)
 	
@@ -222,25 +237,26 @@ class Camera_gphoto:
 				self.set_config_value('eoszoomposition', "%d,%d" % (self.x, self.y))
 		
 			if cmd.startswith('iso-'):
-				self.iso = cmd[len('iso-'):]
+				self.status['iso'] = cmd[len('iso-'):]
         
 			if cmd.startswith('test-iso-'):
-				self.test_iso = cmd[len('test-iso-'):]
+				self.status['test_iso'] = cmd[len('test-iso-'):]
         
 			if cmd.startswith('exp-sec-'):
-				self.exp_sec = int(cmd[len('exp-sec-'):])
+				self.status['exp_sec'] = int(cmd[len('exp-sec-'):])
         
 			if cmd.startswith('test-exp-sec-'):
-				self.test_exp_sec = int(cmd[len('test-exp-sec-'):])
+				self.status['test_exp_sec'] = int(cmd[len('test-exp-sec-'):])
 			
 			if cmd.startswith('f-number-'):
 				self.set_config_value('aperture', cmd[len('f-number-'):])
+				self.status['f-number'] = self.get_config_value('aperture')
         
 			if cmd == 'test-capture':
-				self.capture_bulb(self.test_exp_sec, self.test_iso)
+				self.capture_bulb(self.status['test_exp_sec'], test=True)
 			
 			if cmd == 'capture':
-				self.capture_bulb(self.exp_sec, self.iso, card=True)
+				self.capture_bulb(self.status['exp_sec'], test=False)
 				cmdQueue.put('capture-finished')
 			
 		except gp.GPhoto2Error as ex:
