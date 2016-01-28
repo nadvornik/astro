@@ -121,6 +121,19 @@ class Handler(BaseHTTPRequestHandler):
 			self.wfile.write(subprocess.check_output(['journalctl', '-u', 'navigate.service', '-n', '300']))
 			self.wfile.write("</bre></body></html>")
 			return
+		elif base == 'status.json':
+			global status
+			if status is not None:
+				self.send_response(200)
+				self.send_header('Content-type','application/json')
+				self.end_headers()
+				self.wfile.write(status.to_json())
+			else:
+				print "no status"
+				self.send_response(404)
+				self.end_headers()
+				return
+			return
 		elif ext == '.html' or ext == '.js' or  ext == '.css':
 			try:
 				f = open(base)
@@ -189,6 +202,10 @@ class ServerThread(threading.Thread):
 		self.server.shutdown()
 		
 mjpeglist = MjpegList()
+status = None
+
+
+
 
 if __name__ == '__main__':
 	server = ServerThread()

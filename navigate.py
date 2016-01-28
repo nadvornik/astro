@@ -46,10 +46,15 @@ class Status:
     			self.status["conf_file"] = conf_file
 		except:
 			self.status = {"conf_file" : conf_file}
+		ui.set_status(self)
+		
 	def save(self):
 		with open(self.status["conf_file"], "w") as outfile:
 			json.dump(self.status, outfile, indent=4)
 	
+	def to_json(self):
+		return json.dumps(self.status)
+
 	def path(self, p):
 		def get_or_create(d, k):
 			if k not in d:
@@ -1584,6 +1589,7 @@ def run_v4l2():
 	status = Status("run_v4l2.conf")
 	ui.namedWindow('capture')
 	ui.namedWindow('capture_polar')
+
 	cam = Camera(status.path(["navigator", "camera"]))
 	cam.prepare(1280, 960)
 	dark = Median(5)
@@ -1602,6 +1608,7 @@ def run_gphoto():
 	ui.namedWindow('capture')
 	ui.namedWindow('capture_polar')
 	ui.namedWindow('full_res')
+
 	dark = Median(5)
 	nav = Navigator(status.path(["navigator"]), dark, 'capture')
 	focuser = Focuser('capture', dark = dark)
@@ -1619,6 +1626,7 @@ def run_v4l2_g():
 	from guide_out_gpio import GuideOut
 	ui.namedWindow('capture')
 	ui.namedWindow('capture_polar')
+
 	cam = Camera(status.path(["guider", "camera"]))
 	cam.prepare(1280, 960)
 
@@ -1637,6 +1645,7 @@ def run_test_g():
 	status = Status("run_test_g.conf")
 	ui.namedWindow('capture')
 	ui.namedWindow('capture_polar')
+
 	dark = Median(5)
 	nav = Navigator(status.path(["guider", "navigator"]), dark, 'capture')
 	go = GuideOutBase()
@@ -1653,7 +1662,7 @@ def run_test():
 	status = Status("run_test.conf")
 	ui.namedWindow('capture')
 	ui.namedWindow('capture_polar')
-	
+
 	cam = Camera_test(status.path(["navigator", "camera"]))
 	dark = Median(5)
 	nav = Navigator(status.path(["navigator"]), dark, 'capture')
@@ -1759,6 +1768,7 @@ def run_2():
 	ui.namedWindow('capture_v4l_polar')
 	ui.namedWindow('full_res')
 
+	
 	go.out(1, 10) # move aside for 10s to collect darkframes
 
 	runner = Runner(cam1, navigator = nav1, focuser=focuser, zoom_focuser = zoom_focuser)

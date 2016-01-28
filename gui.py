@@ -87,7 +87,10 @@ class MyGUI_CV2(threading.Thread):
 				cv2.namedWindow(name, cv2.WINDOW_NORMAL)
 			else:
 				cv2.imshow(name, img)
-		
+
+	def set_status(self, status):
+		self.status = status
+
 	def __enter__(self):
 		pass
 
@@ -111,11 +114,14 @@ class MyGUI_Web:
 	def imshow_jpg(self, name, jpg):
 		webserver.mjpeglist.update_jpg(name,jpg)
 	
+	def set_status(self, status):
+		webserver.status = status
+	
 	def __enter__(self):
 		pass
 
 	def __exit__(self, type, value, traceback):
 		self.server.shutdown()
 
-ui = MyGUI_CV2()
-#ui = MyGUI_Web()
+#ui = MyGUI_CV2()
+ui = MyGUI_Web()
