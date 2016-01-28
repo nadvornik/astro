@@ -23,9 +23,9 @@ class Camera_gphoto:
 	def __init__(self, status):
 		self.status = status
 		self.status.setdefault('iso', 400)
-		self.status.setdefault('test_iso', 3200)
-		self.status.setdefault('exp_sec', 120)
-		self.status.setdefault('test_exp_sec', 15)
+		self.status.setdefault('test-iso', 3200)
+		self.status.setdefault('exp-sec', 120)
+		self.status.setdefault('test-exp-sec', 15)
 		self.status.setdefault('f-number', '5.6')
 
 	def get_config_value(self, name):
@@ -74,9 +74,9 @@ class Camera_gphoto:
 	
 	def capture_bulb(self, sec, test = False):
 		if test:
-			self.set_config_value('iso', str(self.status['test_iso']))
+			self.set_config_value('iso', str(self.status['test-iso']))
 			try:
-				self.status['test_iso'] = int(self.set_config_value('iso'))
+				self.status['test-iso'] = int(self.set_config_value('iso'))
 			except:
 				pass
 			self.set_config_choice('capturetarget', 0) #mem
@@ -240,23 +240,23 @@ class Camera_gphoto:
 				self.status['iso'] = cmd[len('iso-'):]
         
 			if cmd.startswith('test-iso-'):
-				self.status['test_iso'] = cmd[len('test-iso-'):]
+				self.status['test-iso'] = cmd[len('test-iso-'):]
         
 			if cmd.startswith('exp-sec-'):
-				self.status['exp_sec'] = int(cmd[len('exp-sec-'):])
+				self.status['exp-sec'] = int(cmd[len('exp-sec-'):])
         
 			if cmd.startswith('test-exp-sec-'):
-				self.status['test_exp_sec'] = int(cmd[len('test-exp-sec-'):])
+				self.status['test-exp-sec'] = int(cmd[len('test-exp-sec-'):])
 			
 			if cmd.startswith('f-number-'):
 				self.set_config_value('aperture', cmd[len('f-number-'):])
 				self.status['f-number'] = self.get_config_value('aperture')
         
 			if cmd == 'test-capture':
-				self.capture_bulb(self.status['test_exp_sec'], test=True)
+				self.capture_bulb(self.status['test-exp-sec'], test=True)
 			
 			if cmd == 'capture':
-				self.capture_bulb(self.status['exp_sec'], test=False)
+				self.capture_bulb(self.status['exp-sec'], test=False)
 				cmdQueue.put('capture-finished')
 			
 		except gp.GPhoto2Error as ex:

@@ -84,6 +84,23 @@ function isElementInViewport(el) {
     xhr.send();
   };
   
+  function update_status() {
+    $.ajax({type: "GET", url: "status.json",
+      success:function(status) {
+        //alert(JSON.stringify(status));
+        $(".ajax_up").each(function() {
+          var jsonp = $(this).data('jsonp');
+          var v = jsonp.split(".").reduce( (dict, key) => (key != undefined ? dict[key] : undefined), status);
+          var prefix = $(this).data('prefix');
+          if (v == undefined) return;
+          if (prefix != undefined) v = prefix + v;
+          $(this).val(v);
+        });
+      }
+    });
+  }
+ 
+ 
   function update_transform(transform, zoom, tx, ty, center_x, center_y) {
     var new_zoom = transform.zoom * zoom;
     if (new_zoom < 0.9) new_zoom = 0.9;
@@ -218,13 +235,10 @@ function isElementInViewport(el) {
         $.ajax({type: "POST", url: "button", data: {key: value},
           success:function() {
             sel.removeClass("ajaxrun");
-            sel.prop("selectedIndex",0);
-            sel.children().first().text(value);
           },
           error:function() {
             sel.removeClass("ajaxrun");
             sel.addClass("ajaxerr");
-            sel.prop("selectedIndex",0);
           }
         });
     });
@@ -289,7 +303,9 @@ function isElementInViewport(el) {
         if(this.complete) $(this).load();
     });
      
-
+    update_status();
+    setInterval(update_status, 5000);
+    
     //document.body.addEventListener('touchstart', function(e){ e.preventDefault(); });
     $('html, body').animate({scrollTop: $(".viewportbox").first().offset().top}, 200);  
   });
