@@ -1,0 +1,49 @@
+#!/usr/bin/python
+import sys
+import time
+import select
+import os
+
+from pyA20.gpio import gpio
+from pyA20.gpio import port
+from pyA20.gpio import connector
+
+
+
+def set_pin(d):
+	if d > 0:
+		gpio.output(self.st4pins[3], 1)
+	else:
+		gpio.output(self.st4pins[3], 0)
+	if d < 0:
+		gpio.output(self.st4pins[0], 1)
+	else:
+		gpio.output(self.st4pins[0], 0)
+
+
+gpio.init()
+st4pins = [ port.PD14, port.PC4, port.PC7, port.PA7 ]
+
+for p in self.st4pins:
+	gpio.setcfg(p, gpio.OUTPUT)
+
+
+sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
+while True:
+	line = sys.stdin.readline()
+	(v, usec) = [int(s) for s in line.split()]
+	
+	t1 = time.time()
+	print "%d %d %d" % (v, int(t1), (t1 - int(t1)) * 1000000)
+	set_pin(v)
+	
+	if usec > 0:
+		if usec > 500000:
+			ready_to_read, ready_to_write, in_error = select.select([sys.stdin], [], [], usec / 1000000.0)
+			if len(ready_to_read) > 0:
+				continue
+		else:
+			time.sleep(usec / 1000000.0)
+		t2 = time.time()
+		set_pin(0)
+		print "%d %d %d" % (0, int(t2), (t2 - int(t2)) * 1000000)

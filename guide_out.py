@@ -7,43 +7,33 @@
 # the Free Software Foundation; either version 2 of the License, or
 # (at your option) any later version.
 
-import time
-import threading
 import numpy as np
+import threading
+import subprocess
+import atexit
+import time
 
-class TimerThread(threading.Thread):
-	def __init__(self, t, func, args=()):
-		threading.Thread.__init__(self)
-		self.t = t
-		self.func = func
-		self.args = args
-		self.disabled = threading.Event()
-
-	def stop(self):
-		self.disabled.set()
-
-	def run(self):
-		if not self.disabled.wait(self.t):
-			self.func(*self.args)
-
-
-class GuideOutBase:
+class GuideOut(threading.Thread):
 	def __init__(self):
-		self.tt = None
+		threading.Thread.__init__(self)
+		self.daemon = True
 		self.history = []
+		self.cmd = subprocess.Popen(['./guide_out_rt'], close_fds=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, bufsize=1 )
+		atexit.register(self.cmd.terminate)
+		self.start()
 	
-	def set_pin(self, d):
-		print "set pin ", d
-		self.history.insert(0, (d, time.time()))
+	def run(self):
+		while self.cmd.poll() is None:
+			try:
+				line = self.cmd.stdout.readline()
+				(d, tsec, tusec) = [int(s) for s in line.split()]
+				self.history.append((d, tsec + tusec / 1000000.0))
+			except:
+				pass
+		print "guide_out exited"
 	
 	def out(self, d, t = 0):
-		if self.tt:
-			self.tt.stop()
-			self.tt =None
-		self.set_pin(d)
-		if t > 0.0:
-			self.tt = TimerThread(t, self.set_pin, (0,))
-			self.tt.start()
+		self.cmd.stdin.write("%d %d\n" % (d, int(t * 1000000)))
 	
 	def recent_avg(self, t = None):
 		t1 = time.time()
@@ -52,7 +42,7 @@ class GuideOutBase:
 		else:
 			t0 = t1 - t
 		avg = 0
-		for (d, ti) in self.history:
+		for (d, ti) in reversed(self.history):
 			if (ti > t0):
 				avg = avg + d * (t1 - ti)
 				t1 = ti
@@ -65,17 +55,17 @@ class GuideOutBase:
 		np.save(fn, np.array(self.history))
 
 if __name__ == "__main__":
-	g = GuideOutBase()
+	g = GuideOut()
 	while True:
 		g.out(0, 0)
 		time.sleep(5)
-		print g.recent_avg(5)
+		print "0x5s", g.recent_avg(5)
 		g.out(1, 0)
-		print g.recent_avg(5)
+		print "0x5s1x0", g.recent_avg(5)
 		time.sleep(5)
-		print g.recent_avg(5)
+		print "1x5s", g.recent_avg(5)
 		g.out(-1, 1)
 		time.sleep(5)
-		print g.recent_avg(5)
-
+		print "-1x1s,0x4s", g.recent_avg(5)
+		
 #usb.close()

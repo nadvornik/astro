@@ -27,7 +27,7 @@ import threading
 from v4l2_camera import *
 from camera_gphoto import *
 
-from guide_out import GuideOutBase
+from guide_out import GuideOut
 
 import random
 from line_profiler import LineProfiler
@@ -1647,7 +1647,7 @@ def run_test_g():
 
 	dark = Median(5)
 	nav = Navigator(status.path(["guider", "navigator"]), dark, 'capture')
-	go = GuideOutBase()
+	go = GuideOut()
 	guider = Guider(status.path(["guider"]), go, dark, 'capture')
 	cam = Camera_test_g(status.path(["guider", "camera"]), go)
 
@@ -1686,7 +1686,7 @@ def run_test_2():
 	nav1 = Navigator(status.path(["navigator"]), dark1, 'capture')
 
 	nav = Navigator(status.path(["guider", "navigator"]), dark2, 'capture_v4l')
-	go = GuideOutBase()
+	go = GuideOut()
 	guider = Guider(status.path(["guider"]), go, dark2, 'capture_v4l')
 	cam = Camera_test_g(status.path(["guider", "camera"]), go)
 
@@ -1716,7 +1716,7 @@ def run_test_2_gphoto():
 	zoom_focuser = Focuser('capture')
 
 	nav = Navigator(status.path(["guider", "navigator"]), dark2, 'capture_v4l')
-	go = GuideOutBase()
+	go = GuideOut()
 	guider = Guider(status.path(["guider"]), go, dark2, 'capture_v4l')
 	cam = Camera_test_g(status.path(["guider", "camera"]), go)
 
