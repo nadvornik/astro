@@ -15,15 +15,55 @@ import tempfile
 import shutil
 import time
 
-class Solver(threading.Thread):
-	def __init__(self, sources_img = None, sources_list = None, field_w = None, field_h = None, ra = None, dec = None, field_deg = None, radius = None):
+engines = {}
+
+class Engine(threading.Thread):
+	def __init__(self, conf):
 		threading.Thread.__init__(self)
-		self.sources_img = sources_img
+		self.conf = conf
+		self.cmd = None
+		self.done = True
+		self.lock = threading.Lock()
+	
+
+	def run(self):
+		while self.cmd.poll() is None:
+			line = self.cmd.stdout.readline()
+			#print line
+			if "Run cancelled" in line or "did not solve" in line:
+				self.done = True
+		self.done = True # shutdown
+			
+	
+	def solve(self, axy):
+		self.lock.acquire()
+		self.done = False
+		if self.cmd is None:
+			args = ['astrometry-engine', '--config', self.conf, '-f', '-' ]
+			self.cmd = subprocess.Popen(args, close_fds=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, bufsize=1 )
+
+			self.start()
+		self.cmd.stdin.write(axy + "\n")
+	
+	def check(self):
+		return self.done
+		
+	def release(self):
+		self.lock.release()
+	
+	def terminate(self):
+		print "terminate engine " + self.conf
+		try:
+			self.cmd.terminate()
+		except:
+			print "Unexpected error:", sys.exc_info()
+
+class Solver(threading.Thread):
+	def __init__(self, sources_list = None, field_w = None, field_h = None, ra = None, dec = None, field_deg = None, radius = None):
+		threading.Thread.__init__(self)
 		self.sources_list = sources_list
 		self.field_w = field_w
 		self.field_h = field_h
-		if self.sources_img is not None:
-			(self.field_h, self.field_w) = sources_img.shape
 		self.ra = ra
 		self.dec = dec
 		self.field_deg = field_deg
@@ -36,70 +76,89 @@ class Solver(threading.Thread):
 	
 	def run(self):
 		tmp_dir = tempfile.mkdtemp()
-		if (self.sources_img is None):
-			tbhdu = pyfits.BinTableHDU.from_columns([
-				pyfits.Column(name='X', format='E', array=self.sources_list[:, 1]),
-				pyfits.Column(name='Y', format='E', array=self.sources_list[:, 0]),
-				pyfits.Column(name='FLUX', format='E', array=self.sources_list[:, 2])
-				])
-			prihdr = pyfits.Header()
-			prihdr['IMAGEW'] = self.field_w
-			prihdr['IMAGEH'] = self.field_h
-			prihdu = pyfits.PrimaryHDU(header=prihdr)
-			thdulist = pyfits.HDUList([prihdu, tbhdu])
-			thdulist.writeto(tmp_dir + '/field.fits', clobber=True)
-		else:
-			cv2.imwrite(tmp_dir + "/field.tif", self.sources_img)
+		tbhdu = pyfits.BinTableHDU.from_columns([
+			pyfits.Column(name='X', format='E', array=self.sources_list[:, 1]),
+			pyfits.Column(name='Y', format='E', array=self.sources_list[:, 0]),
+			pyfits.Column(name='FLUX', format='E', array=self.sources_list[:, 2])
+			])
+		prihdr = pyfits.Header()
+		prihdr['IMAGEW'] = self.field_w
+		prihdr['IMAGEH'] = self.field_h
 		
-		cmd_s = ['solve-field', '-O',  '--objs', '20', '--depth', '20', '-E', '2', '--no-plots', '--no-remove-lines', '--no-fits2fits', '--crpix-center', '--tweak-order', '1' ] #, '--no-tweak'] #, '-z', '2']
+		prihdr['ANRUN'] = True
+		prihdr['ANVERUNI'] = True
+		prihdr['ANVERDUP'] = False
+		prihdr['ANCRPIXC'] = True
+		prihdr['ANTWEAK'] = True
+		prihdr['ANTWEAKO'] = 1
+		prihdr['ANSOLVED'] = tmp_dir + '/field.solved'
+		#prihdr['ANMATCH'] = tmp_dir + '/field.match'
+		prihdr['ANRDLS'] = tmp_dir + '/field.rdls'
+		prihdr['ANWCS'] = tmp_dir + '/field.wcs'
+		#prihdr['ANCORR'] = tmp_dir + '/field.corr'
+		prihdr['ANCANCEL'] = tmp_dir + '/field.solved'
 		
+		
+		prihdr['ANPOSERR'] = 2
 		if self.ra is not None:
-			cmd_s = cmd_s + ['--ra',  str(self.ra)]
+			prihdr['ANERA'] = self.ra
+			prihdr['ANEDEC'] = self.dec
 			if self.radius is not None and self.radius > 0:
-				cmd_s = cmd_s + ['--radius', str(self.radius)]
-		if self.dec is not None:
-			cmd_s = cmd_s + ['--dec', str(self.dec)]
+				prihdr['ANERAD'] = self.radius
+			
+		prihdr['ANDPL1'] = 1
+		prihdr['ANDPU1'] = 20
 		
 		if self.field_deg is not None:
-			cmd_s = cmd_s + ['--scale-low', str(self.field_deg * 0.95), '--scale-high', str(self.field_deg * 1.05), '--odds-to-solve', '1e6']
+			prihdr['ANODDSSL'] = 1e6
+			prihdr['ANAPPL1'] = self.field_deg * 0.95 * 3600 / self.field_w
+			prihdr['ANAPPU1'] = self.field_deg * 1.05 * 3600 / self.field_w
+			
 		else:
-			cmd_s = cmd_s + ['--odds-to-solve', '1e8']
+			prihdr['ANODDSSL'] = 1e8
 		
-		if (self.sources_img is None):
-			cmd_s = cmd_s + ['--sort-column', 'FLUX', tmp_dir + "/field.fits"]
-		else:
-			cmd_s = cmd_s + [tmp_dir + "/field.tif", '-z', '2']
-
+		
+		prihdu = pyfits.PrimaryHDU(header=prihdr)
+		thdulist = pyfits.HDUList([prihdu, tbhdu])
+		thdulist.writeto(tmp_dir + '/field.axy', clobber=True)
+	
 		if self.radius is not None and self.radius > 0 and self.radius < 5:
 			conf_list = ['conf-all']
 		else:
 			conf_list = ['conf-41', 'conf-42-1', 'conf-42-2' ]
-			
-		for conf in conf_list:
-			cmd_s1 = cmd_s + [ '--config', conf + '.cfg', '--out', conf ]
-			print cmd_s1
-			cmd = subprocess.Popen(cmd_s1, preexec_fn=os.setpgrp, close_fds=True)
-			self.cmd.append(cmd)
+		
+		self.cancel_file = tmp_dir + '/field.solved'
 		
 		solved = None
-		while solved is None:
+		global engines
+		for conf in conf_list:
+			if conf in engines:
+				cmd = engines[conf]
+			else:
+				cmd = Engine(conf + '.cfg')
+				engines[conf] = cmd
+			
+			cmd.solve(tmp_dir + '/field.axy')
+			self.cmd.append(cmd)
+		
+		while True:
 			running = False
 			for cmd, conf in zip(self.cmd, conf_list):
-				if cmd.poll() is not None:
-					if os.path.exists(tmp_dir + '/' + conf + '.solved'):
-						solved = tmp_dir + '/' + conf
-						break
-				else:
+				if not cmd.check():
 					running = True
 			if not running:
 				break
-			if solved is not None:
-				break
 			time.sleep(0.1)
 		
-		self.terminate(wait = False)
+		for cmd in self.cmd:
+			cmd.release()
+		
+		if os.path.exists(tmp_dir + '/field.wcs'):
+			solved = tmp_dir + '/field'
 
-		if solved is None or not os.path.exists(solved + ".solved"):
+		self.cancel_file = None
+
+		if solved is None or not os.path.exists(solved + ".wcs"):
 			self.ra = None
 			self.dec = None
 			self.field_deg = None
@@ -110,37 +169,37 @@ class Solver(threading.Thread):
 		self.ra, self.dec = self.wcs.radec_center()
 		self.field_deg = self.field_w * self.wcs.pixel_scale() / 3600
 		
-		ind = pyfits.open(solved + '-indx.xyls')
+		ind = pyfits.open(solved + '.rdls')
 		tbdata = ind[1].data
 		self.ind_sources = []
 		self.ind_radec = []
 		for l in tbdata:
-			x = np.clip(int(l['X']), 0, self.field_w - 1)
-			y = np.clip(int(l['Y']), 0, self.field_h - 1)
+			ok, x, y = self.wcs.radec2pixelxy(l['ra'], l['dec'])
+			x = np.clip(int(x), 0, self.field_w - 1)
+			y = np.clip(int(y), 0, self.field_h - 1)
 			self.ind_sources.append((x,y))
-			self.ind_radec.append(self.wcs.pixelxy2radec(l['X'], l['Y']))
+			self.ind_radec.append((l['ra'], l['dec']))
 		shutil.rmtree(tmp_dir)
 		self.solved = True
 
 
 	def terminate(self, wait = True):
-		for cmd in self.cmd:
-			if cmd.poll() is not None:
-				continue
 		
-			try:
-				pgid = os.getpgid(cmd.pid)
-				os.killpg(pgid, signal.SIGTERM)
-			except:
-				print "Unexpected error:", sys.exc_info()
-			try:
-				cmd.terminate()
-			except:
-				print "Unexpected error:", sys.exc_info()
-				
+		try:
+			with open(self.cancel_file, 'a'):
+				pass
+		except:
+			pass
+		
 		if wait:
 			self.join()
-				
+		
+def am_shutdown():
+	print "terminate"
+	for e in engines.values():
+		e.terminate()
+
+
 
 	
 

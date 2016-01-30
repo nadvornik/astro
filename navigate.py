@@ -15,7 +15,7 @@ from time import sleep
 import bisect
 import subprocess
 
-from am import Solver, Plotter
+from am import Solver, Plotter, am_shutdown
 from polar import Polar
 
 import sys
@@ -1451,8 +1451,7 @@ class Runner(threading.Thread):
 				if cmd is None:
 					break
 				if cmd == 'exit' or cmd == 'shutdown':
-					if self.navigator.solver is not None and self.navigator.solver.is_alive():
-						self.navigator.solver.terminate()
+					am_shutdown()
 					profiler.print_stats()
 					stacktraces()
 
