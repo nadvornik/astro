@@ -45,7 +45,7 @@ function isElementInViewport(el) {
     xhr.open('GET', url + "?seq=" + seq);
 //    xhr.responseType = 'arraybuffer';
     xhr.responseType = 'blob';
-    xhr.timeout = 4000;
+    xhr.timeout = 60000;
     xhr.onload = function() {
       if (this.status == 200) {
         seq = Number(this.getResponseHeader('X-seq'));
@@ -94,7 +94,9 @@ function isElementInViewport(el) {
           var prefix = $(this).data('prefix');
           if (v == undefined) return;
           if (prefix != undefined) v = prefix + v;
+          $(this).data('no_cb', 1)
           $(this).val(v);
+          $(this).removeData('no_cb')
         });
       }
     });
@@ -214,6 +216,7 @@ function isElementInViewport(el) {
   $(document).ready(function(){
     $("button.ajax").click(function(){
         var btn = $(this);
+        if (btn.data('no_cb')) return;
         btn.addClass("ajaxrun");
         btn.removeClass("ajaxerr");
         $.ajax({type: "POST", url: "button", data: {key: $(this).attr('id')},
@@ -228,8 +231,8 @@ function isElementInViewport(el) {
     });
     $("select.ajax").change(function(){
         var sel = $(this);
+        if (sel.data('no_cb')) return;
         var value = this.value;
-        if ( sel.prop("selectedIndex") == 0 ) return;
         sel.addClass("ajaxrun");
         sel.removeClass("ajaxerr");
         $.ajax({type: "POST", url: "button", data: {key: value},
