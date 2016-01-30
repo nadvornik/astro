@@ -8,6 +8,7 @@ from PIL import Image
 from cmd import cmdQueue
 import Queue
 import threading
+import atexit
 
 class MyGUI_CV2(threading.Thread):
 	cmds = {
@@ -58,6 +59,8 @@ class MyGUI_CV2(threading.Thread):
 		threading.Thread.__init__(self)
 		self.queue = Queue.Queue()
 		self.stop = False
+		self.daemon = True
+		atexit.register(self.terminate)
 		self.start()
 
 	def namedWindow(self, name):
@@ -91,18 +94,15 @@ class MyGUI_CV2(threading.Thread):
 	def set_status(self, status):
 		self.status = status
 
-	def __enter__(self):
-		pass
-
-	def __exit__(self, type, value, traceback):
+	def terminate(self):
 		self.stop = True
-		pass
 		
 
 class MyGUI_Web:
 	def __init__(self):
 		self.server = webserver.ServerThread()
 		self.server.start()
+		atexit.register(self.terminate)
 	
 	def namedWindow(self, name):
 		webserver.mjpeglist.add(name)
@@ -117,10 +117,7 @@ class MyGUI_Web:
 	def set_status(self, status):
 		webserver.status = status
 	
-	def __enter__(self):
-		pass
-
-	def __exit__(self, type, value, traceback):
+	def terminate(self):
 		self.server.shutdown()
 
 #ui = MyGUI_CV2()

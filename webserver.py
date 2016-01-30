@@ -192,9 +192,9 @@ class ServerThread(threading.Thread):
 		threading.Thread.__init__(self)
 		self.server = ThreadedHTTPServer(('', 8080), Handler)
 		self.server.daemon_threads = True
+		self.daemon = True
 
 	def run(self):
-		print 'Starting server, use <Ctrl-C> to stop'
 		self.server.serve_forever()
 
 	def shutdown(self):
