@@ -14,49 +14,74 @@ import math
 import tempfile
 import shutil
 import time
-
-engines = {}
+import Queue
+import atexit
 
 class Engine(threading.Thread):
-	def __init__(self, conf):
+	def __init__(self, conf, queue):
 		threading.Thread.__init__(self)
+		self.daemon = True
 		self.conf = conf
 		self.cmd = None
 		self.done = True
-		self.lock = threading.Lock()
+		self.queue = queue
+
 	
 
 	def run(self):
+		#log = open(self.conf + self.name + ".log", "w")
 		while self.cmd.poll() is None:
 			line = self.cmd.stdout.readline()
-			#print line
-			if "Run cancelled" in line or "did not solve" in line:
+			#log.write(line)
+			if "seconds on this field" in line:
+				print line
+				self.queue.put(self) # back to free engines queue
+				#log.write(">>>\n")
 				self.done = True
+		
+		if not self.done:
+			self.queue.put(self) # back to free engines queue
 		self.done = True # shutdown
+		#log.write("<<<\n")
+		#log.close()
 			
 	
 	def solve(self, axy):
-		self.lock.acquire()
 		self.done = False
 		if self.cmd is None:
-			args = ['astrometry-engine', '--config', self.conf, '-f', '-' ]
+			args = ['astrometry-engine', '--config', self.conf, '-f', '-', '-v' ]
 			self.cmd = subprocess.Popen(args, close_fds=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, bufsize=1 )
-
+			atexit.register(self.terminate)
 			self.start()
 		self.cmd.stdin.write(axy + "\n")
 	
 	def check(self):
 		return self.done
-		
-	def release(self):
-		self.lock.release()
 	
 	def terminate(self):
-		print "terminate engine " + self.conf
-		try:
+		if self.cmd is not None and self.cmd.poll() is None:
 			self.cmd.terminate()
-		except:
-			print "Unexpected error:", sys.exc_info()
+		self.join()
+	
+		
+
+class EnginePool:
+	def __init__(self):
+		self.engines = {}
+		for (conf, n) in [('conf-all', 2), ('conf-41', 2), ('conf-42-1', 2), ('conf-42-2', 2) ]:
+			self.engines[conf] = Queue.Queue()
+			for i in range(0, n):
+				engine = Engine(conf + ".cfg", self.engines[conf])
+				self.engines[conf].put(engine)
+
+			
+		
+	def get(self, conf):
+		return self.engines[conf].get(block = True)
+	
+engines = EnginePool()
+
+
 
 class Solver(threading.Thread):
 	def __init__(self, sources_list = None, field_w = None, field_h = None, ra = None, dec = None, field_deg = None, radius = None):
@@ -71,7 +96,7 @@ class Solver(threading.Thread):
 		if self.ra is not None and field_deg is not None and radius is None:
 			self.radius = field_deg * 2.0
 		self.solved = False
-		self.cmd = []
+		self.engines = []
 		
 	
 	def run(self):
@@ -110,10 +135,11 @@ class Solver(threading.Thread):
 		prihdr['ANDPU1'] = 20
 		
 		if self.field_deg is not None:
-			prihdr['ANODDSSL'] = 1e6
 			prihdr['ANAPPL1'] = self.field_deg * 0.95 * 3600 / self.field_w
 			prihdr['ANAPPU1'] = self.field_deg * 1.05 * 3600 / self.field_w
-			
+		
+		if self.radius is not None and self.radius > 0 and self.radius < 5:
+			prihdr['ANODDSSL'] = 1e6
 		else:
 			prihdr['ANODDSSL'] = 1e8
 		
@@ -132,26 +158,18 @@ class Solver(threading.Thread):
 		solved = None
 		global engines
 		for conf in conf_list:
-			if conf in engines:
-				cmd = engines[conf]
-			else:
-				cmd = Engine(conf + '.cfg')
-				engines[conf] = cmd
-			
-			cmd.solve(tmp_dir + '/field.axy')
-			self.cmd.append(cmd)
+			engine = engines.get(conf)
+			engine.solve(tmp_dir + '/field.axy')
+			self.engines.append(engine)
 		
 		while True:
 			running = False
-			for cmd, conf in zip(self.cmd, conf_list):
-				if not cmd.check():
+			for engine in self.engines:
+				if not engine.check():
 					running = True
 			if not running:
 				break
 			time.sleep(0.1)
-		
-		for cmd in self.cmd:
-			cmd.release()
 		
 		if os.path.exists(tmp_dir + '/field.wcs'):
 			solved = tmp_dir + '/field'
@@ -194,14 +212,6 @@ class Solver(threading.Thread):
 		if wait:
 			self.join()
 		
-def am_shutdown():
-	print "terminate"
-	for e in engines.values():
-		e.terminate()
-
-
-
-	
 
 class Plotter:
 	def __init__(self, wcs):

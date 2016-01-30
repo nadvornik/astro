@@ -15,7 +15,7 @@ from time import sleep
 import bisect
 import subprocess
 
-from am import Solver, Plotter, am_shutdown
+from am import Solver, Plotter
 from polar import Polar
 
 import sys
@@ -1451,7 +1451,6 @@ class Runner(threading.Thread):
 				if cmd is None:
 					break
 				if cmd == 'exit' or cmd == 'shutdown':
-					am_shutdown()
 					profiler.print_stats()
 					stacktraces()
 
@@ -1546,7 +1545,7 @@ class Camera_test:
 			self.step = 1 - self.step
 	
 	def capture(self):
-		time.sleep(3)
+		#time.sleep(3)
 		print self.i
 		#pil_image = Image.open("converted/IMG_%04d.jpg" % (146+self.i))
 		#pil_image.thumbnail((1000,1000), Image.ANTIALIAS)
@@ -1689,7 +1688,7 @@ def run_test_2():
 	go = GuideOut()
 	guider = Guider(status.path(["guider"]), go, dark2, 'capture_v4l')
 	cam = Camera_test_g(status.path(["guider", "camera"]), go)
-
+	
 	runner = Runner(cam1, navigator = nav1)
 	runner.start()
 	
