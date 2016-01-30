@@ -1780,12 +1780,16 @@ def run_2():
 	runner2.join()
 	status.save()
 
-
-
 if __name__ == "__main__":
 	os.environ["LC_NUMERIC"] = "C"
-	sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
-	sys.stderr = sys.stdout
+	
+	mystderr = os.fdopen(os.dup(sys.stderr.fileno()), 'w', 0)
+	devnull = open(os.devnull,"w")
+	os.dup2(devnull.fileno(), sys.stdout.fileno())
+	os.dup2(devnull.fileno(), sys.stderr.fileno())
+	
+	sys.stdout = mystderr
+	sys.stderr = mystderr
 	
 
 	#run_gphoto()
