@@ -88,15 +88,12 @@ class Handler(BaseHTTPRequestHandler):
 		
 		base = os.path.basename(path)
 		name, ext = os.path.splitext(base)
-		print name, ext
 		if self.path == '/':
 			self.send_response(301)
 			self.send_header('Location', 'index.html')
 			self.end_headers()
 			return
 		elif ext == '.jpg':
-			print name, ext, args
-			
 			s_args = args.split('=')
 			if len(s_args) == 2 and s_args[0] == 'seq':
 				seq = int(s_args[1])
@@ -129,7 +126,6 @@ class Handler(BaseHTTPRequestHandler):
 				self.end_headers()
 				self.wfile.write(status.to_json())
 			else:
-				print "no status"
 				self.send_response(404)
 				self.end_headers()
 				return
@@ -184,7 +180,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 	"""Handle requests in a separate thread."""
 
 	def handle_error(self, request, client_address):
-		print "Error: ", sys.exc_info()
+		print "Error: " + sys.exc_info()
 
 
 class ServerThread(threading.Thread):

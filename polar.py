@@ -13,7 +13,7 @@ from am import Plotter
 
 def quat_axis_to_ra_dec(q):
 	(w,x,y,z) = q.a
-	print "xyz", x,y,z
+	#print "xyz", x,y,z
 	ra = math.degrees(math.atan2(y,x))
 	dec = math.degrees(math.atan2(z, (x ** 2 + y ** 2)**0.5))
 	return (ra, dec)
@@ -93,9 +93,9 @@ class Polar:
 
 	def add_tan(self, tan, t):
 		ra, dec, orient = self.tan_to_euler(tan)
-		print ra, dec, orient
+		#print ra, dec, orient
 		self.add(ra, dec, orient, t)
-		print "added ", t
+		#print "added ", t
 
 
 	def compute2(self, i = 0, j = None):

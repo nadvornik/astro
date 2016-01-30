@@ -269,7 +269,7 @@ class Plotter:
 		plot.color = 'gray'
 		
 		plot_area_deg = new_wcs.pixel_scale() * scale * field_w / 3600.0
-		print "plot area", plot_area_deg
+		#print "plot area", plot_area_deg
 		
 		
 		if grid:
@@ -280,7 +280,7 @@ class Plotter:
 			grid_step_dec = 10 ** int(log_dec / 3) * log_step[log_dec % 3]
 			grid_step_ra = min(10, grid_step_ra)
 			grid_step_dec = min(10, grid_step_dec)
-			print "grid", plot_area_deg, log_ra, log_dec, grid_step_ra, grid_step_dec
+			#print "grid", plot_area_deg, log_ra, log_dec, grid_step_ra, grid_step_dec
 			plot.plot_grid(grid_step_ra, grid_step_dec, grid_step_ra, grid_step_dec)
 
 		ann = plot.annotations

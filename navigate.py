@@ -700,7 +700,7 @@ class Navigator:
 
 		if self.solver is None and i > 20 :
 			xy = self.stack.get_xy()
-			print "len", len(xy)
+			#print "len", len(xy)
 			if len(xy) > 8:
 				self.status['i_solver'] = i
 				self.status['t_solver'] = t
@@ -963,7 +963,7 @@ class Guider:
 			pt1m, pt2m, match = match_triangle(self.pt0, pt, 5, 50, self.off)
 			if len(match) > 0:
 				off, weights = avg_pt(pt1m, pt2m)
-				print "triangle", off, match
+				#print "triangle", off, match
 			
 				pt0, pt, match = match_closest(self.pt0, pt, 5, off)
 				
@@ -1112,7 +1112,7 @@ class Focuser:
 		v_curve_s = smooth(v_curve_s, smooth_size, 'flat')
 		
 		derived = np.gradient(v_curve_s)
-		print derived.tolist()
+		#print derived.tolist()
 				
 		i1 = np.argmin(derived)
 		i2 = np.argmax(derived)
@@ -1161,7 +1161,7 @@ class Focuser:
 		(h, w) = im.shape
 		for p in xy:
 			if p[2] < stddev * 3:
-				print "under 3stddev:", p[2], stddev * 3
+				#print "under 3stddev:", p[2], stddev * 3
 				continue
 			x = int(p[1])
 			y = int(p[0])

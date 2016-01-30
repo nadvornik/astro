@@ -34,7 +34,7 @@ class Camera_gphoto:
 		if OK >= gp.GP_OK:
 			# set value
 			value = gp.check_result(gp.gp_widget_get_value(widget))
-			print >> sys.stderr,name, value
+			print "get %s => %s" % (name, value)
 			return value
 
 	def set_config_choice(self, name, num):
@@ -45,7 +45,7 @@ class Camera_gphoto:
 				if OK >= gp.GP_OK:
 					# set value
 					value = gp.check_result(gp.gp_widget_get_choice(widget, num))
-					print >> sys.stderr,name, value
+					print "set %s => %s" % (name, value)
 					gp.check_result(gp.gp_widget_set_value(widget, value))
 				# set config
 				gp.check_result(gp.gp_camera_set_config(self.camera, config, self.context))
@@ -61,8 +61,8 @@ class Camera_gphoto:
 				config = gp.check_result(gp.gp_camera_get_config(self.camera, self.context))
 				OK, widget = gp.gp_widget_get_child_by_name(config, name)
 				if OK >= gp.GP_OK:
+					print "set %s => %s" % (name, value)
 					# set value
-					print >> sys.stderr,name, value
 					gp.check_result(gp.gp_widget_set_value(widget, value))
 				# set config
 				gp.check_result(gp.gp_camera_set_config(self.camera, config, self.context))
@@ -96,7 +96,6 @@ class Camera_gphoto:
 		self.set_config_value('eosremoterelease', 'Release Full')
 		while True:
 			e, file_path =  gp.check_result(gp.gp_camera_wait_for_event(self.camera, 1000,self.context))
-			print >> sys.stderr, "wait for event", e
 			if e == gp.GP_EVENT_FILE_ADDED:
 				print >> sys.stderr, "filepath:", file_path.folder, file_path.name
 				filename, file_extension = os.path.splitext(file_path.name)
@@ -260,7 +259,7 @@ class Camera_gphoto:
 				cmdQueue.put('capture-finished')
 			
 		except gp.GPhoto2Error as ex:
-			print "Unexpected error:", sys.exc_info()
+			print "Unexpected error: " + sys.exc_info()
 			print "code:", ex.code
 			stacktraces()
 			time.sleep(1)
@@ -292,7 +291,7 @@ class Camera_gphoto:
 			except KeyboardInterrupt:
 				break
 			except gp.GPhoto2Error as ex:
-				print "Unexpected error:", sys.exc_info()
+				print "Unexpected error: " + sys.exc_info()
 				print "code:", ex.code
 				stacktraces()
 				time.sleep(1)
