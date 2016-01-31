@@ -12,19 +12,19 @@ from pyA20.gpio import connector
 
 def set_pin(d):
 	if d > 0:
-		gpio.output(self.st4pins[3], 1)
+		gpio.output(st4pins[3], 1)
 	else:
-		gpio.output(self.st4pins[3], 0)
+		gpio.output(st4pins[3], 0)
 	if d < 0:
-		gpio.output(self.st4pins[0], 1)
+		gpio.output(st4pins[0], 1)
 	else:
-		gpio.output(self.st4pins[0], 0)
+		gpio.output(st4pins[0], 0)
 
 
 gpio.init()
 st4pins = [ port.PD14, port.PC4, port.PC7, port.PA7 ]
 
-for p in self.st4pins:
+for p in st4pins:
 	gpio.setcfg(p, gpio.OUTPUT)
 
 
@@ -38,7 +38,7 @@ while True:
 	set_pin(v)
 	
 	if usec > 0:
-		if usec > 500000:
+		if usec > 100000:
 			ready_to_read, ready_to_write, in_error = select.select([sys.stdin], [], [], usec / 1000000.0)
 			if len(ready_to_read) > 0:
 				continue
