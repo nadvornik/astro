@@ -180,7 +180,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 	"""Handle requests in a separate thread."""
 
 	def handle_error(self, request, client_address):
-		print "Error: " + sys.exc_info()
+		print "Error: " +  sys.exc_info().__str__()
 
 
 class ServerThread(threading.Thread):

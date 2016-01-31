@@ -220,7 +220,7 @@ class Camera:
     def cmd(self, cmd):
         print "camera:", cmd
 
-    def __del__(self):
+    def shutdown(self):
 	if self.vd is not None:
 		os.close(self.vd)
 

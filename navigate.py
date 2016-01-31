@@ -1521,6 +1521,7 @@ class Runner(threading.Thread):
 			#if i == 300:
 			#	cmdQueue.put('exit')
 		cmdQueue.put('exit')
+		self.camera.shutdown()
 
 from PIL import Image;
 
@@ -1563,6 +1564,9 @@ class Camera_test:
 		self.i += self.step
 		return im, None
 
+	def shutdown(self):
+		pass
+
 class Camera_test_g:
 	def __init__(self, status, go):
 		self.i = 0
@@ -1581,6 +1585,8 @@ class Camera_test_g:
 		im = cv2.imread("testimg16_" + str(i + 50) + ".tif")
 		return im, None
 
+	def shutdown(self):
+		pass
 
 def run_v4l2():
 	global status

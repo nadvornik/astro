@@ -259,7 +259,7 @@ class Camera_gphoto:
 				cmdQueue.put('capture-finished')
 			
 		except gp.GPhoto2Error as ex:
-			print "Unexpected error: " + sys.exc_info()
+			print "Unexpected error: " + sys.exc_info().__str__()
 			print "code:", ex.code
 			stacktraces()
 			time.sleep(1)
@@ -291,7 +291,7 @@ class Camera_gphoto:
 			except KeyboardInterrupt:
 				break
 			except gp.GPhoto2Error as ex:
-				print "Unexpected error: " + sys.exc_info()
+				print "Unexpected error: " + sys.exc_info().__str__()
 				print "code:", ex.code
 				stacktraces()
 				time.sleep(1)
@@ -300,7 +300,7 @@ class Camera_gphoto:
 					self.prepare()
 
 	
-	def __del__(self):
+	def shutdown(self):
 		gp.check_result(gp.gp_camera_exit(self.camera, self.context))
 	
 	
