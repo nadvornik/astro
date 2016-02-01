@@ -160,7 +160,9 @@ class Camera_gphoto:
 		self.set_config_value('eosremoterelease', 'Release Full')
 		
 		cur_time = self.get_config_value('datetime')
-		subprocess.call(['date', '--set', '@' + str(cur_time) ])
+		if abs(time.time() - cur_time) > 1500:
+			print "adjusting time ", time.time(), cur_time
+			subprocess.call(['date', '--set', '@' + str(cur_time) ])
 		
 		self.set_config_value('aperture', self.status['f-number'])
 		self.status['f-number'] = self.get_config_value('aperture')
