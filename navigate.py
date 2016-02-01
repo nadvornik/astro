@@ -814,6 +814,8 @@ class Guider:
 		self.status['t_delay'] = None
 		self.status['t_delay1'] = None
 		self.status['t_delay2'] = None
+		self.status['pixpersec'] = None
+		self.status['pixpersec_neg'] = None
 		self.off = (0.0, 0.0)
 		self.off_t = None
 		self.go.out(0)
@@ -940,21 +942,21 @@ class Guider:
 					aresp1 = aresp[aresp[:, 1] > 10]
 					m, c = np.polyfit(aresp1[:, 0], aresp1[:, 1], 1)
 
-					self.pixpersec = m
+					self.status['pixpersec'] = m
 					self.status['t_delay1'] = max(-c / m, 0.5)
 					
-					self.pixperframe = self.pixpersec * dt / self.cnt
+					self.pixperframe = self.status['pixpersec'] * dt / self.cnt
 					self.dist = m * dt + c
 					self.ref_off = complex(*self.off) / dist
 				
-					print "pixpersec", self.pixpersec, "pixperframe", self.pixperframe, "t_delay1", self.status['t_delay1']
+					print "pixpersec", self.status['pixpersec'], "pixperframe", self.pixperframe, "t_delay1", self.status['t_delay1']
 				
 					self.pt0 = np.array(self.pt0)[np.where(np.bincount(self.used_cnt) > self.cnt / 3)]
 				
 					self.cnt = 0
 					self.status['mode'] = 'back'
 				
-					self.go.out(-1, self.dist / self.pixpersec)
+					self.go.out(-1, self.dist / self.status['pixpersec'])
 			for p in pt:
 				cv2.circle(disp, (int(p[1]), int(p[0])), 10, (255), 1)
 
@@ -980,9 +982,9 @@ class Guider:
 
 				for p in pt:
 					cv2.circle(disp, (int(p[1]), int(p[0])), 10, (255), 1)
-				self.go.out(-1, err.real / self.pixpersec)
+				self.go.out(-1, err.real / self.status['pixpersec'])
 				
-				if err.real < self.pixpersec * self.status['t_delay1'] + self.pixperframe:
+				if err.real < self.status['pixpersec'] * self.status['t_delay1'] + self.pixperframe:
 					self.t2 = t
 					dt = self.t2 - self.t1
 					
@@ -990,13 +992,13 @@ class Guider:
 					aresp1 = aresp[aresp[:, 0] > self.t1 + self.status['t_delay1'] - self.t0]
 					m, c = np.polyfit(aresp1[:, 0], aresp1[:, 1], 1)
 
-					self.pixpersec_neg = m
-					self.status['t_delay2'] = max(0.5, (c + self.status['t_delay1'] * self.pixpersec) / (self.pixpersec - self.pixpersec_neg) - self.t1 + self.t0)
+					self.status['pixpersec_neg'] = m
+					self.status['t_delay2'] = max(0.5, (c + self.status['t_delay1'] * self.status['pixpersec']) / (self.status['pixpersec'] - self.status['pixpersec_neg']) - self.t1 + self.t0)
 
 
-					self.pixperframe_neg = self.pixpersec_neg * dt / self.cnt
+					self.pixperframe_neg = self.status['pixpersec_neg'] * dt / self.cnt
 				
-					print "pixpersec_neg", self.pixpersec_neg, "pixperframe_neg", self.pixperframe_neg, "t_delay2", self.status['t_delay2']
+					print "pixpersec_neg", self.status['pixpersec_neg'], "pixperframe_neg", self.pixperframe_neg, "t_delay2", self.status['t_delay2']
 					self.status['t_delay'] = (self.status['t_delay1'] + self.status['t_delay2']) / 2
 				
 					self.status['mode'] = 'track'
@@ -1017,16 +1019,16 @@ class Guider:
 
 				t_proc = time.time() - t
 
-				err_corr = err.real + self.go.recent_avg(self.status['t_delay'] + t_proc) * self.pixpersec
+				err_corr = err.real + self.go.recent_avg(self.status['t_delay'] + t_proc, self.status['pixpersec'], self.status['pixpersec_neg'])
 				
 				
 				aggresivnes = 0.9
 				err_corr *= aggresivnes
 				status += " err:%.1f %.1f corr:%.1f t_d:%.1f t_p:%.1f" % (err.real, err.imag, err_corr, self.status['t_delay'], t_proc)
 				if err_corr > 0.1:
-					self.go.out(-1, -err_corr / self.pixpersec_neg)
+					self.go.out(-1, -err_corr / self.status['pixpersec_neg'])
 				elif err_corr < -0.1:
-					self.go.out(1, -err_corr / self.pixpersec)
+					self.go.out(1, -err_corr / self.status['pixpersec'])
 				else:
 					self.go.out(0)
 				

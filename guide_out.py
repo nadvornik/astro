@@ -35,7 +35,7 @@ class GuideOut(threading.Thread):
 	def out(self, d, t = 0):
 		self.cmd.stdin.write("%d %d\n" % (d, int(t * 1000000)))
 	
-	def recent_avg(self, t = None):
+	def recent_avg(self, t = None, w_plus = 1.0, w_minus = 1.0):
 		t1 = time.time()
 		if (t == None):
 			t0 = 0
@@ -43,11 +43,17 @@ class GuideOut(threading.Thread):
 			t0 = t1 - t
 		avg = 0
 		for (d, ti) in reversed(self.history):
+			if d > 0:
+				w = w_plus
+			elif d < 0:
+				w = -w_minus
+			else:
+				w = 0.0
 			if (ti > t0):
-				avg = avg + d * (t1 - ti)
+				avg += w * (t1 - ti)
 				t1 = ti
 			else:
-				avg = avg + d * (t1 - t0)
+				avg += w * (t1 - t0)
 				break
 		return avg
 	
