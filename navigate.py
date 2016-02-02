@@ -800,6 +800,7 @@ def fit_line(xylist):
 class Guider:
 	def __init__(self, status, go, dark, ui_capture):
 		self.status = status
+		self.status.setdefault('aggressivness', 1.3)
 		self.go = go
 		self.dark = dark
 		self.reset()
@@ -915,8 +916,7 @@ class Guider:
 
 				if (dist > 20):
 					self.dark.add(im)
-			
-				self.resp0.append((t - self.t0, dist, 0))
+					self.resp0.append((t - self.t0, dist, 0))
 			
 				if (dist > self.dist):
 					self.dist = dist
@@ -933,7 +933,7 @@ class Guider:
 
 				status += " dist:%.1f" % (dist)
 
-				if (self.dist > 100 and self.cnt > 12):
+				if (self.dist > 100 and len(self.resp0) > 12):
 					self.t1 = time.time()
 					dt = t - self.t0
 					self.go.out(-1)
@@ -1022,8 +1022,7 @@ class Guider:
 				err_corr = err.real + self.go.recent_avg(self.status['t_delay'] + t_proc, self.status['pixpersec'], self.status['pixpersec_neg'])
 				
 				
-				aggresivnes = 0.9
-				err_corr *= aggresivnes
+				err_corr *= self.status['aggressivness']
 				status += " err:%.1f %.1f corr:%.1f t_d:%.1f t_p:%.1f" % (err.real, err.imag, err_corr, self.status['t_delay'], t_proc)
 				if err_corr > 0.1:
 					self.go.out(-1, -err_corr / self.status['pixpersec_neg'])
@@ -1629,12 +1628,30 @@ def run_gphoto():
 def run_v4l2_g():
 	global status
 	status = Status("run_v4l2_g.conf")
-	from guide_out_gpio import GuideOut
 	ui.namedWindow('capture')
 	ui.namedWindow('capture_polar')
 
 	cam = Camera(status.path(["guider", "camera"]))
 	cam.prepare(1280, 960)
+
+	dark = Median(5)
+	nav = Navigator(status.path(["guider", "navigator"]), dark, 'capture')
+	go = GuideOut()
+	guider = Guider(status.path(["guider"]), go, dark, 'capture')
+
+	runner = Runner(cam, navigator = nav, guider = guider)
+	runner.start()
+	runner.join()
+	status.save()
+
+def run_gphoto_g():
+	global status
+	status = Status("run_gphoto_g.conf")
+	ui.namedWindow('capture')
+	ui.namedWindow('capture_polar')
+
+	cam = Camera_gphoto(status.path(["guider", "camera"]))
+	cam.prepare()
 
 	dark = Median(5)
 	nav = Navigator(status.path(["guider", "navigator"]), dark, 'capture')
@@ -1749,7 +1766,6 @@ def run_test_2_gphoto():
 
 def run_2():
 	global status
-	from guide_out_gpio import GuideOut
 	status = Status("run_v4l2.conf")
 	cam = Camera(status.path(["guider", "camera"]))
 	cam.prepare(1280, 960)
