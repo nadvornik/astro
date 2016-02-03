@@ -35,13 +35,13 @@ class Engine(threading.Thread):
 			#log.write(line)
 			if "seconds on this field" in line:
 				print line
-				self.queue.put(self) # back to free engines queue
 				#log.write(">>>\n")
 				self.done = True
+				self.queue.put(self) # back to free engines queue
 		
 		if not self.done:
+			self.done = True # shutdown
 			self.queue.put(self) # back to free engines queue
-		self.done = True # shutdown
 		#log.write("<<<\n")
 		#log.close()
 			
@@ -68,7 +68,7 @@ class Engine(threading.Thread):
 class EnginePool:
 	def __init__(self):
 		self.engines = {}
-		for (conf, n) in [('conf-all', 2), ('conf-41', 2), ('conf-42-1', 2), ('conf-42-2', 2) ]:
+		for (conf, n) in [('conf-all', 2), ('conf-41', 1), ('conf-42-1', 1), ('conf-42-2', 1) ]:
 			self.engines[conf] = Queue.Queue()
 			for i in range(0, n):
 				engine = Engine(conf + ".cfg", self.engines[conf])
