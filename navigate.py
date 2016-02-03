@@ -613,7 +613,18 @@ class Navigator:
 		self.solver = None
 		self.solver_off = np.array([0.0, 0.0])
 		self.status.setdefault("dispmode", 'disp-normal')
-		self.status.setdefault('field_deg', None)
+		try:
+			if self.status['lensname'] == self.status['camera']['lensname']:
+				self.status.setdefault('field_deg', None)
+			else:
+				self.status['field_deg'] = None
+		except:
+			self.status['field_deg'] = None
+		try:
+			self.status['lensname'] = self.status['camera']['lensname']
+		except:
+			pass
+		
 		self.wcs = None
 		self.plotter = None
 		self.plotter_off = np.array([0.0, 0.0])
