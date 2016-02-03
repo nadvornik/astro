@@ -34,7 +34,11 @@ function isElementInViewport(el) {
       }); 
     }
   
-    if (canvas && image.naturalWidth && image.naturalHeight) canvas.getContext("2d").drawImage(image, 0, 0);
+    if (canvas && image.naturalWidth && image.naturalHeight) {
+      canvas.width = image.naturalWidth;
+      canvas.height = image.naturalHeight;
+      canvas.getContext("2d").drawImage(image, 0, 0);
+    }
 
     if (canvas && !isElementInViewport(canvas)) {
       $(image).removeClass("reloading");
