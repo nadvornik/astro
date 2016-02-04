@@ -92,10 +92,17 @@ class Camera_gphoto:
 			self.set_config_choice('imageformat', 7) #RAW + Large Normal JPEG 
 		
 		self.set_config_value('eosremoterelease', 'Immediate')
-		time.sleep(sec)
-		self.set_config_value('eosremoterelease', 'Release Full')
+		self.t_start = time.time()
+		exp_in_progress = True
 		while True:
 			e, file_path =  gp.check_result(gp.gp_camera_wait_for_event(self.camera, 1000,self.context))
+			t = time.time() - self.t_start
+			print "camera event ", t, e, file_path
+			
+			if exp_in_progress and t > sec:
+				self.set_config_value('eosremoterelease', 'Release Full')
+				exp_in_progress = False
+			
 			if e == gp.GP_EVENT_FILE_ADDED:
 				print >> sys.stderr, "filepath:", file_path.folder, file_path.name
 				filename, file_extension = os.path.splitext(file_path.name)
