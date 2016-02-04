@@ -56,6 +56,7 @@ class Camera_gphoto:
 				continue
 
 	def set_config_value(self, name, value):
+		value = str(value)
 		for t in range(0, 20):
 			try:
 				config = gp.check_result(gp.gp_camera_get_config(self.camera, self.context))

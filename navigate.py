@@ -41,9 +41,9 @@ import json
 class Status:
 	def __init__(self, conf_file):
 		try:
-			with open('data.json') as data_file:    
-    				self.status = json.load(conf_file)
-    			self.status["conf_file"] = conf_file
+			with open(conf_file) as data_file:    
+				self.status = json.load(data_file)
+			self.status["conf_file"] = conf_file
 		except:
 			self.status = {"conf_file" : conf_file}
 		ui.set_status(self)
