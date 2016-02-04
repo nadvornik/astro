@@ -91,6 +91,8 @@ function isElementInViewport(el) {
   function update_status() {
     $.ajax({type: "GET", url: "status.json",
       success:function(status) {
+        $("#json").text( JSON.stringify(status, null, 2) );
+
         //alert(JSON.stringify(status));
         $(".ajax_up").each(function() {
           var jsonp = $(this).data('jsonp');
@@ -123,7 +125,6 @@ function isElementInViewport(el) {
     var ih = img.height() * transform.zoom;
     var iw = img.width() * transform.zoom;
   
-    $("#txt2").text( JSON.stringify(iw + ' ' + bw) );
     if (transform.y > Math.max(0, ih - bh)) transform.y = Math.max(0, ih - bh);
     if (transform.y < Math.min(0, ih - bh)) transform.y = Math.min(0, ih - bh);
 
@@ -165,17 +166,12 @@ function isElementInViewport(el) {
         
         if (phase == 'cancel') {
           transform = $(this).data('transform');
-  
-//            var err = new Error();
-//  	    $("#txt2").text( err.stack);
-            
         }
         if (phase == 'end') {
             $(this).data('transform', transform);
         }
         $(this).css('transform', ' translate(' + transform.x + 'px, ' + transform.y + 'px)  scale(' + transform.zoom + ')');
         $(this).data('fingerData', fingerData);
-//        $("#txt2").text( JSON.stringify(startpos) );
         return true;
       },
       doubleTap:function(event, target) {
