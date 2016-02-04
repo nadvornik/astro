@@ -27,6 +27,7 @@ class Camera_gphoto:
 		self.status.setdefault('exp-sec', 120)
 		self.status.setdefault('test-exp-sec', 15)
 		self.status.setdefault('f-number', '5.6')
+		self.status['cur_time'] = 0
 
 	def get_config_value(self, name):
 		config = gp.check_result(gp.gp_camera_get_config(self.camera, self.context))
@@ -100,9 +101,13 @@ class Camera_gphoto:
 			t = time.time() - self.t_start
 			print "camera event ", t, e, file_path
 			
+			if exp_in_progress:
+				self.status['cur_time'] = int(t)
+
 			if exp_in_progress and t > sec:
 				self.set_config_value('eosremoterelease', 'Release Full')
 				exp_in_progress = False
+
 			
 			if e == gp.GP_EVENT_FILE_ADDED:
 				print >> sys.stderr, "filepath:", file_path.folder, file_path.name
@@ -110,7 +115,8 @@ class Camera_gphoto:
 				if file_extension == ".jpg" or file_extension == ".JPG":
 					break
 				
-		
+		self.status['cur_time'] = 0
+	
 		target = os.path.join('/tmp', file_path.name)
 		
 		n = 20
