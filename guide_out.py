@@ -12,29 +12,53 @@ import threading
 import subprocess
 import atexit
 import time
+import sys
 
 class GuideOut(threading.Thread):
 	def __init__(self):
 		threading.Thread.__init__(self)
 		self.daemon = True
 		self.history = []
-		self.cmd = subprocess.Popen(['./guide_out_rt'], close_fds=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, bufsize=1 )
-		atexit.register(self.cmd.terminate)
+		self.terminating = False
+		self.cmd = None
 		self.start()
 	
 	def run(self):
-		while self.cmd.poll() is None:
+		while True:
+			if self.cmd is None or self.cmd.poll() is not None:
+				restart = self.cmd is not None
+				if restart:
+					print "guide_out_rt exited with %d\n" % (self.cmd.poll()),
+				if self.terminating:
+					return
+				self.cmd = subprocess.Popen(['./guide_out_rt'], close_fds=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, bufsize=1 )
+				if not restart:
+					atexit.register(self.terminate)
 			try:
 				line = self.cmd.stdout.readline()
 				(d, tsec, tusec) = [int(s) for s in line.split()]
 				self.history.append((d, tsec + tusec / 1000000.0))
 			except:
 				pass
-		print "guide_out exited"
 	
 	def out(self, d, t = 0):
-		self.cmd.stdin.write("%d %d\n" % (d, int(t * 1000000)))
-	
+		while True:
+			try:
+				if self.cmd is None:
+					time.sleep(0.3)
+				self.cmd.stdin.write("%d %d\n" % (d, int(t * 1000000)))
+				break
+			except:
+				print "Error: " +  sys.exc_info().__str__()
+				time.sleep(0.1)
+
+	def terminate(self):
+		self.terminating = True
+		if self.cmd is not None and self.cmd.poll() is None:
+			self.cmd.terminate()
+		self.join()
+
+
 	def recent_avg(self, t = None, w_plus = 1.0, w_minus = -1.0):
 		t1 = time.time()
 		if (t == None):

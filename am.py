@@ -23,42 +23,58 @@ class Engine(threading.Thread):
 		self.daemon = True
 		self.conf = conf
 		self.cmd = None
-		self.done = True
+		self.ready = True
 		self.queue = queue
+		self.terminating = False
+		self.start()
 
 	
 
 	def run(self):
 		#log = open(self.conf + self.name + ".log", "w")
-		while self.cmd.poll() is None:
+		while True:
+			if self.cmd is None or self.cmd.poll() is not None:
+				restart = self.cmd is not None
+				if restart:
+					print "%s engine exited with %d\n" % (self.conf, self.cmd.poll()),
+				#log.write("<<<\n")
+				#log.close()
+				if self.terminating:
+					return
+				args = ['astrometry-engine', '--config', self.conf, '-f', '-', '-v' ]
+				self.cmd = subprocess.Popen(args, close_fds=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, bufsize=1 )
+				if not restart:
+					atexit.register(self.terminate)
+				if not self.ready:
+					self.ready = True
+					self.queue.put(self) # back to free engines queue
+				
 			line = self.cmd.stdout.readline()
 			#log.write(line)
 			if "seconds on this field" in line:
 				print line
 				#log.write(">>>\n")
-				self.done = True
+				self.ready = True
 				self.queue.put(self) # back to free engines queue
 		
-		if not self.done:
-			self.done = True # shutdown
-			self.queue.put(self) # back to free engines queue
-		#log.write("<<<\n")
-		#log.close()
 			
 	
 	def solve(self, axy):
-		self.done = False
-		if self.cmd is None:
-			args = ['astrometry-engine', '--config', self.conf, '-f', '-', '-v' ]
-			self.cmd = subprocess.Popen(args, close_fds=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, bufsize=1 )
-			atexit.register(self.terminate)
-			self.start()
-		self.cmd.stdin.write(axy + "\n")
+		self.ready = False
+		while True:
+			try:
+				self.cmd.stdin.write(axy + "\n")
+				break
+			except:
+				print "Error: " +  sys.exc_info().__str__()
+				time.sleep(0.1)
+		
 	
 	def check(self):
-		return self.done
+		return self.ready
 	
 	def terminate(self):
+		self.terminating = True
 		if self.cmd is not None and self.cmd.poll() is None:
 			self.cmd.terminate()
 		self.join()
