@@ -51,8 +51,12 @@ def precession():
 	return q
 
 class Polar:
-	def __init__(self):
+	def __init__(self, cameras):
 		self.pos = []
+		self.cameras = {}
+		for i, c in enumerate(cameras):
+			self.cameras[c] = i
+			self.pos.append([])
 		self.t0 = None
 		self.p2_from = None
 		self.prec_q = precession()
@@ -61,15 +65,16 @@ class Polar:
 		self.dec = None
 		self.gps = (50.0, 15.0)
 		
-	def add(self, ra, dec, roll, t):
+	def add(self, ra, dec, roll, t, camera):
 		if self.t0 is None:
 			self.t0 = t
 		ha = (t - self.t0) / 240.0
 		qha = self.prec_q * Quaternion([-ha, 0, 0]) / self.prec_q
 		#print "qha", quat_axis_to_ra_dec(qha), "prec", self.prec_ra, self.prec_dec 
 		#print Quaternion([ra, dec, roll]).to_euler(), (qha * Quaternion([ra, dec, roll])).to_euler()
-		self.pos.append(qha * Quaternion([ra, dec, roll]))
-		#self.pos.append(Quaternion([ra, dec, roll]))
+		
+		ci = self.cameras[camera]
+		self.pos[ci].append((qha * Quaternion([ra, dec, roll]), t))
 
 	def tan_to_euler(self, tan, off=(0,0)):
 		ra, dec = tan.radec_center()
@@ -91,10 +96,10 @@ class Polar:
 		
 		return ra, dec, orient
 
-	def add_tan(self, tan, t):
+	def add_tan(self, tan, t, camera):
 		ra, dec, orient = self.tan_to_euler(tan)
 		#print ra, dec, orient
-		self.add(ra, dec, orient, t)
+		self.add(ra, dec, orient, t, camera)
 		#print "added ", t
 
 
@@ -121,11 +126,70 @@ class Polar:
 		self.ra = ra
 		self.dec = dec
 		return True, ra, dec
+	
+	def camera_position(self, ci, noise = 2):
+		print "camera_position", ci
+		if ci == 0:
+			return Quaternion([0, 0, 0])
+		
+		if len(self.pos[0]) == 0 or len(self.pos[ci]) == 0:
+			return None
+		if self.pos[0][0][1] > self.pos[ci][-1][1]:
+			print "no overlap 1 ", self.pos[0][0][1] , self.pos[ci][-1][1]
+			return None
+		if self.pos[0][-1][1] < self.pos[ci][0][1]:
+			print "no overlap 2 ", self.pos[0][-1][1] , self.pos[ci][0][1]
+			return None
+		
+		merged = [ (t, i, l) for l in [0, ci] for i, (p, t) in enumerate(self.pos[l]) ]
+		merged_sorted = sorted(merged, key=lambda tup: tup[0])
+		
+		pos_list = []
+		l_prev = merged_sorted[0][2]
+		i_prev = 0
+		for (t, i, l) in merged_sorted:
+			if l < l_prev:
+				q1 = self.pos[l][i][0]
+				q2 = self.pos[l_prev][i_prev][0]
+				pos_list.append(q1 / q2)
+			if l > l_prev:
+				q2 = self.pos[l][i][0]
+				q1 = self.pos[l_prev][i_prev][0]
+				pos_list.append(q1 / q2)
+			
+			l_prev = l
+			i_prev = i
+		#for q in pos_list:
+		#	print q.to_euler()
+		avg = Quaternion.average(pos_list)
+		
+		d = np.array([avg.distance_metric(q) for q in pos_list])
+		
+		d2 = d**2
+		var = np.mean(d2)
+		#print np.where(d2 < var * noise**2)
+		
+		weights = 180.0 - d
+		weights[np.where(d2 > var * noise**2)] = 0
+	
+		
+		return Quaternion.average(pos_list, weights)
 
 	def compute(self, noise=2):
-		if len(self.pos) < 2:
+		if len(self.pos[0]) < 2:
 			return False, None, None
-		qa = np.array([p.a for p in self.pos])
+
+		qlist = [p.a for (p, t) in self.pos[0]]
+		
+		for ci in range(1, len(self.pos)):
+			q_trans = self.camera_position(ci, noise)
+			if q_trans is not None:
+				qlist_ci = [ (q_trans * p).a for (p, t) in self.pos[ci]]
+				qlist.extend(qlist_ci)
+				#qlist = qlist_ci
+		
+				
+		qa = np.array(qlist)
 		
 		qamin = np.amin(qa, axis = 0)
 		qamax = np.amax(qa, axis = 0)

@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 import numpy as np
 from math import *
 
@@ -27,7 +28,7 @@ class Quaternion:
 		x = sr * cpcy - cr * spsy;
 		y = cr * sp * cy + sr * cp * sy;
 		z = cr * cp * sy - sr * sp * cy;
-		self.a = [ w, x, y, z ]
+		self.a = np.array([ w, x, y, z ])
 
 	def to_euler(self):
 		w, x, y, z = self.a
@@ -36,7 +37,11 @@ class Quaternion:
 		yaw = atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z));
 		return np.rad2deg([yaw, pitch, roll]);
 
-#	def to_axis_roll
+	def to_axis_roll(self):
+		qw, qx, qy, qz = self.a
+		roll = degrees(2.0 * acos(qw))
+		a = np.array([qx, qy, qz]) / sqrt(1-qw*qw)
+		return a, roll
 
 	def inv(self):
 		w, x, y, z = self.a
@@ -66,6 +71,17 @@ class Quaternion:
 		dec = degrees(atan2(z, (x ** 2 + y ** 2)**0.5))
 		return [ra, dec]
 	
+	def distance_metric(self, q2):
+		return degrees(acos(2 * np.sum(self.a * q2.a) ** 2 - 1))
+
+	@classmethod
+	def from_axis_roll(cls, a, roll):
+		qw = cos(np.deg2rad(roll / 2.0))
+		a = np.array(a)
+		a = a / np.linalg.norm(a) * sqrt(1-qw*qw)
+		return cls(np.array([qw, a[0], a[1], a[2]]))
+		
+	
 	@classmethod
 	def from_vector_pair(cls, v1, v2):
 		c = np.cross(v1, v2)
@@ -86,4 +102,34 @@ class Quaternion:
 		
 		return cls.from_vector_pair(v1, v2)
 
+	@classmethod
+	def average(cls, qlist, weights = None):
+		if weights is None:
+			m = np.matrix([q.a for q in qlist]).T
+		else:
+			m = np.matrix([q.a * w for w, q in zip(weights, qlist)]).T
+		
+		(w,v) = np.linalg.eig(m * m.T)
+		
+		a = v[:, np.argmax(w)].A1
+		return cls(a)
 
+
+if __name__ == "__main__":
+	q1 = Quaternion([10,0,0])
+	q2 = Quaternion([30,0,0.5])
+	q3 = Quaternion([30,0,0.5])
+
+        d12 = q2/q1
+        d23 = q3/q2
+        d13 = q3/q1
+        
+        print d13.a
+        print d12.a + d23.a
+        
+        
+	a,r = q1.to_axis_roll()
+	print a, r
+	print Quaternion.from_axis_roll(a, r).to_euler()
+	
+	
