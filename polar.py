@@ -55,17 +55,20 @@ class Polar:
 		self.pos = []
 		self.campos = []
 		self.cameras = {}
+		self.campos_avg = []
+		self.campos_adjust = []
 		for i, c in enumerate(cameras):
 			self.cameras[c] = i
-			self.pos.append([])
-			self.campos.append([])
-		self.t0 = None
-		self.p2_from = None
+			self.pos.append(None)
+			self.campos.append(None)
+			self.campos_avg.append(None)
+			self.campos_adjust.append(None)
 		self.prec_q = precession()
 		self.prec_ra, self.prec_dec = self.prec_q.inv().transform_ra_dec([0, 90])
 		self.reset()
 		
 	def reset(self):
+		self.t0 = None
 		self.ra = None
 		self.dec = None
 		self.solved = False
@@ -74,6 +77,12 @@ class Polar:
 		for i in range(0, len(self.pos)):
 			self.pos[i] = []
 			self.campos[i] = []
+			self.campos_avg[i] = None
+			self.campos_adjust[i] = None
+		self.p2_from = None
+		self.ref_ra = None
+		self.ref_dec = None
+		
 
 	def set_mode(self, mode):
 		if mode == 'adjust' and self.solved:
@@ -89,6 +98,9 @@ class Polar:
 			self.mode_adjust_set_pos(ra, dec, roll, t, camera)
 	
 	def mode_solve_set_pos(self, ra, dec, roll, t, camera):
+		ci = self.cameras[camera]
+		pos_orig = Quaternion([ra, dec, roll])
+		self.campos_adjust[ci] = pos_orig
 		if self.t0 is None:
 			self.t0 = t
 		ha = (t - self.t0) / 240.0
@@ -96,8 +108,7 @@ class Polar:
 		#print "qha", quat_axis_to_ra_dec(qha), "prec", self.prec_ra, self.prec_dec 
 		#print Quaternion([ra, dec, roll]).to_euler(), (qha * Quaternion([ra, dec, roll])).to_euler()
 		
-		ci = self.cameras[camera]
-		pos = qha * Quaternion([ra, dec, roll])
+		pos = qha * pos_orig
 		self.pos[ci].append((pos, t))
 		
 		if ci > 0 and len(self.pos[0]) > 0:
@@ -179,7 +190,9 @@ class Polar:
 		weights[np.where(d2 > var * noise**2)] = 0
 	
 		
-		return Quaternion.average(self.campos[ci], weights)
+		avg = Quaternion.average(self.campos[ci], weights)
+		self.campos_avg[ci] = avg
+		return avg
 
 	def solve(self, noise=2):
 		if self.mode == 'adjust':
@@ -294,17 +307,32 @@ class Polar:
 			res.append(t.transform_ra_dec(rd))
 		return res
 
-	def mode_adjust_set_ref_pos(self, ra, dec, roll):
-		self.p2_from = Quaternion([ra, dec, roll])
+	def mode_adjust_set_ref_pos(self):
 		self.ref_ra = self.ra
 		self.ref_dec = self.dec
 		
 	def mode_adjust_set_pos(self, ra, dec, roll, t, camera):
+		ci = self.cameras[camera]
+		pos_orig = Quaternion([ra, dec, roll])
+		self.campos_adjust[ci] = pos_orig
+		
+		poslist = []
+		poslist.append(self.campos_adjust[0])
+		for i in range(1, len(self.pos)):
+			if self.campos_adjust[i] is not None and self.campos_avg[i] is not None:
+				poslist.append(self.campos_avg[i] * self.campos_adjust[i])
+		poslist = [p for p in poslist if p is not None]
+		
+		print [p.to_euler() for p in poslist]
+		
+		pos = Quaternion.average(poslist)
+
 		if self.p2_from is None:
-			return self.mode_adjust_set_ref_pos(ra, dec, roll)
+			self.mode_adjust_set_ref_pos()
+			self.p2_from = pos
 			
-		pos = Quaternion([ra, dec, roll])
 		t = pos / self.p2_from
+		print t.to_euler()
 		self.ra, self.dec = t.transform_ra_dec([self.ref_ra, self.ref_dec])
 	
 

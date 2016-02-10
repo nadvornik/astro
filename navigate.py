@@ -719,18 +719,18 @@ class Navigator:
 				self.solver_off = np.array([0.0, 0.0])
 		if self.polar.mode == 'solve' and not self.polar_secondary:
 			polar_plot = self.polar.plot2()
-			p_status = "#%d %s solv#%d r:%.1f fps:%.1f" % (i, self.status['polar_mode'], i - self.status['i_solver'], self.status['radius'], fps)
+			p_status = "#%d %s solv#%d r:%.1f fps:%.1f" % (i, self.polar.mode, i - self.status['i_solver'], self.status['radius'], fps)
 			cv2.putText(polar_plot, p_status, (10, polar_plot.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255,255,0), 2)
 			ui.imshow(self.ui_capture + '_polar', polar_plot)
 		elif self.polar.mode == 'adjust' and self.wcs is not None:
 			self.polar.set_pos_tan(self.wcs, self.status['t_solver'], self.ui_capture, off = self.plotter_off)
 			if not self.polar_secondary:
 				polar_plot = self.polar.plot2()
-				p_status = "#%d %s solv#%d r:%.1f fps:%.1f" % (i, self.status['polar_mode'], i - self.status['i_solved'], self.status['radius'], fps)
+				p_status = "#%d %s solv#%d r:%.1f fps:%.1f" % (i, self.polar.mode, i - self.status['i_solved'], self.status['radius'], fps)
 				cv2.putText(polar_plot, p_status, (10, polar_plot.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2)
 				ui.imshow(self.ui_capture + '_polar', polar_plot)
 			
-		status = "#%d %s %s  solv#%d r:%.1f fps:%.1f" % (i, self.status['dispmode'], self.status['polar_mode'], i - self.status['i_solver'], self.status['radius'], fps)
+		status = "#%d %s %s  solv#%d r:%.1f fps:%.1f" % (i, self.status['dispmode'], self.polar.mode, i - self.status['i_solver'], self.status['radius'], fps)
 		if (self.status['dispmode'] == 'disp-orig'):
 			disp = normalize(im)
 			cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
@@ -747,7 +747,7 @@ class Navigator:
 		
 				extra_lines = []
 				
-				if self.polar.solved and self.status['polar_mode'] == 'polar-adjust':
+				if self.polar.mode == 'adjust':
 					transf_index = self.polar.transform_ra_dec_list(self.index_sources)
 					extra_lines = [ (si[0], si[1], ti[0], ti[1]) for si, ti in zip(self.index_sources, transf_index) ]
 					
