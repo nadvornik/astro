@@ -606,7 +606,7 @@ def plot_bg(*args, **kwargs):
 	threading.Thread(target=_plot_bg, args = args, kwargs = kwargs).start()
 
 class Navigator:
-	def __init__(self, status, dark, polar, ui_capture):
+	def __init__(self, status, dark, polar, ui_capture, polar_secondary = False):
 		self.status = status
 		self.dark = dark
 		self.stack = Stack()
@@ -630,8 +630,7 @@ class Navigator:
 		self.plotter_off = np.array([0.0, 0.0])
 		self.ui_capture = ui_capture
 		self.polar = polar
-		self.status['polar_mode'] = 'polar-solve'
-		self.polar_solved = False
+		self.polar_secondary = polar_secondary
 		self.index_sources = []
 		self.status['i_solved'] = 0
 		self.status['i_solver'] = 0
@@ -692,12 +691,10 @@ class Navigator:
 				#print "self.solver.ind_radec", self.solver.ind_radec
 				#self.solver.wcs.write_to("log_%d.wcs" % self.ii)
 				#subprocess.call(['touch', '-r', "testimg17_" + str(i) + ".tif", "log_%d.wcs" % self.ii])
-				if self.status['polar_mode'] == 'polar-solve':
-					self.polar.add_tan(self.wcs, self.status['t_solver'], self.ui_capture)
-					if self.polar.compute()[0]:
-						self.polar_solved = True
-				elif self.status['polar_mode'] == 'polar-adjust':
-					self.polar.phase2_set_tan(self.wcs)
+				if self.polar.mode == 'solve':
+					self.polar.set_pos_tan(self.wcs, self.status['t_solver'], self.ui_capture)
+				if not self.polar_secondary:
+					self.polar.solve()
 					
 			else:
 				if self.status['radius'] > 0 and self.status['radius'] < 70:
@@ -720,19 +717,19 @@ class Navigator:
 				#self.solver = Solver(sources_img = filtered, field_w = im.shape[1], field_h = im.shape[0], ra = self.status['ra'], dec = self.status['dec'], field_deg = self.status['field_deg'])
 				self.solver.start()
 				self.solver_off = np.array([0.0, 0.0])
-
-		if self.status['polar_mode'] == 'polar-solve':
+		if self.polar.mode == 'solve' and not self.polar_secondary:
 			polar_plot = self.polar.plot2()
 			p_status = "#%d %s solv#%d r:%.1f fps:%.1f" % (i, self.status['polar_mode'], i - self.status['i_solver'], self.status['radius'], fps)
 			cv2.putText(polar_plot, p_status, (10, polar_plot.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255,255,0), 2)
 			ui.imshow(self.ui_capture + '_polar', polar_plot)
-		elif self.status['polar_mode'] == 'polar-adjust' and self.wcs is not None and self.polar_solved:
-			self.polar.phase2_set_tan(self.wcs, off = self.plotter_off)
-			polar_plot = self.polar.plot2()
-			p_status = "#%d %s solv#%d r:%.1f fps:%.1f" % (i, self.status['polar_mode'], i - self.status['i_solved'], self.status['radius'], fps)
-			cv2.putText(polar_plot, p_status, (10, polar_plot.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2)
-			ui.imshow(self.ui_capture + '_polar', polar_plot)
-		
+		elif self.polar.mode == 'adjust' and self.wcs is not None:
+			self.polar.set_pos_tan(self.wcs, self.status['t_solver'], self.ui_capture, off = self.plotter_off)
+			if not self.polar_secondary:
+				polar_plot = self.polar.plot2()
+				p_status = "#%d %s solv#%d r:%.1f fps:%.1f" % (i, self.status['polar_mode'], i - self.status['i_solved'], self.status['radius'], fps)
+				cv2.putText(polar_plot, p_status, (10, polar_plot.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2)
+				ui.imshow(self.ui_capture + '_polar', polar_plot)
+			
 		status = "#%d %s %s  solv#%d r:%.1f fps:%.1f" % (i, self.status['dispmode'], self.status['polar_mode'], i - self.status['i_solver'], self.status['radius'], fps)
 		if (self.status['dispmode'] == 'disp-orig'):
 			disp = normalize(im)
@@ -750,7 +747,7 @@ class Navigator:
 		
 				extra_lines = []
 				
-				if self.polar_solved and self.status['polar_mode'] == 'polar-adjust':
+				if self.polar.solved and self.status['polar_mode'] == 'polar-adjust':
 					transf_index = self.polar.transform_ra_dec_list(self.index_sources)
 					extra_lines = [ (si[0], si[1], ti[0], ti[1]) for si, ti in zip(self.index_sources, transf_index) ]
 					
@@ -794,12 +791,11 @@ class Navigator:
 			cv2.imwrite(self.ui_capture + str(int(time.time())) + ".tif", self.stack.get())
 
 		if cmd == 'polar-reset':
-			self.polar.reset()
-			self.status['polar_mode'] = 'polar-solve'
-			self.polar_solved = False
+			if not self.polar_secondary:
+				self.polar.reset()
 
-		if cmd == 'polar-align' and self.polar_solved:
-			self.status['polar_mode'] = 'polar-adjust'
+		if cmd == 'polar-align':
+			self.polar.set_mode('adjust')
 
 
 def fit_line(xylist):
@@ -1445,7 +1441,7 @@ class Runner(threading.Thread):
 		profiler.add_function(match_triangle)
 		profiler.add_function(Runner.run)
 		profiler.add_function(Camera_test.capture)
-		profiler.add_function(Polar.compute)
+		profiler.add_function(Polar.solve)
 		#profiler.add_function(Polar.camera_position)
 		
 		profiler.enable_by_count()
@@ -1742,7 +1738,6 @@ def run_test_2():
 	ui.namedWindow('capture')
 	ui.namedWindow('capture_v4l')
 	ui.namedWindow('capture_polar')
-	ui.namedWindow('capture_v4l_polar')
 
         polar = Polar(['capture', 'capture_v4l'])
 
@@ -1752,7 +1747,7 @@ def run_test_2():
 	cam1 = Camera_test(status.path(["navigator", "camera"]))
 	nav1 = Navigator(status.path(["navigator"]), dark1, polar, 'capture')
 
-	nav = Navigator(status.path(["guider", "navigator"]), dark2, polar, 'capture_v4l')
+	nav = Navigator(status.path(["guider", "navigator"]), dark2, polar, 'capture_v4l', polar_secondary = True)
 	go = GuideOut()
 	guider = Guider(status.path(["guider"]), go, dark2, 'capture_v4l')
 	#cam = Camera_test_g(status.path(["guider", "camera"]), go)
@@ -1785,7 +1780,7 @@ def run_test_2_gphoto():
 	focuser = Focuser('capture', dark = dark1)
 	zoom_focuser = Focuser('capture')
 
-	nav = Navigator(status.path(["guider", "navigator"]), dark2, polar, 'capture_v4l')
+	nav = Navigator(status.path(["guider", "navigator"]), dark2, polar, 'capture_v4l', polar_secondary = True)
 	go = GuideOut()
 	guider = Guider(status.path(["guider"]), go, dark2, 'capture_v4l')
 	cam = Camera_test_g(status.path(["guider", "camera"]), go)
@@ -1793,7 +1788,6 @@ def run_test_2_gphoto():
 	ui.namedWindow('capture')
 	ui.namedWindow('capture_v4l')
 	ui.namedWindow('capture_polar')
-	ui.namedWindow('capture_v4l_polar')
 	ui.namedWindow('full_res')
 
 	go.out(1, 10) # move aside for 10s to collect darkframes
@@ -1828,14 +1822,13 @@ def run_2():
 	focuser = Focuser('capture', dark = dark1)
 	zoom_focuser = Focuser('capture')
 
-	nav = Navigator(status.path(["guider", "navigator"]), dark2, polar, 'capture_v4l')
+	nav = Navigator(status.path(["guider", "navigator"]), dark2, polar, 'capture_v4l', polar_secondary = True)
 	go = GuideOut()
 	guider = Guider(status.path(["guider"]), go, dark2, 'capture_v4l')
 
 	ui.namedWindow('capture')
 	ui.namedWindow('capture_v4l')
 	ui.namedWindow('capture_polar')
-	ui.namedWindow('capture_v4l_polar')
 	ui.namedWindow('full_res')
 
 	

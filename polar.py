@@ -61,11 +61,31 @@ class Polar:
 		self.p2_from = None
 		self.prec_q = precession()
 		self.prec_ra, self.prec_dec = self.prec_q.inv().transform_ra_dec([0, 90])
+		self.reset()
+		
+	def reset(self):
 		self.ra = None
 		self.dec = None
+		self.solved = False
+		self.mode = 'solve'
 		self.gps = (50.0, 15.0)
-		
-	def add(self, ra, dec, roll, t, camera):
+		for i in range(0, len(self.pos)):
+			self.pos[i] = []
+
+	def set_mode(self, mode):
+		if mode == 'adjust' and self.solved:
+			self.mode = 'adjust'
+		else:
+			self.mode = 'solve'
+			
+	
+	def set_pos(self, ra, dec, roll, t, camera):
+		if self.mode == 'solve':
+			self.mode_solve_set_pos(ra, dec, roll, t, camera)
+		elif self.mode == 'adjust':
+			self.mode_adjust_set_pos(ra, dec, roll, t, camera)
+	
+	def mode_solve_set_pos(self, ra, dec, roll, t, camera):
 		if self.t0 is None:
 			self.t0 = t
 		ha = (t - self.t0) / 240.0
@@ -96,10 +116,10 @@ class Polar:
 		
 		return ra, dec, orient
 
-	def add_tan(self, tan, t, camera):
-		ra, dec, orient = self.tan_to_euler(tan)
+	def set_pos_tan(self, tan, t, camera, off = (0, 0)):
+		ra, dec, orient = self.tan_to_euler(tan, off)
 		#print ra, dec, orient
-		self.add(ra, dec, orient, t, camera)
+		self.set_pos(ra, dec, orient, t, camera)
 		#print "added ", t
 
 
@@ -175,9 +195,11 @@ class Polar:
 		
 		return Quaternion.average(pos_list, weights)
 
-	def compute(self, noise=2):
+	def solve(self, noise=2):
+		if self.mode == 'adjust':
+			return self.ra, self.dec
 		if len(self.pos[0]) < 2:
-			return False, None, None
+			return None, None
 
 		qlist = [p.a for (p, t) in self.pos[0]]
 		
@@ -241,8 +263,9 @@ class Polar:
 		
 		self.ra = ra
 		self.dec = dec
+		self.solved = True
 		#print "rotation center", ra, dec
-		return True, ra, dec
+		return ra, dec
 
 		
 		#fig = plt.figure()
@@ -282,27 +305,19 @@ class Polar:
 			res.append(t.transform_ra_dec(rd))
 		return res
 
-	def phase2_set_ref_pos(self, ra, dec, roll):
+	def mode_adjust_set_ref_pos(self, ra, dec, roll):
 		self.p2_from = Quaternion([ra, dec, roll])
 		self.ref_ra = self.ra
 		self.ref_dec = self.dec
 		
-	def phase2_set_ref_tan(self, tan):
-		ra, dec, orient = self.tan_to_euler(tan)
-		self.phase2_set_ref_pos(ra, dec, orient)
-	
-	def phase2_set_pos(self, ra, dec, roll):
+	def mode_adjust_set_pos(self, ra, dec, roll, t, camera):
 		if self.p2_from is None:
-			return self.phase2_set_ref_pos(ra, dec, roll)
+			return self.mode_adjust_set_ref_pos(ra, dec, roll)
 			
 		pos = Quaternion([ra, dec, roll])
 		t = pos / self.p2_from
 		self.ra, self.dec = t.transform_ra_dec([self.ref_ra, self.ref_dec])
 	
-	def phase2_set_tan(self, tan, off = (0, 0)):
-		ra, dec, orient = self.tan_to_euler(tan, off)
-		self.phase2_set_pos(ra, dec, orient)
-
 
 	def plot2(self, size = 960, area = 0.1):
 		ha = celestial_rot() + self.gps[1]
@@ -407,7 +422,7 @@ if __name__ == "__main__":
 #		for i in range(1, len(p.pos)):
 #			ra, dec = p.compute2(0,i)
 #			extra.append((ra, dec, ""))
-		res, ra, dec = p.compute()
+		res, ra, dec = p.solve()
 		extra.append((ra, dec, "1"))
 		
 
@@ -428,7 +443,7 @@ if __name__ == "__main__":
 #			extra.append((ra, dec, ""))
 #			ra, dec = p.compute2(i,len(p.pos) - 1)
 #			extra.append((ra, dec, ""))
-		res, ra, dec = p.compute()
+		res, ra, dec = p.solve()
 		extra.append((ra, dec, "2"))
 
 	
@@ -441,7 +456,7 @@ if __name__ == "__main__":
 	          1446322596]:
 		tan = Tan('t/capture_gphoto%d.wcs' % t , 0)
 		p.add_tan(tan, t)
-	res, ra, dec = p.compute()
+	res, ra, dec = p.solve()
 	extra.append((ra, dec, "gphoto"))
 	
 	p = Polar()
@@ -452,7 +467,7 @@ if __name__ == "__main__":
 	          1446322596]:
 		tan = Tan('t/capture_v4l%d.wcs' % t , 0)
 		p.add_tan(tan, t)
-	res, ra, dec = p.compute()
+	res, ra, dec = p.solve()
 	extra.append((ra, dec, "v4l2"))
 	cv2.imshow("polar", p.plot2())
 	
@@ -463,7 +478,7 @@ if __name__ == "__main__":
 	#	for j in range(i, i+2000):
 	#		tan = Tan('log_%d.wcs' % (j),0)
 	#		pp.add_tan(tan, 0)
-	#	ra, dec = pp.compute()
+	#	ra, dec = pp.solve()
 	#	extra.append((ra, dec, ""))
 
 	
