@@ -28,6 +28,7 @@ class Camera_gphoto:
 		self.status.setdefault('test-exp-sec', 15)
 		self.status.setdefault('f-number', '5.6')
 		self.status['cur_time'] = 0
+		self.status['exp_in_progress'] = False
 
 	def get_config_value(self, name):
 		config = gp.check_result(gp.gp_camera_get_config(self.camera, self.context))
@@ -95,18 +96,18 @@ class Camera_gphoto:
 		
 		self.set_config_value('eosremoterelease', 'Immediate')
 		self.t_start = time.time()
-		exp_in_progress = True
+		self.status['exp_in_progress'] = True
 		while True:
 			e, file_path =  gp.check_result(gp.gp_camera_wait_for_event(self.camera, 1000,self.context))
 			t = time.time() - self.t_start
 			print "camera event ", t, e, file_path
 			
-			if exp_in_progress:
+			if self.status['exp_in_progress']:
 				self.status['cur_time'] = int(t)
 
-			if exp_in_progress and t > sec:
+			if self.status['exp_in_progress'] and t > sec:
 				self.set_config_value('eosremoterelease', 'Release Full')
-				exp_in_progress = False
+				self.status['exp_in_progress'] = False
 
 			
 			if e == gp.GP_EVENT_FILE_ADDED:
@@ -276,7 +277,6 @@ class Camera_gphoto:
 			
 		except gp.GPhoto2Error as ex:
 			print "Unexpected error: " + sys.exc_info().__str__()
-			print "code:", ex.code
 			stacktraces()
 			time.sleep(1)
 			if ex.code == -7 or ex.code == -1:
@@ -317,6 +317,7 @@ class Camera_gphoto:
 
 	
 	def shutdown(self):
+		self.set_config_value('eosremoterelease', 'Release Full')
 		gp.check_result(gp.gp_camera_exit(self.camera, self.context))
 	
 	
