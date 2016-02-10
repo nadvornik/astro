@@ -53,10 +53,12 @@ def precession():
 class Polar:
 	def __init__(self, cameras):
 		self.pos = []
+		self.campos = []
 		self.cameras = {}
 		for i, c in enumerate(cameras):
 			self.cameras[c] = i
 			self.pos.append([])
+			self.campos.append([])
 		self.t0 = None
 		self.p2_from = None
 		self.prec_q = precession()
@@ -71,6 +73,7 @@ class Polar:
 		self.gps = (50.0, 15.0)
 		for i in range(0, len(self.pos)):
 			self.pos[i] = []
+			self.campos[i] = []
 
 	def set_mode(self, mode):
 		if mode == 'adjust' and self.solved:
@@ -94,7 +97,21 @@ class Polar:
 		#print Quaternion([ra, dec, roll]).to_euler(), (qha * Quaternion([ra, dec, roll])).to_euler()
 		
 		ci = self.cameras[camera]
-		self.pos[ci].append((qha * Quaternion([ra, dec, roll]), t))
+		pos = qha * Quaternion([ra, dec, roll])
+		self.pos[ci].append((pos, t))
+		
+		if ci > 0 and len(self.pos[0]) > 0:
+			prev_pos, prev_t = self.pos[0][-1]
+			if abs(t - prev_t) < 10:
+				self.campos[ci].append(prev_pos / pos)
+		elif ci == 0:
+			for i in range(1, len(self.pos)):
+				if len(self.pos[i]) > 0:
+					prev_pos, prev_t = self.pos[i][-1]
+					if abs(t - prev_t) < 10:
+						self.campos[i].append(pos / prev_pos)
+
+			
 
 	def tan_to_euler(self, tan, off=(0,0)):
 		ra, dec = tan.radec_center()
@@ -148,42 +165,11 @@ class Polar:
 		return True, ra, dec
 	
 	def camera_position(self, ci, noise = 2):
-		print "camera_position", ci
-		if ci == 0:
-			return Quaternion([0, 0, 0])
-		
-		if len(self.pos[0]) == 0 or len(self.pos[ci]) == 0:
+		if len(self.campos[ci]) == 0:
 			return None
-		if self.pos[0][0][1] > self.pos[ci][-1][1]:
-			print "no overlap 1 ", self.pos[0][0][1] , self.pos[ci][-1][1]
-			return None
-		if self.pos[0][-1][1] < self.pos[ci][0][1]:
-			print "no overlap 2 ", self.pos[0][-1][1] , self.pos[ci][0][1]
-			return None
+		avg = Quaternion.average(self.campos[ci])
 		
-		merged = [ (t, i, l) for l in [0, ci] for i, (p, t) in enumerate(self.pos[l]) ]
-		merged_sorted = sorted(merged, key=lambda tup: tup[0])
-		
-		pos_list = []
-		l_prev = merged_sorted[0][2]
-		i_prev = 0
-		for (t, i, l) in merged_sorted:
-			if l < l_prev:
-				q1 = self.pos[l][i][0]
-				q2 = self.pos[l_prev][i_prev][0]
-				pos_list.append(q1 / q2)
-			if l > l_prev:
-				q2 = self.pos[l][i][0]
-				q1 = self.pos[l_prev][i_prev][0]
-				pos_list.append(q1 / q2)
-			
-			l_prev = l
-			i_prev = i
-		#for q in pos_list:
-		#	print q.to_euler()
-		avg = Quaternion.average(pos_list)
-		
-		d = np.array([avg.distance_metric(q) for q in pos_list])
+		d = np.array([avg.distance_metric(q) for q in self.campos[ci]])
 		
 		d2 = d**2
 		var = np.mean(d2)
@@ -193,7 +179,7 @@ class Polar:
 		weights[np.where(d2 > var * noise**2)] = 0
 	
 		
-		return Quaternion.average(pos_list, weights)
+		return Quaternion.average(self.campos[ci], weights)
 
 	def solve(self, noise=2):
 		if self.mode == 'adjust':
@@ -205,6 +191,9 @@ class Polar:
 		
 		for ci in range(1, len(self.pos)):
 			q_trans = self.camera_position(ci, noise)
+			if q_trans is not None:
+				print q_trans.to_euler()
+			
 			if q_trans is not None:
 				qlist_ci = [ (q_trans * p).a for (p, t) in self.pos[ci]]
 				qlist.extend(qlist_ci)

@@ -104,6 +104,8 @@ class Quaternion:
 
 	@classmethod
 	def average(cls, qlist, weights = None):
+		if len(qlist) == 0:
+			return None
 		if weights is None:
 			m = np.matrix([q.a for q in qlist]).T
 		else:
