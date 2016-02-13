@@ -184,13 +184,12 @@ class Polar:
 		
 		d2 = d**2
 		var = np.mean(d2)
-		#print np.where(d2 < var * noise**2)
+		#print var * noise**2
+		#print d2
+		#print np.where(d2 < var * noise**2)[0]
+		self.campos[ci] = [self.campos[ci][i] for i in np.where(d2 < var * noise**2)[0]]
 		
-		weights = 180.0 - d
-		weights[np.where(d2 > var * noise**2)] = 0
-	
-		
-		avg = Quaternion.average(self.campos[ci], weights)
+		avg = Quaternion.average(self.campos[ci])
 		self.campos_avg[ci] = avg
 		return avg
 
