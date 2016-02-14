@@ -276,6 +276,11 @@ def find_nearest(array, val):
 	idx = diff.argmin()
 	return np.unravel_index(idx, array.shape), diff[idx]
 
+def pairwise_dist(x):
+	b = np.dot(x, x.T)
+	q = np.diag(b)[:, None]
+	return np.sqrt(q + q.T - 2 * b)
+
 def match_triangle(pt1, pt2, maxdif = 5.0, maxdrift = 10, off = (0.0, 0.0)):
 	if len(pt1) == 0 or len(pt2) == 0:
 		return match_take(pt1, pt2, [])
@@ -286,9 +291,9 @@ def match_triangle(pt1, pt2, maxdif = 5.0, maxdrift = 10, off = (0.0, 0.0)):
 	pt1s = pt1[ord1][:12]
 	pt2s = pt2[ord2][:12]
 	
-	dist1 = np.array([ [ ((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2) ** 0.5 for p1 in pt1s ] for p2 in pt1s ])
-	dist2 = np.array([ [ ((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2) ** 0.5 for p1 in pt2s ] for p2 in pt2s ])
-
+	dist1 = pairwise_dist(pt1s[:, 0:2])
+	dist2 = pairwise_dist(pt2s[:, 0:2])
+	
 	bestmatch = []
 
 	for a1 in range(0, len(pt1) - 2):
