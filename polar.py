@@ -114,13 +114,13 @@ class Polar:
 		if ci > 0 and len(self.pos[0]) > 0:
 			prev_pos, prev_t = self.campos_adjust[0]
 			if abs(t - prev_t) < 10:
-				self.campos[ci].append(prev_pos / pos_orig)
+				self.campos[ci].append(pos_orig.inv() * prev_pos)
 		elif ci == 0:
 			for i in range(1, len(self.pos)):
 				if len(self.pos[i]) > 0:
 					prev_pos, prev_t = self.campos_adjust[i]
 					if abs(t - prev_t) < 10:
-						self.campos[i].append(pos_orig / prev_pos)
+						self.campos[i].append(prev_pos.inv() * pos_orig)
 
 			
 
@@ -176,7 +176,7 @@ class Polar:
 		return True, ra, dec
 	
 	def camera_position(self, ci, noise = 2):
-		if len(self.campos[ci]) == 0:
+		if len(self.campos[ci]) < 2:
 			return None
 		avg = Quaternion.average(self.campos[ci])
 		
@@ -204,12 +204,17 @@ class Polar:
 		for ci in range(1, len(self.pos)):
 			q_trans = self.camera_position(ci, noise)
 			if q_trans is not None:
-				print q_trans.to_euler()
+				print "q_trans", q_trans.to_euler()
 			
+			#q_trans=Quaternion([0,1,0])
 			if q_trans is not None:
-				qlist_ci = [ (q_trans * p).a for (p, t) in self.pos[ci]]
+				qlist_ci = [ (p * q_trans).a for (p, t) in self.pos[ci]]
+				#print "qlist",  [ Quaternion(q).to_euler() for q in qlist]
+				#print "qlist_ci", [ Quaternion(q).to_euler() for q in qlist_ci]
+				#print "orig_ci", [ q.to_euler() for (q, t) in self.pos[ci]]
 				qlist.extend(qlist_ci)
-				#qlist = qlist_ci
+				#if len(qlist_ci) > 2:
+				#	qlist = qlist_ci
 		
 				
 		qa = np.array(qlist)
@@ -323,7 +328,7 @@ class Polar:
 			if abs(t - prev_t) > 10:
 				continue
 			if i > 0  and self.campos_avg[i] is not None:
-				prev_pos = self.campos_avg[i] * prev_pos
+				prev_pos =  prev_pos * self.campos_avg[i]
 			poslist.append(prev_pos)
 		
 		print [p.to_euler() for p in poslist]
