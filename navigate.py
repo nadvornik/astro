@@ -283,8 +283,8 @@ def match_triangle(pt1, pt2, maxdif = 5.0, maxdrift = 10, off = (0.0, 0.0)):
 	ord1 = np.argsort(pt1[:, 2])[::-1]
 	ord2 = np.argsort(pt2[:, 2])[::-1]
 	
-	pt1s = pt1[ord1][:10]
-	pt2s = pt2[ord2][:10]
+	pt1s = pt1[ord1][:12]
+	pt2s = pt2[ord2][:12]
 	
 	dist1 = np.array([ [ ((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2) ** 0.5 for p1 in pt1s ] for p2 in pt1s ])
 	dist2 = np.array([ [ ((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2) ** 0.5 for p1 in pt2s ] for p2 in pt2s ])
@@ -585,7 +585,7 @@ class Stack:
 
 	def get_xy(self):
 		if self.xy is None:
-			self.xy = np.array(find_max(self.img, 12, n = 20))
+			self.xy = np.array(find_max(self.img, 12, n = 30))
 
 		return self.xy
 
