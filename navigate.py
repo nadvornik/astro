@@ -1806,7 +1806,7 @@ def run_test_2_gphoto():
 
 def run_2():
 	global status
-	status = Status("run_v4l2.conf")
+	status = Status("run_2.conf")
 	cam = Camera(status.path(["guider", "camera"]))
 	cam.prepare(1280, 960)
 	
