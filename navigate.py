@@ -508,6 +508,7 @@ def pt_transform_opt(pt1m, pt2m, noise = 2, pt_func = pt_translation):
 class Stack:
 	def __init__(self, ratio = 0.1):
 		self.img = None
+		self.match = None
 		self.prev_pt = []
 		self.prev_pt_verified = []
 		self.xy = None
@@ -518,6 +519,7 @@ class Stack:
 			im = cv2.multiply(im, 255.0, dtype=cv2.CV_16UC1)
 		if (self.img is None):
 			self.img = im
+			self.match = im
 			return np.matrix([[1., 0], [0, 1.], [0, 0]])
 			
 		pt2 = find_max(im, 12, n = 40)
@@ -569,7 +571,6 @@ class Stack:
 				cv2.circle(self.match, (int(p[1]), int(p[0])), 5, (255), 1)
 			for p in pt2m:
 				cv2.circle(self.match, (int(p[1]), int(p[0])), 10, (255), 1)
-		
 		return M
 
 	def add_simple(self, im):
@@ -1667,7 +1668,7 @@ def run_v4l2_g():
 
         polar = Polar(['capture'])
 
-	cam = Camera(status.path(["guider", "camera"]))
+	cam = Camera(status.path(["guider", "navigator", "camera"]))
 	cam.prepare(1280, 960)
 
 	dark = Median(5)
@@ -1688,7 +1689,7 @@ def run_gphoto_g():
 
         polar = Polar(['capture'])
 
-	cam = Camera_gphoto(status.path(["guider", "camera"]))
+	cam = Camera_gphoto(status.path(["guider", "navigator", "camera"]))
 	cam.prepare()
 
 	dark = Median(5)
@@ -1713,7 +1714,7 @@ def run_test_g():
 	nav = Navigator(status.path(["guider", "navigator"]), dark, polar, 'capture')
 	go = GuideOut()
 	guider = Guider(status.path(["guider"]), go, dark, 'capture')
-	cam = Camera_test_g(status.path(["guider", "camera"]), go)
+	cam = Camera_test_g(status.path(["guider", "navigator", "camera"]), go)
 
 	runner = Runner(cam, navigator = nav, guider = guider)
 	runner.start()
@@ -1755,8 +1756,8 @@ def run_test_2():
 	nav = Navigator(status.path(["guider", "navigator"]), dark2, polar, 'capture_v4l', polar_secondary = True)
 	go = GuideOut()
 	guider = Guider(status.path(["guider"]), go, dark2, 'capture_v4l')
-	#cam = Camera_test_g(status.path(["guider", "camera"]), go)
-	cam = Camera_test_shift(status.path(["guider", "camera"]), cam1, 3000)
+	#cam = Camera_test_g(status.path(["guider", "navigator", "camera"]), go)
+	cam = Camera_test_shift(status.path(["guider", "navigator", "camera"]), cam1, 3000)
 	
 	runner = Runner(cam1, navigator = nav1)
 	runner.start()
@@ -1788,7 +1789,7 @@ def run_test_2_gphoto():
 	nav = Navigator(status.path(["guider", "navigator"]), dark2, polar, 'capture_v4l', polar_secondary = True)
 	go = GuideOut()
 	guider = Guider(status.path(["guider"]), go, dark2, 'capture_v4l')
-	cam = Camera_test_g(status.path(["guider", "camera"]), go)
+	cam = Camera_test_g(status.path(["guider", "navigator", "camera"]), go)
 
 	ui.namedWindow('capture')
 	ui.namedWindow('capture_v4l')
@@ -1812,7 +1813,7 @@ def run_test_2_gphoto():
 def run_2():
 	global status
 	status = Status("run_2.conf")
-	cam = Camera(status.path(["guider", "camera"]))
+	cam = Camera(status.path(["guider", "navigator", "camera"]))
 	cam.prepare(1280, 960)
 	
 	cam1 = Camera_gphoto(status.path(["navigator", "camera"]))
