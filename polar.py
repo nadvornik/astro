@@ -100,7 +100,7 @@ class Polar:
 	def mode_solve_set_pos(self, ra, dec, roll, t, camera):
 		ci = self.cameras[camera]
 		pos_orig = Quaternion([ra, dec, roll])
-		self.campos_adjust[ci] = pos_orig
+		self.campos_adjust[ci] = (pos_orig, t)
 		if self.t0 is None:
 			self.t0 = t
 		ha = (t - self.t0) / 240.0
@@ -112,15 +112,15 @@ class Polar:
 		self.pos[ci].append((pos, t))
 		
 		if ci > 0 and len(self.pos[0]) > 0:
-			prev_pos, prev_t = self.pos[0][-1]
+			prev_pos, prev_t = self.campos_adjust[0]
 			if abs(t - prev_t) < 10:
-				self.campos[ci].append(prev_pos / pos)
+				self.campos[ci].append(prev_pos / pos_orig)
 		elif ci == 0:
 			for i in range(1, len(self.pos)):
 				if len(self.pos[i]) > 0:
-					prev_pos, prev_t = self.pos[i][-1]
+					prev_pos, prev_t = self.campos_adjust[i]
 					if abs(t - prev_t) < 10:
-						self.campos[i].append(pos / prev_pos)
+						self.campos[i].append(pos_orig / prev_pos)
 
 			
 
@@ -313,14 +313,18 @@ class Polar:
 	def mode_adjust_set_pos(self, ra, dec, roll, t, camera):
 		ci = self.cameras[camera]
 		pos_orig = Quaternion([ra, dec, roll])
-		self.campos_adjust[ci] = pos_orig
+		self.campos_adjust[ci] = (pos_orig, t)
 		
 		poslist = []
-		poslist.append(self.campos_adjust[0])
-		for i in range(1, len(self.pos)):
-			if self.campos_adjust[i] is not None and self.campos_avg[i] is not None:
-				poslist.append(self.campos_avg[i] * self.campos_adjust[i])
-		poslist = [p for p in poslist if p is not None]
+		for i in range(0, len(self.pos)):
+			if self.campos_adjust[i] is None:
+				continue
+			prev_pos, prev_t = self.campos_adjust[i]
+			if abs(t - prev_t) > 10:
+				continue
+			if i > 0  and self.campos_avg[i] is not None:
+				prev_pos = self.campos_avg[i] * prev_pos
+			poslist.append(prev_pos)
 		
 		print [p.to_euler() for p in poslist]
 		
