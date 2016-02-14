@@ -52,6 +52,7 @@ class Camera:
         self.buffers = []
         self.i = 0
         self.dev_name = self.status.setdefault("device", "/dev/video0")
+        self.status['lensname'] = 'default'
         self.vd = None
 
     def _prepare(self, width, height, format = V4L2_PIX_FMT_SBGGR16):
