@@ -18,6 +18,13 @@ def quat_axis_to_ra_dec(q):
 	dec = math.degrees(math.atan2(z, (x ** 2 + y ** 2)**0.5))
 	return (ra, dec)
 
+def xyz_to_ra_dec(v):
+	(x,y,z) = v
+	#print "xyz", x,y,z
+	ra = math.degrees(math.atan2(y,x))
+	dec = math.degrees(math.atan2(z, (x ** 2 + y ** 2)**0.5))
+	return (ra, dec)
+
 def ra_dec_to_xyz(rd):
 	rd = np.deg2rad(rd)
 	v = [ math.cos(rd[0]) * math.cos(rd[1]), math.sin(rd[0]) * math.cos(rd[1]), math.sin(rd[1]) ]
@@ -193,7 +200,7 @@ class Polar:
 		self.campos_avg[ci] = avg
 		return avg
 
-	def solve(self, noise=2):
+	def solve_(self, noise=2):
 		if self.mode == 'adjust':
 			return self.ra, self.dec
 		if len(self.pos[0]) < 2:
@@ -282,6 +289,82 @@ class Polar:
 		#ax.scatter(qa[:,0], qa[:,1], qa[:,0] * res2[0] + qa[:,1] * res2[1] + res2[2], c=qa[:,3], cmap=plt.hot())
 		#plt.show()
 
+	def solve(self, noise=2):
+		if self.mode == 'adjust':
+			return self.ra, self.dec
+		if len(self.pos[0]) < 3:
+			return None, None
+
+		weights = np.matrix(np.zeros((2, 2)))
+		wsum = np.zeros((2,1))
+
+		for ci in range(0, len(self.pos)):
+			if len(self.pos[ci]) < 3:
+				continue
+				
+			qlist = [ p for (p, t) in self.pos[ci]]
+				
+			avg = Quaternion.average(qlist).inv()
+			alist = []
+			for q in qlist:
+				q0 = q * avg
+				if abs(q0.a[0]) < 0.7:
+					ax, roll = q0.to_axis_roll()
+					q0 = Quaternion.from_axis_roll(ax, roll - 180)
+
+				a = q0.a[1:4] / q0.a[0]
+				alist.append(a)
+			aa = np.array(alist)
+
+
+			d2 = np.sum(aa[:, 0:2] ** 2, axis = 1)
+			var = np.mean(d2)
+
+			aa = aa[np.where(d2 < var * 4)]
+
+
+			line = cv2.fitLine(aa / aa[0,2] * 100, cv2.DIST_L2, 0.001, 0.000001, 0.000001)[0:3].reshape(3)
+
+			line2d = line[0:2] / line[2]
+			aa2d = aa[:, 0:2] - np.outer(aa[:, 2],  line2d)
+			cov =np.cov(aa2d.T)
+			print cov
+			w = np.matrix(cov).I
+			print ci, "w", w
+			weights += w
+			wsum += w * line2d.reshape((2,1))
+	
+			print ci, "weights", weights
+			print ci, "wsum", wsum
+	
+
+		line2d = weights.I * wsum
+		print "res", line2d
+		line = np.array([line2d[0,0], line2d[1,0], 1])
+
+		ra, dec = xyz_to_ra_dec(line)
+		
+		if dec < 0:
+			dec = -dec
+			ra -= 180
+		if ra < 0.0 :
+			ra += 360
+		
+		self.ra = ra
+		self.dec = dec
+		self.solved = True
+		#print "rotation center", ra, dec
+		print "prec", self.prec_ra, self.prec_dec
+		return ra, dec
+
+		#fig = plt.figure()
+		#ax = fig.add_subplot(111, projection='3d')
+
+		#ax.scatter(qa[:,0], qa[:,1], qa[:,2], c=qa[:,3], cmap=plt.hot())
+		#ax.scatter(qa[:,0], qa[:,1], qa[:,3], c=qa[:,3], cmap=plt.hot())
+		#ax.scatter(qa[:,0], qa[:,1], qa[:,0] * res2[0] + qa[:,1] * res2[1] + res2[2], c=qa[:,3], cmap=plt.hot())
+		#plt.show()
+
 	def plot(self):
 		extra = []
 		if self.ra is not None and self.dec is not None:
@@ -327,6 +410,8 @@ class Polar:
 			prev_pos, prev_t = self.campos_adjust[i]
 			if abs(t - prev_t) > 10:
 				continue
+			if i > 0  and self.campos_avg[i] is None:
+				self.camera_position(i)
 			if i > 0  and self.campos_avg[i] is not None:
 				prev_pos =  prev_pos * self.campos_avg[i]
 			poslist.append(prev_pos)
