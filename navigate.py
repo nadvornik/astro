@@ -813,7 +813,7 @@ def fit_line(xylist):
 class Guider:
 	def __init__(self, status, go, dark, ui_capture):
 		self.status = status
-		self.status.setdefault('aggressivness', 1.3)
+		self.status.setdefault('aggressivness', 0.6)
 		self.go = go
 		self.dark = dark
 		self.reset()
