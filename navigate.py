@@ -780,11 +780,18 @@ class Navigator:
 		self.prev_t = t
 		
 	def cmd(self, cmd):
-		if cmd == 'solver-reset' and self.solver is not None:
-			self.solver.terminate(wait=True)
+		if cmd == 'solver-reset':
+			if self.solver is not None:
+				self.solver.terminate(wait=True)
 			self.status['field_deg'] = None
 			self.solver = None
 			self.plotter = None
+			self.status['ra'], self.status['dec'] = self.polar.zenith()
+			self.status['radius'] = self.status['max_radius']
+
+		if cmd == 'solver-retry':
+			if self.solver is not None:
+				self.solver.terminate(wait=False)
 			self.status['ra'], self.status['dec'] = self.polar.zenith()
 			self.status['radius'] = self.status['max_radius']
 

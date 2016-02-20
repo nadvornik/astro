@@ -14,7 +14,8 @@ class MyGUI_CV2(threading.Thread):
 	cmds = {
 		ord('q') : 'exit',
 		27 : 'exit',
-		ord(' ') : 'solver-reset',
+		ord(' ') : 'solver-retry',
+		ord('\\') : 'solver-reset',
 		ord('d') : 'dark',
 		ord('g') : 'guider',
 		ord('f') : 'navigator',
