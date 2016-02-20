@@ -874,6 +874,11 @@ class Guider:
 			self.capture_in_progress = True
 		if cmd == "capture-finished":
 			self.capture_in_progress = False
+		if cmd.startswith('aggressivness-'):
+			try:
+				self.status['aggressivness'] = float(cmd[len('aggressivness-'):])
+			except:
+				pass
 
 	def proc_frame(self, im, i):
 
