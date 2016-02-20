@@ -810,6 +810,14 @@ class Navigator:
 		if cmd == 'polar-align':
 			self.polar.set_mode('adjust')
 
+		if cmd.startswith('gps') and self.polar_tid is not None:
+			try:
+				str_gps = cmd[len('gps'):]
+				(lat, lon) = [float(n) for n in str_gps.split(',')]
+				self.polar.set_gps((lat, lon))
+			except:
+				print "Error: " +  sys.exc_info().__str__()
+			
 
 def fit_line(xylist):
 	a = np.array(xylist)
@@ -1635,7 +1643,7 @@ def run_v4l2():
 	ui.namedWindow('navigator')
 	ui.namedWindow('polar')
 
-        polar = Polar(['navigator'])
+        polar = Polar(status.path(["polar"]), ['navigator'])
 	cam = Camera(status.path(["navigator", "camera"]))
 	cam.prepare(1280, 960)
 	dark = Median(5)
@@ -1655,7 +1663,7 @@ def run_gphoto():
 	ui.namedWindow('polar')
 	ui.namedWindow('full_res')
 
-        polar = Polar(['navigator'])
+        polar = Polar(status.path(["polar"]), ['navigator'])
 
 	dark = Median(5)
 	nav = Navigator(status.path(["navigator"]), dark, polar, 'navigator', polar_tid = 'polar')
@@ -1674,7 +1682,7 @@ def run_v4l2_g():
 	ui.namedWindow('navigator')
 	ui.namedWindow('polar')
 
-        polar = Polar(['navigator'])
+        polar = Polar(status.path(["polar"]), ['navigator'])
 
 	cam = Camera(status.path(["guider", "navigator", "camera"]))
 	cam.prepare(1280, 960)
@@ -1695,7 +1703,7 @@ def run_gphoto_g():
 	ui.namedWindow('navigator')
 	ui.namedWindow('polar')
 
-        polar = Polar(['navigator'])
+        polar = Polar(status.path(["polar"]), ['navigator'])
 
 	cam = Camera_gphoto(status.path(["guider", "navigator", "camera"]))
 	cam.prepare()
@@ -1716,7 +1724,7 @@ def run_test_g():
 	ui.namedWindow('navigator')
 	ui.namedWindow('polar')
 
-        polar = Polar(['navigator'])
+        polar = Polar(status.path(["polar"]), ['navigator'])
 
 	dark = Median(5)
 	nav = Navigator(status.path(["guider", "navigator"]), dark, polar, 'navigator', polar_tid = 'polar')
@@ -1735,7 +1743,7 @@ def run_test():
 	ui.namedWindow('navigator')
 	ui.namedWindow('polar')
 
-        polar = Polar(['navigator'])
+        polar = Polar(status.path(["polar"]), ['navigator'])
 
 	cam = Camera_test(status.path(["navigator", "camera"]))
 	dark = Median(5)
@@ -1753,7 +1761,7 @@ def run_test_2():
 	ui.namedWindow('guider')
 	ui.namedWindow('polar')
 
-        polar = Polar(['navigator', 'guider'])
+        polar = Polar(status.path(["polar"]), ['navigator', 'guider'])
 
 	dark1 = Median(5)
 	dark2 = Median(5)
@@ -1785,7 +1793,7 @@ def run_test_2_gphoto():
 	cam1 = Camera_gphoto(status.path(["navigator", "camera"]))
 	cam1.prepare()
 
-        polar = Polar(['navigator', 'guider'])
+        polar = Polar(status.path(["polar"]), ['navigator', 'guider'])
 
 	dark1 = Median(5)
 	dark2 = Median(5)
@@ -1827,7 +1835,7 @@ def run_2():
 	cam1 = Camera_gphoto(status.path(["navigator", "camera"]))
 	cam1.prepare()
 
-        polar = Polar(['navigator', 'guider'])
+        polar = Polar(status.path(["polar"]), ['navigator', 'guider'])
 
 	dark1 = Median(5)
 	dark2 = Median(5)

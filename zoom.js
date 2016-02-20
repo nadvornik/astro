@@ -214,6 +214,13 @@ function isElementInViewport(el) {
 
 
   $(document).ready(function(){
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(function(position){
+           cmd = "gps" + position.coords.latitude + ',' + position.coords.longitude;
+           $.ajax({type: "POST", url: "button", data: {cmd: cmd}});
+        });
+    } 
+    
     $("button.ajax").click(function(){
         var btn = $(this);
         if (btn.data('no_cb')) return;

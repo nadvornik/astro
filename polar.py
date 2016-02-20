@@ -58,7 +58,8 @@ def precession():
 	return q
 
 class Polar:
-	def __init__(self, cameras):
+	def __init__(self, status, cameras):
+		self.status = status
 		self.pos = []
 		self.campos = []
 		self.cameras = {}
@@ -71,6 +72,7 @@ class Polar:
 			self.campos_avg.append(None)
 			self.campos_adjust.append(None)
 		self.prec_q = precession()
+		self.status.setdefault('gps', (50.0, 15.0))
 		self.prec_ra, self.prec_dec = self.prec_q.inv().transform_ra_dec([0, 90])
 		self.reset()
 		
@@ -80,7 +82,6 @@ class Polar:
 		self.dec = None
 		self.solved = False
 		self.mode = 'solve'
-		self.gps = (50.0, 15.0)
 		for i in range(0, len(self.pos)):
 			self.pos[i] = []
 			self.campos[i] = []
@@ -90,6 +91,8 @@ class Polar:
 		self.ref_ra = None
 		self.ref_dec = None
 		
+	def set_gps(self, gps):
+		self.status['gps'] = gps
 
 	def set_mode(self, mode):
 		if mode == 'adjust' and self.solved:
@@ -430,7 +433,7 @@ class Polar:
 	
 
 	def plot2(self, size = 960, area = 0.1):
-		ha = celestial_rot() + self.gps[1]
+		ha = celestial_rot() + self.status['gps'][1]
 		qha = Quaternion([90-ha, 0, 0])
 		
 		img = np.zeros((size, size, 3), dtype=np.uint8)
@@ -483,8 +486,8 @@ class Polar:
 		return img
 	
 	def zenith(self):
-		ha = (celestial_rot() + self.gps[1]) % 360.0
-		dec = self.gps[0]
+		ha = (celestial_rot() + self.status['gps'][1]) % 360.0
+		dec = self.status['gps'][0]
 		return (ha, dec)
 
 if __name__ == "__main__":
