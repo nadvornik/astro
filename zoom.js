@@ -219,7 +219,7 @@ function isElementInViewport(el) {
         if (btn.data('no_cb')) return;
         btn.addClass("ajaxrun");
         btn.removeClass("ajaxerr");
-        $.ajax({type: "POST", url: "button", data: {key: $(this).attr('id')},
+        $.ajax({type: "POST", url: "button", data: {key: $(this).attr('value')},
           success:function() {
             btn.removeClass("ajaxrun");
           },

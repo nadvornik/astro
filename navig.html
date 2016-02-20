@@ -29,39 +29,39 @@
             <button class="toggle" id='focus' title="Focus">Focus</button>
             <div class='overlay_buttons'>
             <div class='toggle_buttons' id='navigate_buttons'>
-                    <button class='ajax' id='solver-reset'>solver-reset</button>
-                    <button class='ajax' id='dark'>dark</button>
-                    <button class='ajax' id='polar-reset'>polar-reset</button>
-                    <button class='ajax' id='polar-align'>polar-align</button>
+                    <button class='ajax' value='solver-reset'>solver-reset</button>
+                    <button class='ajax' value='dark'>dark</button>
+                    <button class='ajax' value='polar-reset'>polar-reset</button>
+                    <button class='ajax' value='polar-align'>polar-align</button>
                     <button class='reflink' id='navig.html'>reload</button>
                 </div>
                 <div class='toggle_buttons' id='focus_buttons'>
                     <table>
                         <tr>
-                            <td><button class='ajax' id='z0'>no focuser</button></td>
-                            <td><button class='ajax' id='z1'>focuser</button></td>
-                            <td><button class='ajax' id='focus'>AF</button></td>
+                            <td><button class='ajax' value='z0'>no focuser</button></td>
+                            <td><button class='ajax' value='z1'>focuser</button></td>
+                            <td><button class='ajax' value='focus'>AF</button></td>
                         </tr>
                         <tr>
-                            <td><button class='ajax' id='f-3'>f-3</button></td>
-                            <td><button class='ajax' id='f-2'>f-2</button></td>
-                            <td><button class='ajax' id='f-1'>f-1</button></td>
+                            <td><button class='ajax' value='f-3'>f-3</button></td>
+                            <td><button class='ajax' value='f-2'>f-2</button></td>
+                            <td><button class='ajax' value='f-1'>f-1</button></td>
                         </tr>
                         <tr>
-                            <td><button class='ajax' id='f+3'>f+3</button></td>
-                            <td><button class='ajax' id='f+2'>f+2</button></td>
-                            <td><button class='ajax' id='f+1'>f+1</button></td>
+                            <td><button class='ajax' value='f+3'>f+3</button></td>
+                            <td><button class='ajax' value='f+2'>f+2</button></td>
+                            <td><button class='ajax' value='f+1'>f+1</button></td>
                         </tr>
                         <tr>
-                            <td/><td><button class='ajax' id='up'>left</button></td>
+                            <td/><td><button class='ajax' value='up'>left</button></td>
                         </tr>
                         <tr>
-                            <td><button class='ajax' id='left'>up</button></td>
+                            <td><button class='ajax' value='left'>up</button></td>
                             <td/>
-                            <td><button class='ajax' id='right'>right</button></td>
+                            <td><button class='ajax' value='right'>right</button></td>
                         </tr>
                         <tr>
-                            <td/><td><button class='ajax' id='down'>down</button></td>
+                            <td/><td><button class='ajax' value='down'>down</button></td>
                         </tr>
                     </table>
                 </div>
@@ -73,8 +73,8 @@
     </div>
     <div class="viewportbox">
         <div class='buttons'>
-            <button class='ajax' id='polar-reset'>polar-reset</button>
-            <button class='ajax' id='polar-align'>polar-align</button>
+            <button class='ajax' value='polar-reset'>polar-reset</button>
+            <button class='ajax' value='polar-align'>polar-align</button>
         </div>
         <div class="imgbox">
             <img class='imagecanvas' src="polar.jpg"/>
@@ -96,15 +96,15 @@
             <option id='disp-orig'>disp-orig</option>
             <option id='disp-df-cor'>disp-df-cor</option>
             </select>
-            <button class='ajax' id='navigator'>navigator</button>
-            <button class='ajax' id='guider'>guider</button>
+            <button class='ajax' value='navigator'>navigator</button>
+            <button class='ajax' value='guider'>guider</button>
             <button class="toggle" id='navigate2' title="Navigate">Navigate</button>
             <div class='overlay_buttons'>
                 <div class='toggle_buttons' id='navigate2_buttons'>
-                    <button class='ajax' id='solver-reset'>solver-reset</button>
-                    <button class='ajax' id='dark'>dark</button>
-                    <button class='ajax' id='polar-reset'>polar-reset</button>
-                    <button class='ajax' id='polar-align'>polar-align</button>
+                    <button class='ajax' value='solver-reset'>solver-reset</button>
+                    <button class='ajax' value='dark'>dark</button>
+                    <button class='ajax' value='polar-reset'>polar-reset</button>
+                    <button class='ajax' value='polar-align'>polar-align</button>
                     <button class='reflink' id='guide.html'>reload</button>
                 </div>
             </div>
@@ -153,7 +153,7 @@
             <option id='iso-3200'>iso-3200</option>
             </select>
             <br/>
-            <button class='ajax' id='test-capture'>test-capture</button>
+            <button class='ajax' value='test-capture'>test-capture</button>
             <select class='ajax ajax_up' data-jsonp='navigator.camera.test-exp-sec' data-prefix='test-exp-sec-'>
             <option id='test-exp-sec-1'>test-exp-sec-1</option>
             <option id='test-exp-sec-2'>test-exp-sec-2</option>
@@ -179,7 +179,7 @@
             <option id='test-iso-3200'>test-iso-3200</option>
             </select>
             <br/>
-            <button class='ajax' id='capture'>capture</button>
+            <button class='ajax' value='capture'>capture</button>
         </div>
         <div class="imgbox">
             <img class='imagecanvas' src="full_res.jpg"/>
@@ -188,11 +188,11 @@
     <div class="viewportbox">
         <pre id='json'></pre>
         <br/>
-        <button class='ajax' id='save'>save</button>
-        <button class='ajax' id='exit'>exit</button>
-        <button class='ajax' id='shutdown'>shutdown</button>
+        <button class='ajax' value='save'>save</button>
+        <button class='ajax' value='exit'>exit</button>
+        <button class='ajax' value='shutdown'>shutdown</button>
         <br/>
-        <button class='ajax' id='stacktrace'>stacktrace</button>
+        <button class='ajax' value='stacktrace'>stacktrace</button>
         <button class='reflink' id='log.html'>log</button>
         <button class='reflink prevlink' id='capture.html'>Capture</button>
         <button class='reflink nextlink' id='guide.html'>Guider</button>
