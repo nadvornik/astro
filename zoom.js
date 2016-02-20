@@ -224,7 +224,7 @@ function isElementInViewport(el) {
     $("button.ajax").click(function(){
         var btn = $(this);
         if (btn.data('no_cb')) return;
-        var cmd_a = $(this).attr('value').split(".");
+        var cmd_a = $(this).attr('value').split("!");
         var cmd;
         
         //alert(JSON.stringify(cmd_a));
@@ -253,7 +253,7 @@ function isElementInViewport(el) {
         var sel = $(this);
         if (sel.data('no_cb')) return;
 
-        var cmd_a = this.value.split(".");
+        var cmd_a = this.value.split("!");
         //alert(JSON.stringify(cmd_a));
         var cmd;
         if (cmd_a.length == 1) {
