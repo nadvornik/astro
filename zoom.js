@@ -217,9 +217,22 @@ function isElementInViewport(el) {
     $("button.ajax").click(function(){
         var btn = $(this);
         if (btn.data('no_cb')) return;
+        var cmd_a = $(this).attr('value').split(".");
+        var cmd;
+        
+        //alert(JSON.stringify(cmd_a));
+        if (cmd_a.length == 1) {
+            cmd = { cmd: cmd_a[0] };
+        }
+        else if (cmd_a.length == 2) {
+            cmd = { cmd: cmd_a[1], tgt: cmd_a[0] };
+        }
+        else return;
+
         btn.addClass("ajaxrun");
         btn.removeClass("ajaxerr");
-        $.ajax({type: "POST", url: "button", data: {key: $(this).attr('value')},
+        
+        $.ajax({type: "POST", url: "button", data: cmd,
           success:function() {
             btn.removeClass("ajaxrun");
           },
@@ -232,10 +245,22 @@ function isElementInViewport(el) {
     $("select.ajax").change(function(){
         var sel = $(this);
         if (sel.data('no_cb')) return;
-        var value = this.value;
+
+        var cmd_a = this.value.split(".");
+        //alert(JSON.stringify(cmd_a));
+        var cmd;
+        if (cmd_a.length == 1) {
+            cmd = { cmd: cmd_a[0] }
+        }
+        else if (cmd_a.length == 2) {
+            cmd = { cmd: cmd_a[1], tgt: cmd_a[0] };
+        }
+        else return;
+
+
         sel.addClass("ajaxrun");
         sel.removeClass("ajaxerr");
-        $.ajax({type: "POST", url: "button", data: {key: value},
+        $.ajax({type: "POST", url: "button", data: cmd,
           success:function() {
             sel.removeClass("ajaxrun");
           },

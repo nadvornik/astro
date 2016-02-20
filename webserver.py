@@ -168,10 +168,15 @@ class Handler(BaseHTTPRequestHandler):
 			self.send_header('Content-type','text/text')
 			self.end_headers()
 			self.wfile.write("ok")
-			cmd = postvars['key'][0]
+			
+			cmd = postvars['cmd'][0]
+			try:
+				tgt = postvars['tgt'][0]
+			except:
+				tgt = None
 			if cmd == 'exit' or cmd == 'shutdowm' or cmd == 'stacktrace':
 				stacktraces()
-			cmdQueue.put(cmd)
+			cmdQueue.put(cmd, target = tgt)
 			return
 		self.send_response(404)
 		self.end_headers()

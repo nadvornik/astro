@@ -19,9 +19,13 @@ class CmdQueue:
 		except Queue.Empty:
 			return None
 			
-	def put(self, entry):
-		for q in self.dict.values():
-			q.put(entry)
+	def put(self, entry, target = None):
+		if target is None or target == '':
+			for q in self.dict.values():
+				q.put(entry)
+		else:
+			if target in self.dict:
+				self.dict[target].put(entry)
 			
 cmdQueue = CmdQueue()
-	
+
