@@ -845,13 +845,14 @@ class Guider:
 		self.status['t_delay2'] = None
 		self.status['pixpersec'] = None
 		self.status['pixpersec_neg'] = None
+		self.status['seq'] = 'seq-stop'
 		self.off = (0.0, 0.0)
 		self.off_t = None
 		self.go.out(0)
 		self.cnt = 0
 		self.pt0 = []
 		self.ok = False
-		self.capture_in_progress = True
+		self.capture_in_progress = False
 
 	def dark_add_masked(self, im):
 		h, w = im.shape
@@ -879,6 +880,9 @@ class Guider:
 				self.status['aggressivness'] = float(cmd[len('aggressivness-'):])
 			except:
 				pass
+
+		if cmd.startswith('seq-'):
+			self.status['seq'] = cmd
 
 	def proc_frame(self, im, i):
 
@@ -1065,7 +1069,7 @@ class Guider:
 					self.go.out(0)
 				
 				self.ok = (err.real < 2 and err.real > -2)
-				if self.ok and not self.capture_in_progress:
+				if not self.capture_in_progress and (self.status['seq'] == 'seq-guided' and self.ok or self.status['seq'] == 'seq-unguided'):
 					cmdQueue.put('capture')
 					self.capture_in_progress = True
 				
