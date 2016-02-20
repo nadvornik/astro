@@ -612,7 +612,7 @@ def plot_bg(*args, **kwargs):
 	threading.Thread(target=_plot_bg, args = args, kwargs = kwargs).start()
 
 class Navigator:
-	def __init__(self, status, dark, polar, tid, polar_secondary = False):
+	def __init__(self, status, dark, polar, tid, polar_tid = None):
 		self.status = status
 		self.dark = dark
 		self.stack = Stack()
@@ -636,7 +636,7 @@ class Navigator:
 		self.plotter_off = np.array([0.0, 0.0])
 		self.tid = tid
 		self.polar = polar
-		self.polar_secondary = polar_secondary
+		self.polar_tid = polar_tid
 		self.index_sources = []
 		self.status['i_solved'] = 0
 		self.status['i_solver'] = 0
@@ -699,7 +699,7 @@ class Navigator:
 				#subprocess.call(['touch', '-r', "testimg17_" + str(i) + ".tif", "log_%d.wcs" % self.ii])
 				if self.polar.mode == 'solve':
 					self.polar.set_pos_tan(self.wcs, self.status['t_solver'], self.tid)
-				if not self.polar_secondary:
+				if self.polar_tid is not None:
 					self.polar.solve()
 					
 			else:
@@ -723,18 +723,18 @@ class Navigator:
 				#self.solver = Solver(sources_img = filtered, field_w = im.shape[1], field_h = im.shape[0], ra = self.status['ra'], dec = self.status['dec'], field_deg = self.status['field_deg'])
 				self.solver.start()
 				self.solver_off = np.array([0.0, 0.0])
-		if self.polar.mode == 'solve' and not self.polar_secondary:
+		if self.polar.mode == 'solve' and self.polar_tid is not None:
 			polar_plot = self.polar.plot2()
 			p_status = "#%d %s solv#%d r:%.1f fps:%.1f" % (i, self.polar.mode, i - self.status['i_solver'], self.status['radius'], fps)
 			cv2.putText(polar_plot, p_status, (10, polar_plot.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255,255,0), 2)
-			ui.imshow(self.tid + '_polar', polar_plot)
+			ui.imshow(self.polar_tid, polar_plot)
 		elif self.polar.mode == 'adjust' and self.wcs is not None:
 			self.polar.set_pos_tan(self.wcs, self.status['t_solver'], self.tid, off = self.plotter_off)
-			if not self.polar_secondary:
+			if self.polar_tid is not None:
 				polar_plot = self.polar.plot2()
 				p_status = "#%d %s solv#%d r:%.1f fps:%.1f" % (i, self.polar.mode, i - self.status['i_solved'], self.status['radius'], fps)
 				cv2.putText(polar_plot, p_status, (10, polar_plot.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2)
-				ui.imshow(self.tid + '_polar', polar_plot)
+				ui.imshow(self.polar_tid, polar_plot)
 			
 		status = "#%d %s %s  solv#%d r:%.1f fps:%.1f" % (i, self.status['dispmode'], self.polar.mode, i - self.status['i_solver'], self.status['radius'], fps)
 		if (self.status['dispmode'] == 'disp-orig'):
@@ -797,7 +797,7 @@ class Navigator:
 			cv2.imwrite(self.tid + str(int(time.time())) + ".tif", self.stack.get())
 
 		if cmd == 'polar-reset':
-			if not self.polar_secondary:
+			if self.polar_tid is not None:
 				self.polar.reset()
 
 		if cmd == 'polar-align':
@@ -1625,16 +1625,16 @@ class Camera_test_g:
 def run_v4l2():
 	global status
 	status = Status("run_v4l2.conf")
-	ui.namedWindow('capture')
-	ui.namedWindow('capture_polar')
+	ui.namedWindow('navigator')
+	ui.namedWindow('polar')
 
-        polar = Polar(['capture'])
+        polar = Polar(['navigator'])
 	cam = Camera(status.path(["navigator", "camera"]))
 	cam.prepare(1280, 960)
 	dark = Median(5)
-	nav = Navigator(status.path(["navigator"]), dark, polar, 'capture')
+	nav = Navigator(status.path(["navigator"]), dark, polar, 'navigator', polar_tid = 'polar')
 
-	runner = Runner('capture', cam, navigator = nav)
+	runner = Runner('navigator', cam, navigator = nav)
 	runner.start()
 	runner.join()
 	status.save()
@@ -1644,18 +1644,18 @@ def run_gphoto():
 	status = Status("run_gphoto.conf")
 	cam = Camera_gphoto(status.path(["navigator", "camera"]))
 	cam.prepare()
-	ui.namedWindow('capture')
-	ui.namedWindow('capture_polar')
+	ui.namedWindow('navigator')
+	ui.namedWindow('polar')
 	ui.namedWindow('full_res')
 
-        polar = Polar(['capture'])
+        polar = Polar(['navigator'])
 
 	dark = Median(5)
-	nav = Navigator(status.path(["navigator"]), dark, polar, 'capture')
-	focuser = Focuser('capture', dark = dark)
-	zoom_focuser = Focuser('capture')
+	nav = Navigator(status.path(["navigator"]), dark, polar, 'navigator', polar_tid = 'polar')
+	focuser = Focuser('navigator', dark = dark)
+	zoom_focuser = Focuser('navigator')
 
-	runner = Runner('capture', cam, navigator = nav, focuser = focuser, zoom_focuser = zoom_focuser)
+	runner = Runner('navigator', cam, navigator = nav, focuser = focuser, zoom_focuser = zoom_focuser)
 	runner.start()
 	runner.join()
 	status.save()
@@ -1664,20 +1664,20 @@ def run_gphoto():
 def run_v4l2_g():
 	global status
 	status = Status("run_v4l2_g.conf")
-	ui.namedWindow('capture')
-	ui.namedWindow('capture_polar')
+	ui.namedWindow('navigator')
+	ui.namedWindow('polar')
 
-        polar = Polar(['capture'])
+        polar = Polar(['navigator'])
 
 	cam = Camera(status.path(["guider", "navigator", "camera"]))
 	cam.prepare(1280, 960)
 
 	dark = Median(5)
-	nav = Navigator(status.path(["guider", "navigator"]), dark, polar, 'capture')
+	nav = Navigator(status.path(["guider", "navigator"]), dark, polar, 'navigator', polar_tid = 'polar')
 	go = GuideOut()
-	guider = Guider(status.path(["guider"]), go, dark, 'capture')
+	guider = Guider(status.path(["guider"]), go, dark, 'navigator')
 
-	runner = Runner('capture', cam, navigator = nav, guider = guider)
+	runner = Runner('navigator', cam, navigator = nav, guider = guider)
 	runner.start()
 	runner.join()
 	status.save()
@@ -1685,20 +1685,20 @@ def run_v4l2_g():
 def run_gphoto_g():
 	global status
 	status = Status("run_gphoto_g.conf")
-	ui.namedWindow('capture')
-	ui.namedWindow('capture_polar')
+	ui.namedWindow('navigator')
+	ui.namedWindow('polar')
 
-        polar = Polar(['capture'])
+        polar = Polar(['navigator'])
 
 	cam = Camera_gphoto(status.path(["guider", "navigator", "camera"]))
 	cam.prepare()
 
 	dark = Median(5)
-	nav = Navigator(status.path(["guider", "navigator"]), dark, polar, 'capture')
+	nav = Navigator(status.path(["guider", "navigator"]), dark, polar, 'navigator', polar_tid = 'polar')
 	go = GuideOut()
-	guider = Guider(status.path(["guider"]), go, dark, 'capture')
+	guider = Guider(status.path(["guider"]), go, dark, 'navigator')
 
-	runner = Runner('capture', cam, navigator = nav, guider = guider)
+	runner = Runner('navigator', cam, navigator = nav, guider = guider)
 	runner.start()
 	runner.join()
 	status.save()
@@ -1706,18 +1706,18 @@ def run_gphoto_g():
 def run_test_g():
 	global status
 	status = Status("run_test_g.conf")
-	ui.namedWindow('capture')
-	ui.namedWindow('capture_polar')
+	ui.namedWindow('navigator')
+	ui.namedWindow('polar')
 
-        polar = Polar(['capture'])
+        polar = Polar(['navigator'])
 
 	dark = Median(5)
-	nav = Navigator(status.path(["guider", "navigator"]), dark, polar, 'capture')
+	nav = Navigator(status.path(["guider", "navigator"]), dark, polar, 'navigator', polar_tid = 'polar')
 	go = GuideOut()
-	guider = Guider(status.path(["guider"]), go, dark, 'capture')
+	guider = Guider(status.path(["guider"]), go, dark, 'navigator')
 	cam = Camera_test_g(status.path(["guider", "navigator", "camera"]), go)
 
-	runner = Runner('capture', cam, navigator = nav, guider = guider)
+	runner = Runner('navigator', cam, navigator = nav, guider = guider)
 	runner.start()
 	runner.join()
 	status.save()
@@ -1725,16 +1725,16 @@ def run_test_g():
 def run_test():
 	global status
 	status = Status("run_test.conf")
-	ui.namedWindow('capture')
-	ui.namedWindow('capture_polar')
+	ui.namedWindow('navigator')
+	ui.namedWindow('polar')
 
-        polar = Polar(['capture'])
+        polar = Polar(['navigator'])
 
 	cam = Camera_test(status.path(["navigator", "camera"]))
 	dark = Median(5)
-	nav = Navigator(status.path(["navigator"]), dark, polar, 'capture')
+	nav = Navigator(status.path(["navigator"]), dark, polar, 'navigator', polar_tid = 'polar')
 
-	runner = Runner('capture', cam, navigator = nav)
+	runner = Runner('navigator', cam, navigator = nav)
 	runner.start()
 	runner.join()
 	status.save()
@@ -1742,28 +1742,28 @@ def run_test():
 def run_test_2():
 	global status
 	status = Status("run_test_2.conf")
-	ui.namedWindow('capture')
-	ui.namedWindow('capture_v4l')
-	ui.namedWindow('capture_polar')
+	ui.namedWindow('navigator')
+	ui.namedWindow('guider')
+	ui.namedWindow('polar')
 
-        polar = Polar(['capture', 'capture_v4l'])
+        polar = Polar(['navigator', 'guider'])
 
 	dark1 = Median(5)
 	dark2 = Median(5)
 
 	cam1 = Camera_test(status.path(["navigator", "camera"]))
-	nav1 = Navigator(status.path(["navigator"]), dark1, polar, 'capture')
+	nav1 = Navigator(status.path(["navigator"]), dark1, polar, 'navigator', polar_tid = 'polar')
 
-	nav = Navigator(status.path(["guider", "navigator"]), dark2, polar, 'capture_v4l', polar_secondary = True)
+	nav = Navigator(status.path(["guider", "navigator"]), dark2, polar, 'guider')
 	go = GuideOut()
-	guider = Guider(status.path(["guider"]), go, dark2, 'capture_v4l')
+	guider = Guider(status.path(["guider"]), go, dark2, 'guider')
 	#cam = Camera_test_g(status.path(["guider", "navigator", "camera"]), go)
 	cam = Camera_test_shift(status.path(["guider", "navigator", "camera"]), cam1, 3000)
 	
-	runner = Runner('capture', cam1, navigator = nav1)
+	runner = Runner('navigator', cam1, navigator = nav1)
 	runner.start()
 	
-	runner2 = Runner('capture_v4l', cam, navigator = nav, guider = guider)
+	runner2 = Runner('guider', cam, navigator = nav, guider = guider)
 	runner2.start()
 	
 	
@@ -1778,31 +1778,31 @@ def run_test_2_gphoto():
 	cam1 = Camera_gphoto(status.path(["navigator", "camera"]))
 	cam1.prepare()
 
-        polar = Polar(['capture', 'capture_v4l'])
+        polar = Polar(['navigator', 'guider'])
 
 	dark1 = Median(5)
 	dark2 = Median(5)
 	
-	nav1 = Navigator(status.path(["navigator"]), dark1, polar, 'capture')
-	focuser = Focuser('capture', dark = dark1)
-	zoom_focuser = Focuser('capture')
+	nav1 = Navigator(status.path(["navigator"]), dark1, polar, 'navigator', polar_tid = 'polar')
+	focuser = Focuser('navigator', dark = dark1)
+	zoom_focuser = Focuser('navigator')
 
-	nav = Navigator(status.path(["guider", "navigator"]), dark2, polar, 'capture_v4l', polar_secondary = True)
+	nav = Navigator(status.path(["guider", "navigator"]), dark2, polar, 'guider')
 	go = GuideOut()
-	guider = Guider(status.path(["guider"]), go, dark2, 'capture_v4l')
+	guider = Guider(status.path(["guider"]), go, dark2, 'guider')
 	cam = Camera_test_g(status.path(["guider", "navigator", "camera"]), go)
 
-	ui.namedWindow('capture')
-	ui.namedWindow('capture_v4l')
-	ui.namedWindow('capture_polar')
+	ui.namedWindow('navigator')
+	ui.namedWindow('guider')
+	ui.namedWindow('polar')
 	ui.namedWindow('full_res')
 
 	go.out(1, 10) # move aside for 10s to collect darkframes
 
-	runner = Runner('capture', cam1, navigator = nav1, focuser=focuser, zoom_focuser = zoom_focuser)
+	runner = Runner('navigator', cam1, navigator = nav1, focuser=focuser, zoom_focuser = zoom_focuser)
 	runner.start()
 	
-	runner2 = Runner('capture_v4l', cam, navigator = nav, guider = guider)
+	runner2 = Runner('guider', cam, navigator = nav, guider = guider)
 	runner2.start()
 	
 	
@@ -1820,31 +1820,31 @@ def run_2():
 	cam1 = Camera_gphoto(status.path(["navigator", "camera"]))
 	cam1.prepare()
 
-        polar = Polar(['capture', 'capture_v4l'])
+        polar = Polar(['navigator', 'guider'])
 
 	dark1 = Median(5)
 	dark2 = Median(5)
 	
-	nav1 = Navigator(status.path(["navigator"]), dark1, polar, 'capture')
-	focuser = Focuser('capture', dark = dark1)
-	zoom_focuser = Focuser('capture')
+	nav1 = Navigator(status.path(["navigator"]), dark1, polar, 'navigator', polar_tid = 'polar')
+	focuser = Focuser('navigator', dark = dark1)
+	zoom_focuser = Focuser('navigator')
 
-	nav = Navigator(status.path(["guider", "navigator"]), dark2, polar, 'capture_v4l', polar_secondary = True)
+	nav = Navigator(status.path(["guider", "navigator"]), dark2, polar, 'guider')
 	go = GuideOut()
-	guider = Guider(status.path(["guider"]), go, dark2, 'capture_v4l')
+	guider = Guider(status.path(["guider"]), go, dark2, 'guider')
 
-	ui.namedWindow('capture')
-	ui.namedWindow('capture_v4l')
-	ui.namedWindow('capture_polar')
+	ui.namedWindow('navigator')
+	ui.namedWindow('guider')
+	ui.namedWindow('polar')
 	ui.namedWindow('full_res')
 
 	
 	go.out(1, 10) # move aside for 10s to collect darkframes
 
-	runner = Runner('capture', cam1, navigator = nav1, focuser=focuser, zoom_focuser = zoom_focuser)
+	runner = Runner('navigator', cam1, navigator = nav1, focuser=focuser, zoom_focuser = zoom_focuser)
 	runner.start()
 	
-	runner2 = Runner('capture_v4l', cam, navigator = nav, guider = guider)
+	runner2 = Runner('guider', cam, navigator = nav, guider = guider)
 	runner2.start()
 	
 	
