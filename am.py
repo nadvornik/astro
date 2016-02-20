@@ -77,6 +77,9 @@ class Engine(threading.Thread):
 		self.terminating = True
 		if self.cmd is not None and self.cmd.poll() is None:
 			self.cmd.terminate()
+			time.sleep(0.2)
+		if self.cmd is not None and self.cmd.poll() is None:
+			self.cmd.kill()
 		self.join()
 	
 		
