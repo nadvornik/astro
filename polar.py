@@ -372,6 +372,14 @@ class Polar:
 		#ax.scatter(qa[:,0], qa[:,1], qa[:,0] * res2[0] + qa[:,1] * res2[1] + res2[2], c=qa[:,3], cmap=plt.hot())
 		#plt.show()
 
+	def save(self):
+		alist = []
+
+		for ci in range(0, len(self.pos)):
+			qlist = [ p.a for (p, t) in self.pos[ci]]
+			alist.append(np.array(qlist))
+		np.savez("polar_%d.npz" % self.t0, *alist)
+
 	def plot(self):
 		extra = []
 		if self.ra is not None and self.dec is not None:
@@ -430,6 +438,7 @@ class Polar:
 		if self.p2_from is None:
 			self.mode_adjust_set_ref_pos()
 			self.p2_from = pos
+			self.save()
 			
 		t = pos / self.p2_from
 		print t.to_euler()
