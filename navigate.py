@@ -38,6 +38,9 @@ from cmd import cmdQueue
 from stacktraces import stacktraces
 import json
 
+from PIL import Image;
+
+
 class Status:
 	def __init__(self, conf_file):
 		try:
@@ -648,6 +651,7 @@ class Navigator:
 		self.status['radius'] = self.status['max_radius']
 
 	def proc_frame(self,im, i, t = None):
+		self.i = i
 		if im.ndim > 2:
 			im = cv2.min(cv2.min(im[:, :, 0], im[:, :, 1]), im[:, :, 2])
 
@@ -817,7 +821,24 @@ class Navigator:
 				self.polar.set_gps((lat, lon))
 			except:
 				print "Error: " +  sys.exc_info().__str__()
-			
+	
+	def proc_full_res(self, jpg):
+		t = time.time()
+		pil_image = Image.open(jpg)
+		im = np.array(pil_image)
+		im = np.amin(im, 2)
+
+		pts = find_max(im, 12, 100)
+
+		solver = Solver(sources_list = pts, field_w = im.shape[1], field_h = im.shape[0], ra = self.status['ra'], dec = self.status['dec'], field_deg = self.status['field_deg'], radius = 100)
+		solver.start()
+		solver.join()
+		if solver.solved:
+			print "full-res solved:", solver.ra, solver.dec
+			self.status['field_deg'] = solver.field_deg
+			self.polar.set_pos_tan(solver.wcs, t, "full-res")
+		else:
+			print "full-res not solved"
 
 def fit_line(xylist):
 	a = np.array(xylist)
@@ -1533,7 +1554,13 @@ class Runner(threading.Thread):
 					if mode == 'zoom_focuser':
 						self.camera.cmd('z0')
 						mode = 'navigator'
-					self.camera.cmd(cmd)
+
+					cmdQueue.put('capture-started')
+					try:
+						self.camera.capture_bulb(test=(cmd == 'test-capture'), callback = self.capture_cb)
+					except:
+						print "Unexpected error: " + sys.exc_info().__str__()
+
 					break
 				else:
 					self.camera.cmd(cmd)
@@ -1563,8 +1590,11 @@ class Runner(threading.Thread):
 			#	cmdQueue.put('exit')
 		cmdQueue.put('exit')
 		self.camera.shutdown()
-
-from PIL import Image;
+	
+	def capture_cb(self, jpg):
+		cmdQueue.put('capture-finished')
+		ui.imshow_jpg("full_res", io.BytesIO(jpg))
+		threading.Thread(target=self.navigator.proc_full_res, args = [io.BytesIO(jpg)] ).start()
 
 
 class Camera_test:
@@ -1593,7 +1623,7 @@ class Camera_test:
 		#pil_image.thumbnail((1000,1000), Image.ANTIALIAS)
 		#im = np.array(pil_image)
 		#im = cv2.imread("testimg16_" + str(self.i % 100 * 3 + int(self.i / 100) * 10) + ".tif")
-		im = cv2.imread("testimg16_" + str(self.i) + ".tif")
+		im = cv2.imread("testimg19_" + str(self.i) + ".tif")
 		#im = apply_gamma(im, 2.2)
 		if self.x != 0 or self.y != 0:
 			M = np.array([[1.0, 0.0, self.x],
@@ -1618,7 +1648,7 @@ class Camera_test_shift:
 	
 	def capture(self):
 		i =  self.cam0.i + self.shift
-		im = cv2.imread("testimg16_" + str(i) + ".tif")
+		im = cv2.imread("testimg19_" + str(i) + ".tif")
 		return im, None
 
 	def shutdown(self):
@@ -1672,7 +1702,7 @@ def run_gphoto():
 	ui.namedWindow('polar')
 	ui.namedWindow('full_res')
 
-        polar = Polar(status.path(["polar"]), ['navigator'])
+        polar = Polar(status.path(["polar"]), ['navigator', 'full-res'])
 
 	dark = Median(5)
 	nav = Navigator(status.path(["navigator"]), dark, polar, 'navigator', polar_tid = 'polar')
@@ -1712,7 +1742,7 @@ def run_gphoto_g():
 	ui.namedWindow('navigator')
 	ui.namedWindow('polar')
 
-        polar = Polar(status.path(["polar"]), ['navigator'])
+        polar = Polar(status.path(["polar"]), ['navigator', 'full-res'])
 
 	cam = Camera_gphoto(status.path(["guider", "navigator", "camera"]))
 	cam.prepare()
@@ -1802,7 +1832,7 @@ def run_test_2_gphoto():
 	cam1 = Camera_gphoto(status.path(["navigator", "camera"]))
 	cam1.prepare()
 
-        polar = Polar(status.path(["polar"]), ['navigator', 'guider'])
+        polar = Polar(status.path(["polar"]), ['navigator', 'guider', 'full-res'])
 
 	dark1 = Median(5)
 	dark2 = Median(5)
@@ -1844,7 +1874,7 @@ def run_2():
 	cam1 = Camera_gphoto(status.path(["navigator", "camera"]))
 	cam1.prepare()
 
-        polar = Polar(status.path(["polar"]), ['navigator', 'guider'])
+        polar = Polar(status.path(["polar"]), ['navigator', 'guider', 'full-res'])
 
 	dark1 = Median(5)
 	dark2 = Median(5)

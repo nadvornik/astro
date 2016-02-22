@@ -143,7 +143,7 @@ class Solver(threading.Thread):
 		prihdr['ANCANCEL'] = tmp_dir + '/field.solved'
 		
 		
-		prihdr['ANPOSERR'] = 2
+		prihdr['ANPOSERR'] = self.field_w / 400.0
 		if self.ra is not None:
 			prihdr['ANERA'] = self.ra
 			prihdr['ANEDEC'] = self.dec

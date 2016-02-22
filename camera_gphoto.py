@@ -75,8 +75,10 @@ class Camera_gphoto:
 				time.sleep(0.1)
 				continue
 	
-	def capture_bulb(self, sec, test = False):
+	def capture_bulb(self, test = False, callback = None):
 		if test:
+			sec = self.status['test-exp-sec']
+
 			self.set_config_value('iso', str(self.status['test-iso']))
 			try:
 				self.status['test-iso'] = int(self.set_config_value('iso'))
@@ -85,6 +87,8 @@ class Camera_gphoto:
 			self.set_config_choice('capturetarget', 0) #mem
 			self.set_config_choice('imageformat', 1) #Large Normal JPEG
 		else:
+			sec = self.status['exp-sec']
+
 			self.set_config_value('iso', str(self.status['iso']))
 			try:
 				self.status['iso'] = int(self.set_config_value('iso'))
@@ -126,7 +130,8 @@ class Camera_gphoto:
 			try:
 				camera_file = gp.check_result(gp.gp_camera_file_get(self.camera, file_path.folder, file_path.name, gp.GP_FILE_TYPE_NORMAL, self.context))
 				file_data = gp.check_result(gp.gp_file_get_data_and_size(camera_file))
-				ui.imshow_jpg("full_res", io.BytesIO(file_data));
+				if callback is not None:
+					callback(file_data)
 				break
 			except gp.GPhoto2Error as ex:
 				if ex.code == gp.GP_ERROR_CAMERA_BUSY:
@@ -268,12 +273,6 @@ class Camera_gphoto:
 				self.set_config_value('aperture', cmd[len('f-number-'):])
 				self.status['f-number'] = self.get_config_value('aperture')
         
-			if cmd == 'test-capture':
-				self.capture_bulb(self.status['test-exp-sec'], test=True)
-			
-			if cmd == 'capture':
-				self.capture_bulb(self.status['exp-sec'], test=False)
-				cmdQueue.put('capture-finished')
 			
 		except gp.GPhoto2Error as ex:
 			print "Unexpected error: " + sys.exc_info().__str__()
