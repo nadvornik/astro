@@ -835,7 +835,10 @@ class Navigator:
 		solver.join()
 		if solver.solved:
 			print "full-res solved:", solver.ra, solver.dec
+			self.status['ra'] = solver.ra
+			self.status['dec'] = solver.dec
 			self.status['field_deg'] = solver.field_deg
+			self.status['radius'] = solver.field_deg
 			self.polar.set_pos_tan(solver.wcs, t, "full-res")
 		else:
 			print "full-res not solved"
@@ -1558,6 +1561,8 @@ class Runner(threading.Thread):
 					cmdQueue.put('capture-started')
 					try:
 						self.camera.capture_bulb(test=(cmd == 'test-capture'), callback = self.capture_cb)
+					except AttributeError:
+						pass
 					except:
 						print "Unexpected error: " + sys.exc_info().__str__()
 
