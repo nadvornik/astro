@@ -54,6 +54,8 @@ class MyGUI_CV2(threading.Thread):
 		ord('o') : 'polar-align',
 		
 		ord('s') : 'save',
+		ord('w') : 'interrupt',
+		
 		}
 
 	def __init__(self):

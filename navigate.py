@@ -1622,6 +1622,10 @@ def main_loop():
 			break
 		if cmd == 'save':
 			status.save()
+		
+		if cmd == 'interrupt':
+			camera = status.path(["navigator", "camera"])
+			camera['interrupt'] = True
 
 	status.save()
 	

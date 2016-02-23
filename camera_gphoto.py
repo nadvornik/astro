@@ -29,6 +29,7 @@ class Camera_gphoto:
 		self.status.setdefault('f-number', '5.6')
 		self.status['cur_time'] = 0
 		self.status['exp_in_progress'] = False
+		self.status['interrupt'] = False
 
 	def get_config_value(self, name):
 		config = gp.check_result(gp.gp_camera_get_config(self.camera, self.context))
@@ -101,6 +102,7 @@ class Camera_gphoto:
 		self.set_config_value('eosremoterelease', 'Immediate')
 		self.t_start = time.time()
 		self.status['exp_in_progress'] = True
+		self.status['interrupt'] = False
 		while True:
 			e, file_path =  gp.check_result(gp.gp_camera_wait_for_event(self.camera, 1000,self.context))
 			t = time.time() - self.t_start
@@ -109,7 +111,7 @@ class Camera_gphoto:
 			if self.status['exp_in_progress']:
 				self.status['cur_time'] = int(t)
 
-			if self.status['exp_in_progress'] and t > sec:
+			if self.status['exp_in_progress'] and (t > sec or self.status['interrupt']):
 				self.set_config_value('eosremoterelease', 'Release Full')
 				self.status['exp_in_progress'] = False
 
@@ -121,6 +123,7 @@ class Camera_gphoto:
 					break
 				
 		self.status['cur_time'] = 0
+		self.status['interrupt'] = False
 	
 		target = os.path.join('/tmp', file_path.name)
 		
