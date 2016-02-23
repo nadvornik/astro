@@ -865,6 +865,7 @@ class Guider:
 		self.status.setdefault('aggressivness', 0.6)
 		self.go = go
 		self.dark = dark
+		self.status['seq'] = 'seq-stop'
 		self.reset()
 		self.t0 = 0
 		self.resp0 = []
@@ -879,7 +880,6 @@ class Guider:
 		self.status['t_delay2'] = None
 		self.status['pixpersec'] = None
 		self.status['pixpersec_neg'] = None
-		self.status['seq'] = 'seq-stop'
 		self.off = (0.0, 0.0)
 		self.off_t = None
 		self.go.out(0)
@@ -905,7 +905,7 @@ class Guider:
 		return self.dark.add_masked(im, pts)
 
 	def cmd(self, cmd):
-		if cmd == "capture":
+		if cmd == "capture-started":
 			self.capture_in_progress = True
 		if cmd == "capture-finished":
 			self.capture_in_progress = False
@@ -1560,6 +1560,16 @@ class Runner(threading.Thread):
 					if mode == 'navigator':
 						self.focuser.set_xy_from_stack(self.navigator.stack)
 					mode = 'focuser'
+					self.focuser.cmd('focus')
+				elif cmd == 'dark':
+					if mode == 'navigator':
+						self.navigator.cmd(cmd)
+					elif mode == 'guider':
+						self.guider.cmd(cmd)
+					elif mode == 'focuser':
+						self.focuser.cmd(cmd)
+					elif mode == 'zoom_focuser':
+						self.zoom_focuser.cmd(cmd)
 				elif cmd == 'capture' or cmd == 'test-capture':
 					if mode == 'zoom_focuser':
 						self.camera.cmd('z0')
@@ -1577,14 +1587,15 @@ class Runner(threading.Thread):
 				else:
 					self.camera.cmd(cmd)
 					
-				if mode == 'navigator':
-					self.navigator.cmd(cmd)
-				if mode == 'guider':
-					self.guider.cmd(cmd)
-				if mode == 'focuser':
-					self.focuser.cmd(cmd)
-				if mode == 'zoom_focuser':
-					self.zoom_focuser.cmd(cmd)
+					if self.navigator is not None:
+						self.navigator.cmd(cmd)
+					if self.guider is not None:
+						self.guider.cmd(cmd)
+			
+					if mode == 'focuser':
+						self.focuser.cmd(cmd)
+					if mode == 'zoom_focuser':
+						self.zoom_focuser.cmd(cmd)
 	
 			im, t = self.camera.capture()
 			
