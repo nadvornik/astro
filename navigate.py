@@ -825,8 +825,8 @@ class Navigator:
 	def proc_full_res(self, jpg):
 		t = time.time()
 		pil_image = Image.open(jpg)
-		im = np.array(pil_image)
-		im = np.amin(im, 2)
+		im_c = np.array(pil_image)
+		im = np.amin(im_c, 2)
 
 		pts = find_max(im, 12, 100)
 
@@ -840,6 +840,16 @@ class Navigator:
 			self.status['field_deg'] = solver.field_deg
 			self.status['radius'] = solver.field_deg
 			self.polar.set_pos_tan(solver.wcs, t, "full-res")
+
+			if (self.status['dispmode'].startswith('disp-zoom-')):
+				zoom = self.status['dispmode'][len('disp-zoom-'):]
+			else:
+				zoom = 1
+			
+			plotter=Plotter(solver.wcs)
+        		plot = plotter.plot(im_c, scale = zoom)
+        		ui.imshow('full_res', plot)
+
 		else:
 			print "full-res not solved"
 

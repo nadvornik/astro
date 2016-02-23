@@ -346,7 +346,10 @@ class Plotter:
 				thumb = img
 			else:
 				thumb = cv2.resize(img, (tw, th))
-			bg[ty:ty+th, tx:tx+tw, 0] = bg[ty:ty+th, tx:tx+tw, 1] = bg[ty:ty+th, tx:tx+tw, 2] = thumb
+			if thumb.ndim > 2:
+				bg[ty:ty+th, tx:tx+tw, 0:3] = thumb
+			else:
+				bg[ty:ty+th, tx:tx+tw, 0] = bg[ty:ty+th, tx:tx+tw, 1] = bg[ty:ty+th, tx:tx+tw, 2] = thumb
 		
 		res=cv2.add(plot_image, bg)
 
