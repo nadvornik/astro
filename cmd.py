@@ -10,10 +10,10 @@ class CmdQueue:
 		self.dict[tid] = Queue.Queue()
 		print "register", tid
 	
-	def get(self, tid, timeout):
+	def get(self, tid, timeout = None):
 		q = self.dict[tid]
 		try:
-			cmd = q.get(block=True, timeout= timeout/1000.0)
+			cmd = q.get(block=True, timeout= timeout)
 			print tid, ':', cmd
 			return cmd
 		except Queue.Empty:

@@ -1522,15 +1522,12 @@ class Runner(threading.Thread):
 
 		while True:
 			while True:
-				cmd=cmdQueue.get(self.tid, 1)
+				cmd=cmdQueue.get(self.tid, 0.0001)
 				if cmd is None:
 					break
 				if cmd == 'exit' or cmd == 'shutdown':
 					profiler.print_stats()
-					stacktraces()
 
-					if cmd == 'shutdown':
-						subprocess.call(['shutdown', '-h', "now"])
 					return
 				elif cmd == 'navigator' and self.navigator is not None:
 					if mode == 'zoom_focuser':
@@ -1610,6 +1607,24 @@ class Runner(threading.Thread):
 		cmdQueue.put('capture-finished')
 		ui.imshow_jpg("full_res", io.BytesIO(jpg))
 		threading.Thread(target=self.navigator.proc_full_res, args = [io.BytesIO(jpg)] ).start()
+
+def main_loop():
+	global status
+
+	cmdQueue.register('main')
+	while True:
+		cmd=cmdQueue.get('main')
+		if cmd == 'exit' or cmd == 'shutdown':
+			stacktraces()
+
+			if cmd == 'shutdown':
+				subprocess.call(['shutdown', '-h', "now"])
+			break
+		if cmd == 'save':
+			status.save()
+
+	status.save()
+	
 
 
 class Camera_test:
@@ -1705,8 +1720,9 @@ def run_v4l2():
 
 	runner = Runner('navigator', cam, navigator = nav)
 	runner.start()
+	
+	main_loop()
 	runner.join()
-	status.save()
 
 def run_gphoto():
 	global status
@@ -1726,8 +1742,9 @@ def run_gphoto():
 
 	runner = Runner('navigator', cam, navigator = nav, focuser = focuser, zoom_focuser = zoom_focuser)
 	runner.start()
+
+	main_loop()
 	runner.join()
-	status.save()
 
 
 def run_v4l2_g():
@@ -1748,8 +1765,9 @@ def run_v4l2_g():
 
 	runner = Runner('navigator', cam, navigator = nav, guider = guider)
 	runner.start()
+
+	main_loop()
 	runner.join()
-	status.save()
 
 def run_gphoto_g():
 	global status
@@ -1769,8 +1787,8 @@ def run_gphoto_g():
 
 	runner = Runner('navigator', cam, navigator = nav, guider = guider)
 	runner.start()
+	main_loop()
 	runner.join()
-	status.save()
 
 def run_test_g():
 	global status
@@ -1788,8 +1806,8 @@ def run_test_g():
 
 	runner = Runner('navigator', cam, navigator = nav, guider = guider)
 	runner.start()
+	main_loop()
 	runner.join()
-	status.save()
 
 def run_test():
 	global status
@@ -1805,8 +1823,8 @@ def run_test():
 
 	runner = Runner('navigator', cam, navigator = nav)
 	runner.start()
+	main_loop()
 	runner.join()
-	status.save()
 
 def run_test_2():
 	global status
@@ -1835,10 +1853,10 @@ def run_test_2():
 	runner2 = Runner('guider', cam, navigator = nav, guider = guider)
 	runner2.start()
 	
+	main_loop()
 	
 	runner.join()
 	runner2.join()
-	status.save()
 
 def run_test_2_gphoto():
 	global status
@@ -1874,10 +1892,10 @@ def run_test_2_gphoto():
 	runner2 = Runner('guider', cam, navigator = nav, guider = guider)
 	runner2.start()
 	
+	main_loop()
 	
 	runner.join()
 	runner2.join()
-	status.save()
 
 
 def run_2():
@@ -1916,10 +1934,10 @@ def run_2():
 	runner2 = Runner('guider', cam, navigator = nav, guider = guider)
 	runner2.start()
 	
+	main_loop()
 	
 	runner.join()
 	runner2.join()
-	status.save()
 
 if __name__ == "__main__":
 	os.environ["LC_NUMERIC"] = "C"
