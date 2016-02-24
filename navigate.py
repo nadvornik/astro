@@ -826,9 +826,12 @@ class Navigator:
 		t = time.time()
 		pil_image = Image.open(jpg)
 		im_c = np.array(pil_image)
+		del pil_image
 		im = np.amin(im_c, 2)
+		del im_c
 
 		pts = find_max(im, 12, 100)
+		del im
 
 		solver = Solver(sources_list = pts, field_w = im.shape[1], field_h = im.shape[0], ra = self.status['ra'], dec = self.status['dec'], field_deg = self.status['field_deg'], radius = 100)
 		solver.start()
@@ -841,14 +844,14 @@ class Navigator:
 			self.status['radius'] = solver.field_deg
 			self.polar.set_pos_tan(solver.wcs, t, "full-res")
 
-			if (self.status['dispmode'].startswith('disp-zoom-')):
-				zoom = self.status['dispmode'][len('disp-zoom-'):]
-			else:
-				zoom = 1
-			
-			plotter=Plotter(solver.wcs)
-        		plot = plotter.plot(im_c, scale = zoom)
-        		ui.imshow('full_res', plot)
+			#if (self.status['dispmode'].startswith('disp-zoom-')):
+			#	zoom = self.status['dispmode'][len('disp-zoom-'):]
+			#else:
+			#	zoom = 1
+			#
+			#plotter=Plotter(solver.wcs)
+        		#plot = plotter.plot(im_c, scale = zoom)
+        		#ui.imshow('full_res', plot)
 
 		else:
 			print "full-res not solved"
