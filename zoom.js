@@ -17,11 +17,11 @@ function isElementInViewport(el) {
 
     var canvas = $(image).siblings('canvas.imagecanvas')[0];
   
-    if (!canvas && image.naturalWidth && image.naturalHeight) {
-      canvas = $("<canvas class='imagecanvas'/>").insertAfter(image)[0];
+    if (!canvas && $(image).hasClass("imagecanvas") && image.naturalWidth && image.naturalHeight) {
+      canvas = $("<canvas class='reloader imagecanvas'/>").insertAfter(image)[0];
       canvas.width = image.naturalWidth;
       canvas.height = image.naturalHeight;
-      canvas.getContext("2d").drawImage(image, 0, 0);
+      //canvas.getContext("2d").drawImage(image, 0, 0);
 
       image.style.display = 'none';
         
@@ -62,9 +62,11 @@ function isElementInViewport(el) {
         image.src = imageUrl;
         
         $(image).bind("load", function() {
+            URL.revokeObjectURL(this.src);
             reloader(image, url, seq + 1);
         });
         $(image).bind("error", function() {
+            URL.revokeObjectURL(this.src);
             reloader(image, url, seq);
         });
 
@@ -138,15 +140,15 @@ function isElementInViewport(el) {
 
   }
   
-  function register_swipe(canvas) {
+  function register_swipe(elem) {
 
     var transform = { zoom:1.0, x:0, y:0 };
-    $(canvas).data('transform', transform );
-    fix_borders(transform, $(canvas), $(canvas).parent(".imgbox"), true);
-    $(canvas).css('transform', ' translate(' + transform.x + 'px, ' + transform.y + 'px)  scale(' + transform.zoom + ')');
+    $(elem).data('transform', transform );
+    fix_borders(transform, $(elem), $(elem).parent(".imgbox"), true);
+    $(elem).css('transform', ' translate(' + transform.x + 'px, ' + transform.y + 'px)  scale(' + transform.zoom + ')');
 
 
-    $(canvas).swipe( {
+    $(elem).swipe( {
       pinchStatus:function(event, phase, direction, distance , duration , fingerCount, pinchZoom, fingerData) {
         var transform = jQuery.extend({}, $(this).data('transform'));
         var x = fingerData[0].end.x - fingerData[0].start.x;
@@ -182,7 +184,7 @@ function isElementInViewport(el) {
           transform.y = 0;
         }
         else {
-          var img = $(this).siblings('img.imagecanvas')[0];
+          var img = $(this).parent().children('img')[0];
           var fingerData = $(this).data('fingerData');
           var offset = $(this).offset();
           var height = $(this).height() * transform.zoom;
@@ -319,16 +321,23 @@ function isElementInViewport(el) {
 
 
     $(window).on('resize orientationChange', function(event) {
-      $("canvas.imagecanvas").each(function() {
-        var transform = $(this).data('transform');
-        fix_borders(transform, $(this), $(this).parent(".imgbox"), true);
-        $(this).css('transform', ' translate(' + transform.x + 'px, ' + transform.y + 'px)  scale(' + transform.zoom + ')');
+      $("img.reloader").each(function() {
+        var elem = this;
+        if ($(this).hasClass("imagecanvas")) elem = $(this).siblings('canvas.imagecanvas')[0];
+        if (!elem) return;
+        var transform = $(elem).data('transform');
+        fix_borders(transform, $(elem), $(elem).parent(".imgbox"), true);
+        $(elem).css('transform', ' translate(' + transform.x + 'px, ' + transform.y + 'px)  scale(' + transform.zoom + ')');
       });
     });
     
     
-    $("img.imagecanvas").bind("load", function() {
+    $("img.reloader").bind("load", function() {
         var image = this;
+        
+        if (! $(image).hasClass("imagecanvas")) {
+          register_swipe(image);
+        }
         
         var url = image.src;
         reloader(image, url, 1)
