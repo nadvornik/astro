@@ -831,9 +831,11 @@ class Navigator:
 		del im_c
 
 		pts = find_max(im, 12, 100)
+		w = im.shape[1]
+		h = im.shape[0]
 		del im
 
-		solver = Solver(sources_list = pts, field_w = im.shape[1], field_h = im.shape[0], ra = self.status['ra'], dec = self.status['dec'], field_deg = self.status['field_deg'], radius = 100)
+		solver = Solver(sources_list = pts, field_w = w, field_h = h, ra = self.status['ra'], dec = self.status['dec'], field_deg = self.status['field_deg'], radius = 100)
 		solver.start()
 		solver.join()
 		if solver.solved:
