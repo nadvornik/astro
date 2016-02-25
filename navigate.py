@@ -827,7 +827,7 @@ class Navigator:
 		pil_image = Image.open(jpg)
 		im_c = np.array(pil_image)
 		del pil_image
-		im = np.amin(im_c, 2)
+		im = cv2.min(cv2.min(im_c[:, :, 0], im_c[:, :, 1]), im_c[:, :, 2])
 		del im_c
 
 		pts = find_max(im, 12, 100)

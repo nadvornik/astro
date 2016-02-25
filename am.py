@@ -339,21 +339,22 @@ class Plotter:
             		plot.stroke()
 
 		plot_image = plot.get_image_as_numpy()
+		del plot
 
-		bg = np.zeros_like(plot_image)
-		if img is not None:
+		if img is not None and scale <= 8:
+			bg = np.zeros_like(plot_image)
 			if scale == 1:
 				thumb = img
 			else:
 				thumb = cv2.resize(img, (tw, th))
 			if thumb.ndim > 2:
-				bg[ty:ty+th, tx:tx+tw, 0:3] = thumb
+				bg[ty:ty+th, tx:tx+tw, 0:3] = thumb[:, :, 0:3]
 			else:
 				bg[ty:ty+th, tx:tx+tw, 0] = bg[ty:ty+th, tx:tx+tw, 1] = bg[ty:ty+th, tx:tx+tw, 2] = thumb
 		
-		res=cv2.add(plot_image, bg)
+			plot_image = cv2.add(plot_image, bg)
 
-		return res
+		return plot_image
 
 
 
