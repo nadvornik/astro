@@ -98,7 +98,12 @@ function isElementInViewport(el) {
         //alert(JSON.stringify(status));
         $(".ajax_up").each(function() {
           var jsonp = $(this).data('jsonp');
-          var v = jsonp.split(".").reduce( (dict, key) => (key != undefined ? dict[key] : undefined), status);
+          try {
+            var v = jsonp.split(".").reduce( (dict, key) => (key != undefined ? dict[key] : undefined), status);
+          } 
+          catch(err) {
+            return;
+          }
           var prefix = $(this).data('prefix');
           if (v == undefined) return;
           if (prefix != undefined) v = prefix + v;
