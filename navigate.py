@@ -858,11 +858,18 @@ class Navigator:
 		else:
 			print "full-res not solved"
 
-def fit_line(xylist):
+def fit_line(xylist, sigma = 2):
 	a = np.array(xylist)
-	x = a[:, 0]
-	y = a[:, 1]
-	return np.polyfit(x, y, 1)
+	m, c = np.polyfit(a[:, 0], a[:, 1], 1)
+	print "fit_line res1" , m ,c
+	
+	for i in range(1, 5):
+		d2 = (a[:, 0] * m + c - a[:, 1]) ** 2
+		var = np.mean(d2)
+		a = a[np.where(d2 < var * sigma ** 2)]
+		m, c = np.polyfit(a[:, 0], a[:, 1], 1)
+		print "fit_line res2" , m ,c
+	return m, c
 
 class Guider:
 	def __init__(self, status, go, dark, tid):
@@ -1019,7 +1026,7 @@ class Guider:
 				
 					aresp = np.array(self.resp0)
 					aresp1 = aresp[aresp[:, 1] > 10]
-					m, c = np.polyfit(aresp1[:, 0], aresp1[:, 1], 1)
+					m, c = fit_line(aresp1)
 
 					self.status['pixpersec'] = m
 					self.status['t_delay1'] = max(-c / m, 0.5)
@@ -1069,7 +1076,7 @@ class Guider:
 					
 					aresp = np.array(self.resp0)
 					aresp1 = aresp[aresp[:, 0] > self.t1 + self.status['t_delay1'] - self.t0]
-					m, c = np.polyfit(aresp1[:, 0], aresp1[:, 1], 1)
+					m, c = fit_line(aresp1)
 
 					self.status['pixpersec_neg'] = m
 					self.status['t_delay2'] = max(0.5, (c + self.status['t_delay1'] * self.status['pixpersec']) / (self.status['pixpersec'] - self.status['pixpersec_neg']) - self.t1 + self.t0)
@@ -1816,18 +1823,18 @@ def run_gphoto_g():
 def run_test_g():
 	global status
 	status = Status("run_test_g.conf")
-	ui.namedWindow('navigator')
+	ui.namedWindow('guider')
 	ui.namedWindow('polar')
 
-        polar = Polar(status.path(["polar"]), ['navigator'])
+        polar = Polar(status.path(["polar"]), ['guider'])
 
 	dark = Median(5)
-	nav = Navigator(status.path(["guider", "navigator"]), dark, polar, 'navigator', polar_tid = 'polar')
+	nav = Navigator(status.path(["guider", "navigator"]), dark, polar, 'guider', polar_tid = 'polar')
 	go = GuideOut()
-	guider = Guider(status.path(["guider"]), go, dark, 'navigator')
+	guider = Guider(status.path(["guider"]), go, dark, 'guider')
 	cam = Camera_test_g(status.path(["guider", "navigator", "camera"]), go)
 
-	runner = Runner('navigator', cam, navigator = nav, guider = guider)
+	runner = Runner('guider', cam, navigator = nav, guider = guider)
 	runner.start()
 	main_loop()
 	runner.join()
