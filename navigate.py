@@ -892,6 +892,7 @@ class Guider:
 		self.pt0 = []
 		self.ok = False
 		self.capture_in_progress = False
+		self.i0 = 0
 
 	def dark_add_masked(self, im):
 		h, w = im.shape
@@ -963,6 +964,7 @@ class Guider:
 			self.status['mode'] = 'move'
 			self.t0 = time.time()
 			self.resp0 = []
+			self.i0 = i
 
 		elif self.status['mode'] == 'move':
 				
@@ -991,10 +993,11 @@ class Guider:
 				dist = np.linalg.norm(off)
 
 				if (dist > 20):
-					self.dark.add(im)
+					if i % int(2 + (i - self.i0) / self.dist) == 0:
+						self.dark.add(im)
 					self.resp0.append((t - self.t0, dist, 0))
 			
-				if (dist > self.dist):
+				if (dist > self.dist and dist < self.dist + 20):
 					self.dist = dist
 					self.off = off
 					self.off_t = t
@@ -1009,7 +1012,7 @@ class Guider:
 
 				status += " dist:%.1f" % (dist)
 
-				if (self.dist > 100 and len(self.resp0) > 12):
+				if self.dist > 100 and len(self.resp0) > 15 or len(self.resp0) > 60:
 					self.t1 = time.time()
 					dt = t - self.t0
 					self.go.out(-1)
