@@ -972,6 +972,7 @@ class Guider:
 			self.t0 = time.time()
 			self.resp0 = []
 			self.i0 = i
+			cmdQueue.put('disp-df-cor')
 
 		elif self.status['mode'] == 'move':
 				
