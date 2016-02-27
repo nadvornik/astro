@@ -652,6 +652,7 @@ class Navigator:
 		self.status['ra'], self.status['dec'] = self.polar.zenith()
 		self.status['max_radius'] = 100
 		self.status['radius'] = self.status['max_radius']
+		self.i_dark = 0
 
 	def proc_frame(self,im, i, t = None):
 		self.i = i
@@ -694,7 +695,9 @@ class Navigator:
 				self.status['radius'] = self.status['field_deg']
 				self.wcs = self.solver.wcs
 			
-				self.dark.add_masked(self.solved_im, self.solver.ind_sources)
+				if i - self.i_dark > 12:
+					self.dark.add_masked(self.solved_im, self.solver.ind_sources)
+					self.i_dark = i
 				
 				self.index_sources = self.solver.ind_radec
 				self.plotter = Plotter(self.wcs)
