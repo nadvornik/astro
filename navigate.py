@@ -689,6 +689,8 @@ class Navigator:
 		if self.solver is not None and not self.solver.is_alive():
 			self.solver.join()
 			if self.solver.solved:
+				save_conf = self.status['field_deg'] is None
+					
 				self.status['ra'] = self.solver.ra
 				self.status['dec'] = self.solver.dec
 				self.status['field_deg'] = self.solver.field_deg
@@ -711,6 +713,8 @@ class Navigator:
 					self.polar.set_pos_tan(self.wcs, self.status['t_solver'], self.tid)
 				if self.polar_tid is not None:
 					self.polar.solve()
+				if save_conf:
+					cmdQueue.put('save')
 					
 			else:
 				if self.status['radius'] > 0 and self.status['radius'] < 70:
