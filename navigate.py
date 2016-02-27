@@ -824,7 +824,7 @@ class Navigator:
 	
 	def proc_full_res(self, jpg):
 		t = time.time()
-		pil_image = Image.open(jpg)
+		pil_image = Image.open(io.BytesIO(jpg))
 		im_c = np.array(pil_image)
 		del pil_image
 		im = cv2.min(cv2.min(im_c[:, :, 0], im_c[:, :, 1]), im_c[:, :, 2])
@@ -1631,8 +1631,8 @@ class Runner(threading.Thread):
 	
 	def capture_cb(self, jpg):
 		cmdQueue.put('capture-finished')
-		ui.imshow_jpg("full_res", io.BytesIO(jpg))
-		threading.Thread(target=self.navigator.proc_full_res, args = [io.BytesIO(jpg)] ).start()
+		ui.imshow_jpg("full_res", jpg)
+		threading.Thread(target=self.navigator.proc_full_res, args = [jpg] ).start()
 
 def main_loop():
 	global status

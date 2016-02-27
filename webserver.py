@@ -5,7 +5,7 @@ from SocketServer import ThreadingMixIn
 import cgi
 import threading
 from PIL import Image
-import StringIO
+import io
 import time
 import os
 import sys
@@ -29,7 +29,7 @@ class MjpegBuf:
 
 	def update_jpg(self, jpg):
 		with self.condition:
-			self.buf = jpg.getvalue()
+			self.buf = memoryview(jpg).tobytes()
 			self.encoded = True
 			self.condition.notify_all()
 			self.seq += 1
@@ -39,10 +39,11 @@ class MjpegBuf:
 			while self.buf is None or seq == self.seq + 1:
 				self.condition.wait()
 			if not self.encoded:
-				tmpFile = StringIO.StringIO()
+				tmpFile = io.BytesIO()
 				self.buf.save(tmpFile,'JPEG')
 				self.buf = tmpFile.getvalue()
 				self.encoded = True
+				tmpFile.close()
 				
 			buf = self.buf
 			seq = self.seq

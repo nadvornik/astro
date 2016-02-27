@@ -74,7 +74,7 @@ class MyGUI_CV2(threading.Thread):
 		self.queue.put((name, img))
 
 	def imshow_jpg(self, name, jpg):
-		pil_image = Image.open(jpg)
+		pil_image = Image.open(io.BytesIO(jpg))
 		img = np.array(pil_image)
 		self.queue.put((name, img))
 	
