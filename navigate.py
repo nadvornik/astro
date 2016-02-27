@@ -223,20 +223,23 @@ class MaxDetector(threading.Thread):
 
 def find_max(img, d, n = 40):
 	(h, w) = img.shape
-	par = 4
+	par = 3
 	step = (h + par - 1) / par
 	mds = []
-	for y in range(0, h, step):
-		md = MaxDetector(img, d, n / par + 1, y, min(y + step, h))
-		mds.append(md)
-		#md.run()
-		md.start()
+	joined = []
+	try:
+		for y in range(0, h, step):
+			md = MaxDetector(img, d, n / par + 1, y, min(y + step, h))
+			mds.append(md)
+			#md.run()
+			md.start()
 		
 
-	joined = []
-	for md in mds:
-		md.join()
-		joined += md.found
+		for md in mds:
+			md.join()
+			joined += md.found
+	except:
+		print "Error: " +  sys.exc_info().__str__()
 	if len(joined) == 0:
 		return []
 
