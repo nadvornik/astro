@@ -716,7 +716,7 @@ class Navigator:
 			self.solver = None
 			self.solved_im = None
 
-		if self.solver is None and i > 20 :
+		if self.solver is None and i > 20 and self.status['dispmode'] != 'disp-orig' and self.status['dispmode'] != 'disp-df-cor':
 			xy = self.stack.get_xy()
 			#print "len", len(xy)
 			if len(xy) > 8:
