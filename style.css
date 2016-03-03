@@ -32,6 +32,14 @@ button, select {
   position:relative;
 }
 
+.textbox {
+  overflow:auto;
+  width: 100%;
+  height: 100%;
+  position:relative;
+}
+
+
 .reloader {
   transform-origin: 0% 100%;
   max-width: 100%;
