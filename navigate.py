@@ -250,6 +250,48 @@ def find_max(img, d, n = 40):
 	
 	return joined
 
+def centroid_list(im, pt0, off):
+	(h, w) = im.shape
+
+	pt = []
+	match = []
+
+	centroid_size = 10
+	
+	for i, (y, x, v) in enumerate(pt0):
+		x = int(x + off[1])
+		y = int(y + off[0])
+		
+		if (x < centroid_size):
+			continue
+		if (y < centroid_size):
+			continue
+		if (x > w - centroid_size - 1):
+			continue
+		if (y > h - centroid_size - 1):
+			continue
+		cm = np.array(im[y - centroid_size : y + centroid_size + 1, x - centroid_size : x + centroid_size + 1], dtype = np.float32)
+		cm = cv2.GaussianBlur(cm, (9, 9), 0)
+		
+		xs, ys = centroid(cm, centroid_size)
+		if abs(xs) > 5:
+			continue
+		if abs(ys) > 5:
+			continue
+			
+		mean, stddev = cv2.meanStdDev(cm)
+		#print "centroid", v, cm[centroid_size + ys, centroid_size + xs], mean, stddev
+		
+		if cm[centroid_size + ys, centroid_size + xs] < mean + stddev * 3:
+			continue
+		
+		i2 = len(pt)
+		pt.append((y + ys, x + xs, v))
+		match.append([i, i2])
+	return match_take(pt0, pt, match)
+
+
+
 def match_take(pt1, pt2, match, ord1 = None, ord2 = None):
 	match = np.array(match)
 	if match.shape[0] == 0:
@@ -980,13 +1022,20 @@ class Guider:
 		else:
 			im_sub = im
 
+		if self.status['mode'] == 'close':
+			pt0, pt, match = centroid_list(im_sub, self.pt0, self.off)
+			if len(match) == 0:
+				self.status['mode'] = 'track'
+		
+		
+		if self.status['mode'] != 'close':
+			bg = cv2.blur(im_sub, (30, 30))
+			bg = cv2.blur(bg, (30, 30))
+			im_sub = cv2.subtract(im_sub, bg)
 
-		bg = cv2.blur(im_sub, (30, 30))
-		bg = cv2.blur(bg, (30, 30))
-		im_sub = cv2.subtract(im_sub, bg)
+			pt = find_max(im_sub, 20, n = 30)
 
 		disp = normalize(im_sub)
-		pt = find_max(im_sub, 20, n = 30)
 
 
 		try:
@@ -1124,14 +1173,15 @@ class Guider:
 					self.status['mode'] = 'track'
 
 
-		elif self.status['mode'] == 'track':
-			pt1m, pt2m, match = match_triangle(self.pt0, pt, 5, 30, self.off)
-			if len(match) > 0:
-				off, weights = avg_pt(pt1m, pt2m)
-				#print "triangle", off, match
+		elif self.status['mode'] == 'track' or self.status['mode'] == 'close':
+			if self.status['mode'] == 'track':
+				pt1m, pt2m, match = match_triangle(self.pt0, pt, 5, 30, self.off)
+				if len(match) > 0:
+					off, weights = avg_pt(pt1m, pt2m)
+					#print "triangle", off, match
 			
-				pt0, pt, match = match_closest(self.pt0, pt, 5, off)
-				
+					pt0, pt, match = match_closest(self.pt0, pt, 5, off)
+
 			if len(match) > 0:
 				self.off, weights = avg_pt(pt0, pt)
 				err = complex(*self.off) / self.ref_off
@@ -1155,6 +1205,9 @@ class Guider:
 				if not self.capture_in_progress and (self.status['seq'] == 'seq-guided' and self.ok or self.status['seq'] == 'seq-unguided'):
 					cmdQueue.put('capture')
 					self.capture_in_progress = True
+				
+				if self.ok:
+					self.status['mode'] = 'close'
 				
 				for p in pt:
 					cv2.circle(disp, (int(p[1]), int(p[0])), 10, (255), 1)
