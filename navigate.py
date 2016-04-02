@@ -597,7 +597,7 @@ class Stack:
 
 	def get_xy(self):
 		if self.xy is None:
-			self.xy = np.array(find_max(self.img, 12, n = 30))
+			self.xy = np.array(find_max(self.img, 12, n = 15))
 
 		return self.xy
 
@@ -652,8 +652,18 @@ class Navigator:
 		self.status['ra'], self.status['dec'] = self.polar.zenith()
 		self.status['max_radius'] = 100
 		self.status['radius'] = self.status['max_radius']
+		self.status.setdefault("hotpixels", None)
+		
 		self.i_dark = 0
 
+	def hotpix_find(self):
+		bg = cv2.GaussianBlur(self.im, (7, 7), 0)
+		im = cv2.subtract(self.im, bg)
+		
+		mean, stddev = cv2.meanStdDev(im)
+		hp = np.where(im > stddev * 10)
+		self.status['hotpixels'] = zip(*hp)
+		
 	def proc_frame(self,im, i, t = None):
 		self.i = i
 		if im.ndim > 2:
@@ -671,6 +681,10 @@ class Navigator:
 		bg = cv2.blur(im_sub, (30, 30))
 		bg = cv2.blur(bg, (30, 30))
 		im_sub = cv2.subtract(im_sub, bg)
+
+		if self.status['hotpixels'] is not None:
+			for p in self.status['hotpixels']:
+				cv2.circle(im_sub, (int(p[1]), int(p[0])), 1, (0), -1)
 
 		if i < 6:
 			self.dark.add(im)
@@ -757,6 +771,12 @@ class Navigator:
 			ui.imshow(self.tid, disp)
 		elif (self.status['dispmode'] == 'disp-df-cor'):
 			disp = normalize(im_sub)
+			
+			if self.status['hotpixels'] is not None:
+				for p in self.status['hotpixels']:
+					cv2.circle(disp, (int(p[1]), int(p[0])), 1, (255), -1)
+
+			
 			cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
 			ui.imshow(self.tid, disp)
 		elif (self.status['dispmode'] == 'disp-normal'):
@@ -811,6 +831,9 @@ class Navigator:
 
 		if cmd == 'dark':
 			self.dark.add(self.im)
+
+		if cmd == 'hotpixels':
+			self.hotpix_find()
 		
 		if cmd.startswith('disp-'):
 			self.status['dispmode'] = cmd

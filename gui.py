@@ -17,6 +17,7 @@ class MyGUI_CV2(threading.Thread):
 		ord(' ') : 'solver-retry',
 		ord('\\') : 'solver-reset',
 		ord('d') : 'dark',
+		ord('h') : 'hotpixels',
 		ord('g') : 'guider',
 		ord('f') : 'navigator',
 		
