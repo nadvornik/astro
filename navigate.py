@@ -694,18 +694,27 @@ class Navigator:
 		self.status['ra'], self.status['dec'] = self.polar.zenith()
 		self.status['max_radius'] = 100
 		self.status['radius'] = self.status['max_radius']
-		self.status.setdefault("hotpixels", None)
+		self.hotpixels = None
+		self.hotpix_cnt = None
 		
 		self.i_dark = 0
+
 
 	def hotpix_find(self):
 		bg = cv2.GaussianBlur(self.im, (7, 7), 0)
 		im = cv2.subtract(self.im, bg)
 		
 		mean, stddev = cv2.meanStdDev(im)
-		hp = np.where(im > stddev * 10)
-		self.status['hotpixels'] = zip(*hp)
 		
+		if self.hotpix_cnt is None:
+			self.hotpix_cnt = np.zeros_like(im, dtype=np.uint8)
+		
+		self.hotpix_cnt[np.where(im > stddev * 10)] += 1
+		
+	def hotpix_update(self):
+		self.hotpixels = zip(*np.where(self.hotpix_cnt > 2))
+		
+	
 	def proc_frame(self,im, i, t = None):
 		self.i = i
 		if im.ndim > 2:
@@ -724,12 +733,19 @@ class Navigator:
 		bg = cv2.blur(bg, (30, 30))
 		im_sub = cv2.subtract(im_sub, bg)
 
-		if self.status['hotpixels'] is not None:
-			for p in self.status['hotpixels']:
+		n_hotpixels = 0
+		if self.hotpixels is not None:
+			n_hotpixels = len(self.hotpixels)
+			for p in self.hotpixels:
 				cv2.circle(im_sub, (int(p[1]), int(p[0])), 1, (0), -1)
 
 		if i < 6:
 			self.dark.add(im)
+			self.hotpix_find()
+		
+		if i == 6:
+			self.hotpix_update()
+
 
 		M = self.stack.add(im_sub, show_match=(self.status['dispmode'] == 'disp-match'))
 		filtered = self.stack.get()
@@ -806,18 +822,13 @@ class Navigator:
 				cv2.putText(polar_plot, p_status, (10, polar_plot.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2)
 				ui.imshow(self.polar_tid, polar_plot)
 			
-		status = "#%d %s %s  solv#%d r:%.1f fps:%.1f" % (i, self.status['dispmode'], self.polar.mode, i - self.status['i_solver'], self.status['radius'], fps)
+		status = "#%d %s %s  solv#%d r:%.1f fps:%.1f hp:%d" % (i, self.status['dispmode'], self.polar.mode, i - self.status['i_solver'], self.status['radius'], fps, n_hotpixels)
 		if (self.status['dispmode'] == 'disp-orig'):
 			disp = normalize(im)
 			cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
 			ui.imshow(self.tid, disp)
 		elif (self.status['dispmode'] == 'disp-df-cor'):
 			disp = normalize(im_sub)
-			
-			if self.status['hotpixels'] is not None:
-				for p in self.status['hotpixels']:
-					cv2.circle(disp, (int(p[1]), int(p[0])), 1, (255), -1)
-
 			
 			cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
 			ui.imshow(self.tid, disp)
@@ -876,6 +887,9 @@ class Navigator:
 
 		if cmd == 'hotpixels':
 			self.hotpix_find()
+			self.hotpix_update()
+			if len(self.hotpixels) > 1000:
+				self.hotpix_cnt = None
 		
 		if cmd.startswith('disp-'):
 			self.status['dispmode'] = cmd
