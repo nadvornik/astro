@@ -259,8 +259,8 @@ def centroid_list(im, pt0, off):
 	centroid_size = 10
 	
 	for i, (y, x, v) in enumerate(pt0):
-		x = int(x + off[1])
-		y = int(y + off[0])
+		x = int(x + off[1] + 0.5)
+		y = int(y + off[0] + 0.5)
 		
 		if (x < centroid_size):
 			continue
@@ -613,12 +613,12 @@ class Stack:
 		if show_match:
 			self.match = normalize(self.img)
 			for p in pt1:
-				cv2.circle(self.match, (int(p[1]), int(p[0])), 13, (255), 1)
+				cv2.circle(self.match, (int(p[1] + 0.5), int(p[0] + 0.5)), 13, (255), 1)
 		
 			for p in pt2:
-				cv2.circle(self.match, (int(p[1]), int(p[0])), 5, (255), 1)
+				cv2.circle(self.match, (int(p[1] + 0.5), int(p[0] + 0.5)), 5, (255), 1)
 			for p in pt2m:
-				cv2.circle(self.match, (int(p[1]), int(p[0])), 10, (255), 1)
+				cv2.circle(self.match, (int(p[1] + 0.5), int(p[0] + 0.5)), 10, (255), 1)
 		return M
 
 	def add_simple(self, im):
@@ -737,7 +737,7 @@ class Navigator:
 		if self.hotpixels is not None:
 			n_hotpixels = len(self.hotpixels)
 			for p in self.hotpixels:
-				cv2.circle(im_sub, (int(p[1]), int(p[0])), 1, (0), -1)
+				cv2.circle(im_sub, (int(p[1] + 0.5), int(p[0] + 0.5)), 1, (0), -1)
 
 		if i < 6:
 			self.dark.add(im)
@@ -835,7 +835,7 @@ class Navigator:
 		elif (self.status['dispmode'] == 'disp-normal'):
 			disp = normalize(filtered)
 			for p in self.stack.get_xy():
-				cv2.circle(disp, (int(p[1]), int(p[0])), 13, (255), 1)
+				cv2.circle(disp, (int(p[1] + 0.5), int(p[0] + 0.5)), 13, (255), 1)
 			if self.plotter is not None:
 		
 				extra_lines = []
@@ -994,7 +994,7 @@ class Guider:
 		h, w = im.shape
 		pts = []
 		for p in self.pt0:
-			(x, y) = (int(p[1] + self.off[1]), int(p[0] + self.off[0]))
+			(x, y) = (int(p[1] + 0.5 + self.off[1]), int(p[0] + 0.5 + self.off[0]))
 			if (x < 0):
 				continue
 			if (y < 0):
@@ -1112,7 +1112,7 @@ class Guider:
 
 				for i in pt_ok:
 					p = self.pt0[i]
-					cv2.circle(disp, (int(p[1] + self.off[1]), int(p[0] + self.off[0])), 13, (255), 1)
+					cv2.circle(disp, (int(p[1] + self.off[1] + 0.5), int(p[0] + self.off[0] + 0.5)), 13, (255), 1)
 
 				status += " dist:%.1f" % (dist)
 
@@ -1141,7 +1141,7 @@ class Guider:
 				
 					self.go.out(-1, self.dist / self.status['pixpersec'])
 			for p in pt:
-				cv2.circle(disp, (int(p[1]), int(p[0])), 10, (255), 1)
+				cv2.circle(disp, (int(p[1] + 0.5), int(p[0] + 0.5)), 10, (255), 1)
 
 		elif self.status['mode'] == 'back':
 			self.cnt += 1
@@ -1164,7 +1164,7 @@ class Guider:
 					self.dark_add_masked(im)
 
 				for p in pt:
-					cv2.circle(disp, (int(p[1]), int(p[0])), 10, (255), 1)
+					cv2.circle(disp, (int(p[1] + 0.5), int(p[0] + 0.5)), 10, (255), 1)
 				self.go.out(-1, err.real / self.status['pixpersec'])
 				
 				if err.real < self.status['pixpersec'] * self.status['t_delay1'] + self.pixperframe:
@@ -1224,7 +1224,7 @@ class Guider:
 					self.status['mode'] = 'close'
 				
 				for p in pt:
-					cv2.circle(disp, (int(p[1]), int(p[0])), 10, (255), 1)
+					cv2.circle(disp, (int(p[1] + 0.5), int(p[0] + 0.5)), 10, (255), 1)
 				
 
 				if i % 100 == 0:
@@ -1234,7 +1234,7 @@ class Guider:
 				
 		if len(self.pt0) > 0:
 			for p in self.pt0:
-				cv2.circle(disp, (int(p[1]), int(p[0])), 13, (255), 1)
+				cv2.circle(disp, (int(p[1] + 0.5), int(p[0] + 0.5)), 13, (255), 1)
 
 		cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
 		ui.imshow(self.tid, disp)
@@ -1351,8 +1351,8 @@ class Focuser:
 			if p[2] < stddev * 3:
 				#print "under 3stddev:", p[2], stddev * 3
 				continue
-			x = int(p[1])
-			y = int(p[0])
+			x = int(p[1] + 0.5)
+			y = int(p[0] + 0.5)
 			if (x < Focuser.hfr_size * 2):
 				continue
 			if (y < Focuser.hfr_size * 2):
@@ -1403,8 +1403,8 @@ class Focuser:
 			xs, ys = centroid(im[y  - centroid_size : y + centroid_size + 1, x - centroid_size : x + centroid_size + 1], centroid_size)
 			x += xs
 			y += ys
-			ix = int(x)
-			iy = int(y)
+			ix = int(x + 0.5)
+			iy = int(y + 0.5)
 			if (ix < Focuser.hfr_size):
 				continue
 			if (iy < Focuser.hfr_size):
@@ -1580,21 +1580,21 @@ class Focuser:
 			cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
 			if self.focus_yx is not None:
 				for p in self.focus_yx:
-					cv2.circle(disp, (int(p[1]), int(p[0])), 20, (255), 1)
+					cv2.circle(disp, (int(p[1] + 0.5), int(p[0] + 0.5)), 20, (255), 1)
 			ui.imshow(self.tid, disp)
 		elif (self.dispmode == 'disp-df-cor'):
 			disp = normalize(im_sub)
 			cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
 			if self.focus_yx is not None:
 				for p in self.focus_yx:
-					cv2.circle(disp, (int(p[1]), int(p[0])), 20, (255), 1)
+					cv2.circle(disp, (int(p[1] + 0.5), int(p[0] + 0.5)), 20, (255), 1)
 			ui.imshow(self.tid, disp)
 		elif (self.dispmode == 'disp-normal'):
 			disp = normalize(self.stack_im)
 			cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
 			if self.focus_yx is not None:
 				for p in self.focus_yx:
-					cv2.circle(disp, (int(p[1]), int(p[0])), 20, (255), 1)
+					cv2.circle(disp, (int(p[1] + 0.5), int(p[0] + 0.5)), 20, (255), 1)
 			ui.imshow(self.tid, disp)
 		else:
 			disp = cv2.cvtColor(normalize(self.stack_im), cv2.COLOR_GRAY2RGB)
