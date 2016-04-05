@@ -1143,11 +1143,14 @@ class Guider:
 					self.status['mode'] = 'back'
 				
 					self.go.out(-1, self.dist / self.status['pixpersec'])
+					cmdQueue.put('interrupt')
+
 			for p in pt:
 				cv2.circle(disp, (int(p[1] + 0.5), int(p[0] + 0.5)), 10, (255), 1)
 
 		elif self.status['mode'] == 'back':
 			self.cnt += 1
+
 			pt1m, pt2m, match = match_triangle(self.pt0, pt, 5, 50, self.off)
 			if len(match) > 0:
 				off, weights = avg_pt(pt1m, pt2m)
@@ -1188,6 +1191,7 @@ class Guider:
 					self.status['t_delay'] = (self.status['t_delay1'] + self.status['t_delay2']) / 2
 				
 					self.status['mode'] = 'track'
+					cmdQueue.put('interrupt')
 
 
 		elif self.status['mode'] == 'track' or self.status['mode'] == 'close':
