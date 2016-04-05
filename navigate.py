@@ -1007,6 +1007,9 @@ class Guider:
 		return self.dark.add_masked(im, pts)
 
 	def cmd(self, cmd):
+		if cmd == "stop":
+			self.go.out(0)
+
 		if cmd == "capture-started":
 			self.capture_in_progress = True
 		if cmd == "capture-finished":
@@ -1642,10 +1645,12 @@ class Runner(threading.Thread):
 				if cmd is None:
 					break
 				if cmd == 'exit' or cmd == 'shutdown':
+					self.guider.cmd('stop')
 					profiler.print_stats()
 
 					return
 				elif cmd == 'navigator' and self.navigator is not None:
+					self.guider.cmd('stop')
 					if mode == 'zoom_focuser':
 						self.camera.cmd('z0')
 					mode = 'navigator'
