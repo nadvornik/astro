@@ -659,6 +659,12 @@ def plot_bg(*args, **kwargs):
 	#_plot_bg(*args, **kwargs)
 	threading.Thread(target=_plot_bg, args = args, kwargs = kwargs).start()
 
+def apply_gamma8(img, gamma):
+	lut = np.fromiter( ( (x / 255.0)**gamma * 255.0 for x in xrange(256)), dtype=np.uint8 )
+	return np.take(lut, img)
+
+
+
 class Navigator:
 	def __init__(self, status, dark, polar, tid, polar_tid = None):
 		self.status = status
@@ -917,7 +923,6 @@ class Navigator:
 		im_c = np.array(pil_image)
 		del pil_image
 		im = cv2.min(cv2.min(im_c[:, :, 0], im_c[:, :, 1]), im_c[:, :, 2])
-		del im_c
 
 		pts = find_max(im, 12, 100)
 		w = im.shape[1]
@@ -935,14 +940,15 @@ class Navigator:
 			self.status['radius'] = solver.field_deg
 			self.polar.set_pos_tan(solver.wcs, t, "full-res")
 
-			#if (self.status['dispmode'].startswith('disp-zoom-')):
-			#	zoom = self.status['dispmode'][len('disp-zoom-'):]
-			#else:
-			#	zoom = 1
-			#
-			#plotter=Plotter(solver.wcs)
-        		#plot = plotter.plot(im_c, scale = zoom)
-        		#ui.imshow('full_res', plot)
+			if (self.status['dispmode'].startswith('disp-zoom-')):
+				zoom = self.status['dispmode'][len('disp-zoom-'):]
+			else:
+				zoom = 1
+			
+			im_c = apply_gamma8(im_c, 0.6)
+			plotter=Plotter(solver.wcs)
+			plot = plotter.plot(im_c, scale = zoom)
+			ui.imshow('full_res', plot)
 
 		else:
 			print "full-res not solved"
