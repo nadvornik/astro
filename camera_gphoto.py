@@ -75,12 +75,50 @@ class Camera_gphoto:
 				print ex.code
 				time.sleep(0.1)
 				continue
-	
+
+	def set_config_value_checked(self, name, value):
+		value = str(value)
+		for t in range(0, 20):
+			try:
+				config = gp.check_result(gp.gp_camera_get_config(self.camera, self.context))
+				OK, widget = gp.gp_widget_get_child_by_name(config, name)
+				
+				if OK >= gp.GP_OK:
+					num = None
+					choice_count = gp.check_result(gp.gp_widget_count_choices(widget))
+					print "count", choice_count
+					for i in range(choice_count):
+						vi = gp.check_result(gp.gp_widget_get_choice(widget, i))
+						if vi == value:
+							num = i
+							break
+						try:
+							if abs(float(vi) - float(value)) < 0.000001:
+								value = vi
+								num = i
+								break
+						except ValueError:
+							pass
+					
+					if num is not None:
+						print "set %s => %s (choice %d)" % (name, value, num)
+						# set value
+						gp.check_result(gp.gp_widget_set_value(widget, value))
+					else:
+						print "cant't set %s => %s" % (name, value)
+				# set config
+				gp.check_result(gp.gp_camera_set_config(self.camera, config, self.context))
+				break
+			except gp.GPhoto2Error as ex:
+				print ex.code
+				time.sleep(0.1)
+				continue
+
 	def capture_bulb(self, test = False, callback = None):
 		if test:
 			sec = self.status['test-exp-sec']
 
-			self.set_config_value('iso', str(self.status['test-iso']))
+			self.set_config_value_checked('iso', self.status['test-iso'])
 			try:
 				self.status['test-iso'] = int(self.set_config_value('iso'))
 			except:
@@ -90,7 +128,7 @@ class Camera_gphoto:
 		else:
 			sec = self.status['exp-sec']
 
-			self.set_config_value('iso', str(self.status['iso']))
+			self.set_config_value('iso', self.status['iso'])
 			try:
 				self.status['iso'] = int(self.set_config_value('iso'))
 			except:
@@ -99,7 +137,7 @@ class Camera_gphoto:
 			#self.set_config_choice('imageformat', 24) #RAW 
 			self.set_config_choice('imageformat', 7) #RAW + Large Normal JPEG 
 		
-		self.set_config_value('eosremoterelease', 'Immediate')
+		self.set_config_value_checked('eosremoterelease', 'Immediate')
 		self.t_start = time.time()
 		self.status['exp_in_progress'] = True
 		self.status['interrupt'] = False
@@ -112,7 +150,7 @@ class Camera_gphoto:
 				self.status['cur_time'] = int(t)
 
 			if self.status['exp_in_progress'] and (t > sec or self.status['interrupt']):
-				self.set_config_value('eosremoterelease', 'Release Full')
+				self.set_config_value_checked('eosremoterelease', 'Release Full')
 				self.status['exp_in_progress'] = False
 
 			
@@ -145,8 +183,8 @@ class Camera_gphoto:
 				raise
 
 		#stop review on display
-		self.set_config_value('eosremoterelease', 'Press Half')
-		self.set_config_value('eosremoterelease', 'Release Half')
+		self.set_config_value_checked('eosremoterelease', 'Press Half')
+		self.set_config_value_checked('eosremoterelease', 'Release Half')
 	
 		time.sleep(.2)
 		self.set_config_choice('output', 1)
@@ -178,21 +216,21 @@ class Camera_gphoto:
 				continue
 		
 		# wake up the camera
-		self.set_config_value('eosremoterelease', 'Press Half')
-		self.set_config_value('eosremoterelease', 'Release Half')
-		self.set_config_value('eosremoterelease', 'Release Full')
+		self.set_config_value_checked('eosremoterelease', 'Press Half')
+		self.set_config_value_checked('eosremoterelease', 'Release Half')
+		self.set_config_value_checked('eosremoterelease', 'Release Full')
 		
 		cur_time = self.get_config_value('datetime')
 		if abs(time.time() - cur_time) > 1500:
 			print "adjusting time ", time.time(), cur_time
 			subprocess.call(['date', '--set', '@' + str(cur_time) ])
 		
-		self.set_config_value('aperture', self.status['f-number'])
+		self.set_config_value_checked('aperture', self.status['f-number'])
 		self.status['f-number'] = self.get_config_value('aperture')
 		self.status['lensname'] = self.get_config_value('lensname')
 		
 		self.set_config_choice('drivemode', 0)
-		self.set_config_value('autoexposuremode', 'Bulb')
+		self.set_config_value_checked('autoexposuremode', 'Bulb')
 		
 		# required configuration will depend on camera type!
 		self.set_config_choice('capturesizeclass', 2)
@@ -319,7 +357,7 @@ class Camera_gphoto:
 
 	
 	def shutdown(self):
-		self.set_config_value('eosremoterelease', 'Release Full')
+		self.set_config_value_checked('eosremoterelease', 'Release Full')
 		gp.check_result(gp.gp_camera_exit(self.camera, self.context))
 	
 	
