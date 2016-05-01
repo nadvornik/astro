@@ -995,6 +995,7 @@ class Guider:
 		self.ok = False
 		self.capture_in_progress = False
 		self.i0 = 0
+		self.dither = 0
 
 	def dark_add_masked(self, im):
 		h, w = im.shape
@@ -1020,6 +1021,8 @@ class Guider:
 			self.capture_in_progress = True
 		if cmd == "capture-finished":
 			self.capture_in_progress = False
+			self.dither = (self.dither + 5) % 23
+			
 		if cmd.startswith('aggressivness-'):
 			try:
 				self.status['aggressivness'] = float(cmd[len('aggressivness-'):])
@@ -1211,7 +1214,7 @@ class Guider:
 
 			if len(match) > 0:
 				self.off, weights = avg_pt(pt0, pt)
-				err = complex(*self.off) / self.ref_off
+				err = complex(*self.off) / self.ref_off + self.dither
 				self.resp0.append((t - self.t0, err.real, err.imag))
 
 				t_proc = time.time() - t
