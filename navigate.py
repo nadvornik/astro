@@ -227,19 +227,23 @@ def find_max(img, d, n = 40):
 	step = (h + par - 1) / par
 	mds = []
 	joined = []
-	try:
-		for y in range(0, h, step):
+	for y in range(0, h, step):
+		try:
 			md = MaxDetector(img, d, n / par + 1, y, min(y + step, h))
-			mds.append(md)
 			#md.run()
 			md.start()
-		
+			mds.append(md)
+		except:
+			print "Error: " +  sys.exc_info().__str__()
 
-		for md in mds:
+
+	for md in mds:
+		try:
 			md.join()
 			joined += md.found
-	except:
-		print "Error: " +  sys.exc_info().__str__()
+		except:
+			print "Error: " +  sys.exc_info().__str__()
+
 	if len(joined) == 0:
 		return []
 

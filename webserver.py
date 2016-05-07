@@ -12,6 +12,7 @@ import sys
 from cmd import cmdQueue
 import subprocess
 from stacktraces import stacktraces
+import exceptions
 
 class MjpegBuf:
 	def __init__(self):
@@ -35,9 +36,13 @@ class MjpegBuf:
 			self.seq += 1
 
 	def serve(self, handler, seq):
+	        t0 = time.time()
 		with self.condition:
 			while self.buf is None or seq == self.seq + 1:
-				self.condition.wait()
+				if time.time() > t0 + 120:
+					print "req timeout"
+					raise exceptions.EOFError()
+				self.condition.wait(120)
 			if not self.encoded:
 				tmpFile = io.BytesIO()
 				self.buf.save(tmpFile,'JPEG')
