@@ -1662,12 +1662,14 @@ class Runner(threading.Thread):
 				if cmd is None:
 					break
 				if cmd == 'exit' or cmd == 'shutdown':
-					self.guider.cmd('stop')
+					if self.guider is not None:
+						self.guider.cmd('stop')
 					profiler.print_stats()
 
 					return
 				elif cmd == 'navigator' and self.navigator is not None:
-					self.guider.cmd('stop')
+					if self.guider is not None:
+						self.guider.cmd('stop')
 					if mode == 'zoom_focuser':
 						self.camera.cmd('z0')
 					mode = 'navigator'
