@@ -15,12 +15,13 @@ import time
 import sys
 
 class GuideOut(threading.Thread):
-	def __init__(self):
+	def __init__(self, bin_name):
 		threading.Thread.__init__(self)
 		self.daemon = True
 		self.history = []
 		self.terminating = False
 		self.cmd = None
+		self.bin_name = bin_name
 		self.start()
 	
 	def run(self):
@@ -31,7 +32,7 @@ class GuideOut(threading.Thread):
 					print "guide_out_rt exited with %d\n" % (self.cmd.poll()),
 				if self.terminating:
 					return
-				self.cmd = subprocess.Popen(['./guide_out_rt'], close_fds=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, bufsize=1 )
+				self.cmd = subprocess.Popen([self.bin_name], close_fds=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, bufsize=1 )
 				if not restart:
 					atexit.register(self.terminate)
 			try:

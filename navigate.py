@@ -971,10 +971,12 @@ def fit_line(xylist, sigma = 2):
 	return m, c
 
 class Guider:
-	def __init__(self, status, go, dark, tid):
+	def __init__(self, status, go_ra, go_dec, dark, tid):
 		self.status = status
 		self.status.setdefault('aggressivness', 0.6)
-		self.go = go
+		self.go_ra = go_ra
+		self.go_dec = go_dec
+		
 		self.dark = dark
 		self.status['seq'] = 'seq-stop'
 		self.reset()
@@ -993,7 +995,8 @@ class Guider:
 		self.status['pixpersec_neg'] = None
 		self.off = (0.0, 0.0)
 		self.off_t = None
-		self.go.out(0)
+		self.go_ra.out(0)
+		self.go_dec.out(0)
 		self.cnt = 0
 		self.pt0 = []
 		self.ok = False
@@ -1019,7 +1022,9 @@ class Guider:
 
 	def cmd(self, cmd):
 		if cmd == "stop":
-			self.go.out(0)
+			self.go_ra.out(0)
+			self.go_dec.out(0)
+			
 
 		if cmd == "capture-started":
 			self.capture_in_progress = True
@@ -1045,7 +1050,8 @@ class Guider:
 		
 		if len(self.pt0) == 0:
 			cmdQueue.put('navigator')
-			self.go.out(0)
+			self.go_ra.out(0)
+			self.go_dec.out(0)
 
 		if (self.dark.len() >= 4):
 			im_sub = cv2.subtract(im, self.dark.get())
@@ -1079,7 +1085,7 @@ class Guider:
 			self.used_cnt = []
 			self.cnt = 0
 			self.dist = 1.0
-			self.go.out(1)
+			self.go_ra.out(1)
 			self.status['mode'] = 'move'
 			self.t0 = time.time()
 			self.resp0 = []
@@ -1135,7 +1141,7 @@ class Guider:
 				if self.dist > 100 and len(self.resp0) > 15 or len(self.resp0) > 60:
 					self.t1 = time.time()
 					dt = t - self.t0
-					self.go.out(-1)
+					self.go_ra.out(-1)
 				
 					aresp = np.array(self.resp0)
 					aresp1 = aresp[aresp[:, 1] > 10]
@@ -1155,7 +1161,7 @@ class Guider:
 					self.cnt = 0
 					self.status['mode'] = 'back'
 				
-					self.go.out(-1, self.dist / self.status['pixpersec'])
+					self.go_ra.out(-1, self.dist / self.status['pixpersec'])
 					cmdQueue.put('interrupt')
 
 			for p in pt:
@@ -1184,7 +1190,7 @@ class Guider:
 
 				for p in pt:
 					cv2.circle(disp, (int(p[1] + 0.5), int(p[0] + 0.5)), 10, (255), 1)
-				self.go.out(-1, err.real / self.status['pixpersec'])
+				self.go_ra.out(-1, err.real / self.status['pixpersec'])
 				
 				if err.real < self.status['pixpersec'] * self.status['t_delay1'] + self.pixperframe:
 					self.t2 = t
@@ -1203,6 +1209,41 @@ class Guider:
 					print "pixpersec_neg", self.status['pixpersec_neg'], "pixperframe_neg", self.pixperframe_neg, "t_delay2", self.status['t_delay2']
 					self.status['t_delay'] = (self.status['t_delay1'] + self.status['t_delay2']) / 2
 				
+					self.err0_dec = err.imag
+					
+					if self.go_dec is not None:
+						self.go_dec.out(1, self.status['t_delay'] * 2 + 3)
+						self.status['mode'] = 'move_dec'
+					else:
+						self.status['mode'] = 'track'
+						cmdQueue.put('interrupt')
+
+		elif self.status['mode'] == 'move_dec':
+			pt1m, pt2m, match = match_triangle(self.pt0, pt, 5, 50, self.off)
+			if len(match) > 0:
+				off, weights = avg_pt(pt1m, pt2m)
+				#print "triangle", off, match
+			
+				pt0, pt, match = match_closest(self.pt0, pt, 5, off)
+				
+			if len(match) > 0:
+				self.off, weights = avg_pt(pt0, pt)
+				err = complex(*self.off) / self.ref_off
+				
+				self.resp0.append((t - self.t0, err.real, err.imag))
+			
+				status += " err:%.1f %.1f t_delay:%.1f" % (err.real, err.imag, self.status['t_delay'])
+			
+				if t > self.t2 + self.status['t_delay'] * 2 + 3 or abs(err.imag - self.err0_dec) > 50:
+					if abs(err.imag - self.err0_dec) < 2 * self.status['pixpersec']:
+						print "no dec axis"
+						self.dec_coef = 0
+						
+					elif err.imag - self.err0_dec > 0:
+						self.dec_coef = 1
+					else:
+						self.dec_coef = -1
+
 					self.status['mode'] = 'track'
 					cmdQueue.put('interrupt')
 
@@ -1223,17 +1264,31 @@ class Guider:
 
 				t_proc = time.time() - t
 
-				err_corr = err.real + self.go.recent_avg(self.status['t_delay'] + t_proc, self.status['pixpersec'], self.status['pixpersec_neg'])
+				err_corr_ra = err.real + self.go_ra.recent_avg(self.status['t_delay'] + t_proc, self.status['pixpersec'], self.status['pixpersec_neg'])
+				err_corr_ra *= self.status['aggressivness']
+
+				if self.dec_coef != 0:
+					err_corr_dec = err.imag * self.dec_coef + self.go_dec.recent_avg(self.status['t_delay'] + t_proc, self.status['pixpersec'], self.status['pixpersec_neg'])
+					err_corr_dec *= self.status['aggressivness']
 				
-				
-				err_corr *= self.status['aggressivness']
-				status += " err:%.1f %.1f corr:%.1f t_d:%.1f t_p:%.1f" % (err.real, err.imag, err_corr, self.status['t_delay'], t_proc)
-				if err_corr > 0.1:
-					self.go.out(-1, -err_corr / self.status['pixpersec_neg'])
-				elif err_corr < -0.1:
-					self.go.out(1, -err_corr / self.status['pixpersec'])
+					status += " err:%.1f %.1f corr:%.1f %.1f t_d:%.1f t_p:%.1f" % (err.real, err.imag, err_corr_ra, err_corr_dec, self.status['t_delay'], t_proc)
+					
+					if err_corr_dec > 0.2:
+						self.go_dec.out(-1, -err_corr_dec / self.status['pixpersec_neg'])
+					elif err_corr_dec < -0.2:
+						self.go_dec.out(1, -err_corr_dec / self.status['pixpersec'])
+					else:
+						self.go_dec.out(0)
+
 				else:
-					self.go.out(0)
+					status += " err:%.1f %.1f corr:%.1f t_d:%.1f t_p:%.1f" % (err.real, err.imag, err_corr_ra, self.status['t_delay'], t_proc)
+				
+				if err_corr_ra > 0.2:
+					self.go_ra.out(-1, -err_corr_ra / self.status['pixpersec_neg'])
+				elif err_corr_ra < -0.2:
+					self.go_ra.out(1, -err_corr_ra / self.status['pixpersec'])
+				else:
+					self.go_ra.out(0)
 				
 				self.ok = (err.real < 2 and err.real > -2)
 				if not self.capture_in_progress and (self.status['seq'] == 'seq-guided' and self.ok or self.status['seq'] == 'seq-unguided'):
@@ -1249,7 +1304,7 @@ class Guider:
 
 				if i % 100 == 0:
 					np.save("resp0_%d.npy" % self.t0, np.array(self.resp0))
-					self.go.save("go_%d.npy" % self.t0)
+					self.go_ra.save("go_ra_%d.npy" % self.t0)
 					print "SAVED" 
 				
 		if len(self.pt0) > 0:
@@ -1841,10 +1896,11 @@ class Camera_test_shift:
 
 
 class Camera_test_g:
-	def __init__(self, status, go):
+	def __init__(self, status, go_ra, go_dec):
 		self.i = 0
 		self.err = 0.0
-		self.go = go
+		self.go_ra = go_ra
+		self.go_dec = go_dec
 	
 	def cmd(self, cmd):
 		print "camera:", cmd
@@ -1852,8 +1908,8 @@ class Camera_test_g:
 	def capture(self):
 		time.sleep(0.5)
 		self.err += random.random() * 2 - 1.1
-		corr = self.go.recent_avg()
-		i = int((corr - self.go.recent_avg(1))  + self.err)
+		corr = self.go_ra.recent_avg()
+		i = int((corr - self.go_ra.recent_avg(1))  + self.err)
 		print self.err, corr * 3, i
 		im = cv2.imread("testimg16_" + str(i + 50) + ".tif")
 		return im, None
@@ -1915,8 +1971,9 @@ def run_v4l2_g():
 
 	dark = Median(5)
 	nav = Navigator(status.path(["guider", "navigator"]), dark, polar, 'navigator', polar_tid = 'polar')
-	go = GuideOut()
-	guider = Guider(status.path(["guider"]), go, dark, 'navigator')
+	go_ra = GuideOut("./guide_out_ra")
+	go_dec = GuideOut("./guide_out_dec")
+	guider = Guider(status.path(["guider"]), go_ra, go_dec, dark, 'navigator')
 
 	runner = Runner('navigator', cam, navigator = nav, guider = guider)
 	runner.start()
@@ -1937,8 +1994,10 @@ def run_gphoto_g():
 
 	dark = Median(5)
 	nav = Navigator(status.path(["guider", "navigator"]), dark, polar, 'navigator', polar_tid = 'polar')
-	go = GuideOut()
-	guider = Guider(status.path(["guider"]), go, dark, 'navigator')
+	go_ra = GuideOut("./guide_out_ra")
+	go_dec = GuideOut("./guide_out_dec")
+
+	guider = Guider(status.path(["guider"]), go_ra, go_dec, dark, 'navigator')
 
 	runner = Runner('navigator', cam, navigator = nav, guider = guider)
 	runner.start()
@@ -1955,9 +2014,10 @@ def run_test_g():
 
 	dark = Median(5)
 	nav = Navigator(status.path(["guider", "navigator"]), dark, polar, 'guider', polar_tid = 'polar')
-	go = GuideOut()
-	guider = Guider(status.path(["guider"]), go, dark, 'guider')
-	cam = Camera_test_g(status.path(["guider", "navigator", "camera"]), go)
+	go_ra = GuideOut("./guide_out_ra")
+	go_dec = GuideOut("./guide_out_dec")
+	guider = Guider(status.path(["guider"]), go_ra, go_dec, dark, 'guider')
+	cam = Camera_test_g(status.path(["guider", "navigator", "camera"]), go_ra, go_dec)
 
 	runner = Runner('guider', cam, navigator = nav, guider = guider)
 	runner.start()
@@ -1997,8 +2057,10 @@ def run_test_2():
 	nav1 = Navigator(status.path(["navigator"]), dark1, polar, 'navigator', polar_tid = 'polar')
 
 	nav = Navigator(status.path(["guider", "navigator"]), dark2, polar, 'guider')
-	go = GuideOut()
-	guider = Guider(status.path(["guider"]), go, dark2, 'guider')
+	go_ra = GuideOut("./guide_out_ra")
+	go_dec = GuideOut("./guide_out_dec")
+
+	guider = Guider(status.path(["guider"]), go_ra, go_dec, dark2, 'guider')
 	#cam = Camera_test_g(status.path(["guider", "navigator", "camera"]), go)
 	cam = Camera_test_shift(status.path(["guider", "navigator", "camera"]), cam1, 3000)
 	
@@ -2030,8 +2092,10 @@ def run_test_2_gphoto():
 	zoom_focuser = Focuser('navigator')
 
 	nav = Navigator(status.path(["guider", "navigator"]), dark2, polar, 'guider')
-	go = GuideOut()
-	guider = Guider(status.path(["guider"]), go, dark2, 'guider')
+	go_ra = GuideOut("./guide_out_ra")
+	go_dec = GuideOut("./guide_out_dec")
+
+	guider = Guider(status.path(["guider"]), go_ra, go_dec, dark2, 'guider')
 	cam = Camera_test_g(status.path(["guider", "navigator", "camera"]), go)
 
 	ui.namedWindow('navigator')
@@ -2072,8 +2136,10 @@ def run_2():
 	zoom_focuser = Focuser('navigator')
 
 	nav = Navigator(status.path(["guider", "navigator"]), dark2, polar, 'guider')
-	go = GuideOut()
-	guider = Guider(status.path(["guider"]), go, dark2, 'guider')
+	go_ra = GuideOut("./guide_out_ra")
+	go_dec = GuideOut("./guide_out_dec")
+
+	guider = Guider(status.path(["guider"]), go_ra, go_dec, dark2, 'guider')
 
 	ui.namedWindow('navigator')
 	ui.namedWindow('guider')
