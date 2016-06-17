@@ -40,6 +40,7 @@ import json
 
 from PIL import Image;
 
+from focuser_out import FocuserOut
 
 class Status:
 	def __init__(self, conf_file):
@@ -1938,7 +1939,8 @@ def run_v4l2():
 def run_gphoto():
 	global status
 	status = Status("run_gphoto.conf")
-	cam = Camera_gphoto(status.path(["navigator", "camera"]))
+	fo = FocuserOut()
+	cam = Camera_gphoto(status.path(["navigator", "camera"]), fo)
 	cam.prepare()
 	ui.namedWindow('navigator')
 	ui.namedWindow('polar')

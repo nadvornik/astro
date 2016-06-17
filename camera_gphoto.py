@@ -20,7 +20,7 @@ def apply_gamma(img, gamma):
 
 
 class Camera_gphoto:
-	def __init__(self, status):
+	def __init__(self, status, focuser = None):
 		self.status = status
 		self.status.setdefault('iso', 400)
 		self.status.setdefault('test-iso', 3200)
@@ -30,6 +30,7 @@ class Camera_gphoto:
 		self.status['cur_time'] = 0
 		self.status['exp_in_progress'] = False
 		self.status['interrupt'] = False
+		self.focuser = focuser
 
 	def get_config_value(self, name):
 		config = gp.check_result(gp.gp_camera_get_config(self.camera, self.context))
@@ -248,18 +249,23 @@ class Camera_gphoto:
 	
 	def cmd(self, cmd, x = None, y = None):
 		try:
-			if cmd == "f-3":
-				self.set_config_choice('manualfocusdrive', 2)
-			if cmd == "f-2":
-				self.set_config_choice('manualfocusdrive', 1)
-			if cmd == "f-1":
-				self.set_config_choice('manualfocusdrive', 0)
-			if cmd == "f+1":
-				self.set_config_choice('manualfocusdrive', 4)
-			if cmd == "f+2":
-				self.set_config_choice('manualfocusdrive', 5)
-			if cmd == "f+3":
-				self.set_config_choice('manualfocusdrive', 6)
+			if cmd in ["f-3", "f-2", "f-1", "f+3", "f+2", "f+1"]:
+				if self.focuser is not None:
+					self.focuser.cmd(cmd)
+				else:
+					if cmd == "f-3":
+						self.set_config_choice('manualfocusdrive', 2)
+					if cmd == "f-2":
+						self.set_config_choice('manualfocusdrive', 1)
+					if cmd == "f-1":
+						self.set_config_choice('manualfocusdrive', 0)
+					if cmd == "f+1":
+						self.set_config_choice('manualfocusdrive', 4)
+					if cmd == "f+2":
+						self.set_config_choice('manualfocusdrive', 5)
+					if cmd == "f+3":
+						self.set_config_choice('manualfocusdrive', 6)
+			
 			if cmd == "z1":
         
 				zoom = 5
