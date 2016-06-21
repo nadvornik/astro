@@ -224,7 +224,7 @@ class MaxDetector(threading.Thread):
 
 def find_max(img, d, n = 40):
 	(h, w) = img.shape
-	par = 3
+	par = 4
 	step = (h + par - 1) / par
 	mds = []
 	joined = []
