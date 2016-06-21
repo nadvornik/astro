@@ -1234,15 +1234,21 @@ class Guider:
 				self.resp0.append((t - self.t0, err.real, err.imag))
 			
 				status += " err:%.1f %.1f t_delay:%.1f" % (err.real, err.imag, self.status['t_delay'])
+				
+				print status
+				print abs(err.imag - self.err0_dec), 2 * self.status['pixpersec']
 			
-				if t > self.t2 + self.status['t_delay'] * 2 + 3 or abs(err.imag - self.err0_dec) > 50:
+				if t > self.t2 + self.status['t_delay'] * 2 + 10 or abs(err.imag - self.err0_dec) > 50:
 					if abs(err.imag - self.err0_dec) < 2 * self.status['pixpersec']:
 						print "no dec axis"
 						self.dec_coef = 0
 						
 					elif err.imag - self.err0_dec > 0:
+						print "dec_pos"
 						self.dec_coef = 1
 					else:
+						print "dec_neg"
+
 						self.dec_coef = -1
 
 					self.status['mode'] = 'track'
@@ -1864,7 +1870,7 @@ class Camera_test:
 		#pil_image.thumbnail((1000,1000), Image.ANTIALIAS)
 		#im = np.array(pil_image)
 		#im = cv2.imread("testimg16_" + str(self.i % 100 * 3 + int(self.i / 100) * 10) + ".tif")
-		im = cv2.imread("testimg19_" + str(self.i) + ".tif")
+		im = cv2.imread("test/testimg16_" + str(self.i) + ".tif")
 		#im = apply_gamma(im, 2.2)
 		if self.x != 0 or self.y != 0:
 			M = np.array([[1.0, 0.0, self.x],
@@ -1889,7 +1895,7 @@ class Camera_test_shift:
 	
 	def capture(self):
 		i =  self.cam0.i + self.shift
-		im = cv2.imread("testimg19_" + str(i) + ".tif")
+		im = cv2.imread("test/testimg16_" + str(i) + ".tif")
 		return im, None
 
 	def shutdown(self):
@@ -1912,7 +1918,7 @@ class Camera_test_g:
 		corr = self.go_ra.recent_avg()
 		i = int((corr - self.go_ra.recent_avg(1))  + self.err)
 		print self.err, corr * 3, i
-		im = cv2.imread("testimg16_" + str(i + 50) + ".tif")
+		im = cv2.imread("test/testimg16_" + str(i + 50) + ".tif")
 		return im, None
 
 	def shutdown(self):
@@ -2063,8 +2069,7 @@ def run_test_2():
 	go_dec = GuideOut("./guide_out_dec")
 
 	guider = Guider(status.path(["guider"]), go_ra, go_dec, dark2, 'guider')
-	#cam = Camera_test_g(status.path(["guider", "navigator", "camera"]), go)
-	cam = Camera_test_shift(status.path(["guider", "navigator", "camera"]), cam1, 3000)
+	cam = Camera_test_g(status.path(["guider", "navigator", "camera"]), go)
 	
 	runner = Runner('navigator', cam1, navigator = nav1)
 	runner.start()
@@ -2125,7 +2130,8 @@ def run_2():
 	cam = Camera(status.path(["guider", "navigator", "camera"]))
 	cam.prepare(1280, 960)
 	
-	cam1 = Camera_gphoto(status.path(["navigator", "camera"]))
+	fo = FocuserOut()
+	cam1 = Camera_gphoto(status.path(["navigator", "camera"]), fo)
 	cam1.prepare()
 
         polar = Polar(status.path(["polar"]), ['navigator', 'guider', 'full-res'])
@@ -2149,7 +2155,7 @@ def run_2():
 	ui.namedWindow('full_res')
 
 	
-	go.out(1, 10) # move aside for 10s to collect darkframes
+	go_ra.out(1, 10) # move aside for 10s to collect darkframes
 
 	runner = Runner('navigator', cam1, navigator = nav1, focuser=focuser, zoom_focuser = zoom_focuser)
 	runner.start()
