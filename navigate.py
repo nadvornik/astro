@@ -1322,8 +1322,12 @@ class Guider:
 					print "SAVED" 
 				
 		if len(self.pt0) > 0:
+			if self.dither != 0:
+				dither_off = self.dither * self.ref_off
+			else:
+				dither_off = complex(0, 0)
 			for p in self.pt0:
-				cv2.circle(disp, (int(p[1] + 0.5), int(p[0] + 0.5)), 13, (255), 1)
+				cv2.circle(disp, (int(p[1] + dither_off.imag + 0.5), int(p[0] + dither_off.real + 0.5)), 13, (255), 1)
 
 		cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
 		ui.imshow(self.tid, disp)
