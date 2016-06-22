@@ -982,6 +982,7 @@ class Guider:
 	def __init__(self, status, go_ra, go_dec, dark, tid):
 		self.status = status
 		self.status.setdefault('aggressivness', 0.6)
+		self.status.setdefault('aggressivness_dec', 0.1)
 		self.go_ra = go_ra
 		self.go_dec = go_dec
 		
@@ -1034,19 +1035,25 @@ class Guider:
 			self.go_dec.out(0)
 			
 
-		if cmd == "capture-started":
+		elif cmd == "capture-started":
 			self.capture_in_progress = True
-		if cmd == "capture-finished":
+		elif cmd == "capture-finished":
 			self.capture_in_progress = False
 			self.dither = (self.dither + 5) % 23
 			
-		if cmd.startswith('aggressivness-'):
+		elif cmd.startswith('aggressivness-dec-'):
+			try:
+				self.status['aggressivness_dec'] = float(cmd[len('aggressivness-dec-'):])
+			except:
+				pass
+
+		elif cmd.startswith('aggressivness-'):
 			try:
 				self.status['aggressivness'] = float(cmd[len('aggressivness-'):])
 			except:
 				pass
 
-		if cmd.startswith('seq-'):
+		elif cmd.startswith('seq-'):
 			self.status['seq'] = cmd
 
 	def proc_frame(self, im, i):
@@ -1283,13 +1290,13 @@ class Guider:
 
 				if self.dec_coef != 0:
 					err_corr_dec = err.imag * self.dec_coef + self.go_dec.recent_avg(self.status['t_delay'] + t_proc, self.status['pixpersec'], self.status['pixpersec_neg'])
-					err_corr_dec *= self.status['aggressivness']
+					err_corr_dec *= self.status['aggressivness_dec']
 				
 					status += " err:%.1f %.1f corr:%.1f %.1f t_d:%.1f t_p:%.1f" % (err.real, err.imag, err_corr_ra, err_corr_dec, self.status['t_delay'], t_proc)
 					
-					if err_corr_dec > 0.2:
+					if err_corr_dec > 0.5:
 						self.go_dec.out(-1, -err_corr_dec / self.status['pixpersec_neg'])
-					elif err_corr_dec < -0.2:
+					elif err_corr_dec < -0.5:
 						self.go_dec.out(1, -err_corr_dec / self.status['pixpersec'])
 					else:
 						self.go_dec.out(0)
@@ -2080,7 +2087,7 @@ def run_test_2():
 	go_dec = GuideOut("./guide_out_dec")
 
 	guider = Guider(status.path(["guider"]), go_ra, go_dec, dark2, 'guider')
-	cam = Camera_test_g(status.path(["guider", "navigator", "camera"]), go)
+	cam = Camera_test_g(status.path(["guider", "navigator", "camera"]), go_ra, go_dec)
 	
 	runner = Runner('navigator', cam1, navigator = nav1)
 	runner.start()
