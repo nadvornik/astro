@@ -678,6 +678,7 @@ class Navigator:
 		self.solver = None
 		self.solver_off = np.array([0.0, 0.0])
 		self.status.setdefault("dispmode", 'disp-normal')
+		self.status.setdefault("field_corr", None)
 		try:
 			if self.status['lensname'] == self.status['camera']['lensname']:
 				self.status.setdefault('field_deg', None)
@@ -707,6 +708,10 @@ class Navigator:
 		self.status['radius'] = self.status['max_radius']
 		self.hotpixels = None
 		self.hotpix_cnt = None
+		
+		self.field_cor = None
+		if self.status['field_corr'] is not None:
+			self.field_cor = np.load(self.status['field_corr'])
 		
 		self.i_dark = 0
 
@@ -756,7 +761,9 @@ class Navigator:
 		
 		if i == 6:
 			self.hotpix_update()
-
+			
+		if self.field_cor is not None:
+			im_sub = cv2.remap(im_sub, self.field_cor, None, cv2.INTER_LINEAR)
 
 		M = self.stack.add(im_sub, show_match=(self.status['dispmode'] == 'disp-match'))
 		filtered = self.stack.get()
@@ -2180,7 +2187,7 @@ if __name__ == "__main__":
 	sys.stderr = mystderr
 	
 
-	run_gphoto()
+	#run_gphoto()
 	#run_test_2()
 	#run_v4l2()
 	#run_test_2_gphoto()
