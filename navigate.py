@@ -41,6 +41,7 @@ import json
 from PIL import Image;
 
 from focuser_out import FocuserOut
+from centroid import centroid, sym_center
 
 class Status:
 	def __init__(self, conf_file):
@@ -149,24 +150,6 @@ class Median:
 		self.i = 0
 		self.list = []
 
-centroid_mat_cache = {}
-def centroid(a, centroid_size):
-	if centroid_size not in centroid_mat_cache:
-		centroid_mat_x = np.array([[x for x in range(-centroid_size, centroid_size + 1) ] for y in range(-centroid_size, centroid_size + 1) ], dtype=np.float)
-		centroid_mat_y = np.array([[y for x in range(-centroid_size, centroid_size + 1) ] for y in range(-centroid_size, centroid_size + 1) ], dtype=np.float)
-		centroid_mat_cache[centroid_size] = (centroid_mat_x, centroid_mat_y)
-	else:
-		(centroid_mat_x, centroid_mat_y) = centroid_mat_cache[centroid_size]
-		
-
-	s = cv2.sumElems(a)[0]
-	if s == 0.0:
-		return 0, 0
-	x = cv2.sumElems(cv2.multiply(a, centroid_mat_x, dtype=cv2.CV_32FC1))[0] / s
-	y = cv2.sumElems(cv2.multiply(a, centroid_mat_y, dtype=cv2.CV_32FC1))[0] / s
-	return x, y
-	
-
 class MaxDetector(threading.Thread):
 	def __init__(self, img, d, n, y1, y2):
 		threading.Thread.__init__(self)
@@ -215,7 +198,7 @@ class MaxDetector(threading.Thread):
 				continue
 			if (y + self.y1 > h - centroid_size - 1):
 				continue
-			xs, ys = centroid(imge[y + self.y1e0 - centroid_size : y + self.y1e0 + centroid_size + 1, x - centroid_size : x + centroid_size + 1], centroid_size)
+			xs, ys = sym_center(imge[y + self.y1e0 - centroid_size : y + self.y1e0 + centroid_size + 1, x - centroid_size : x + centroid_size + 1])
 			#print "centroid", xs, ys, xs2, ys2
 			
 			self.found.append((y + self.y1 + ys, x + xs, v))
@@ -276,17 +259,18 @@ def centroid_list(im, pt0, off):
 		if (y > h - centroid_size - 1):
 			continue
 		cm = np.array(im[y - centroid_size : y + centroid_size + 1, x - centroid_size : x + centroid_size + 1], dtype = np.float32)
-		cm = cv2.GaussianBlur(cm, (9, 9), 0)
 		
-		xs, ys = centroid(cm, centroid_size)
+		xs, ys = sym_center(cm)
+		print "xs, ys", xs, ys
 		if abs(xs) > 5:
 			continue
 		if abs(ys) > 5:
 			continue
 			
-		mean, stddev = cv2.meanStdDev(cm)
 		#print "centroid", v, cm[centroid_size + ys, centroid_size + xs], mean, stddev
 		
+		cm = cv2.GaussianBlur(cm, (9, 9), 0)
+		mean, stddev = cv2.meanStdDev(cm)
 		if cm[centroid_size + ys, centroid_size + xs] < mean + stddev * 3:
 			continue
 		
@@ -1500,7 +1484,7 @@ class Focuser:
 				continue
 			if (y > h - Focuser.hfr_size - 1):
 				continue
-			xs, ys = centroid(im[y  - centroid_size : y + centroid_size + 1, x - centroid_size : x + centroid_size + 1], centroid_size)
+			xs, ys = sym_center(im[y  - centroid_size : y + centroid_size + 1, x - centroid_size : x + centroid_size + 1])
 			x += xs
 			y += ys
 			ix = int(x + 0.5)
@@ -1715,6 +1699,7 @@ class Runner(threading.Thread):
 	def run(self):
 		profiler = LineProfiler()
 		profiler.add_function(Navigator.proc_frame)
+		profiler.add_function(Guider.proc_frame)
 		profiler.add_function(Stack.add)
 		profiler.add_function(Median.add)
 		profiler.add_function(Median.add_masked)
