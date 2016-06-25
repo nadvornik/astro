@@ -693,9 +693,9 @@ class Navigator:
 		self.hotpixels = None
 		self.hotpix_cnt = None
 		
-		self.field_cor = None
+		self.field_corr = None
 		if self.status['field_corr'] is not None:
-			self.field_cor = np.load(self.status['field_corr'])
+			self.field_corr = np.load(self.status['field_corr'])
 		
 		self.i_dark = 0
 
@@ -746,8 +746,8 @@ class Navigator:
 		if i == 6:
 			self.hotpix_update()
 			
-		if self.field_cor is not None:
-			im_sub = cv2.remap(im_sub, self.field_cor, None, cv2.INTER_LINEAR)
+		if self.field_corr is not None:
+			im_sub = cv2.remap(im_sub, self.field_corr, None, cv2.INTER_LINEAR)
 
 		M = self.stack.add(im_sub, show_match=(self.status['dispmode'] == 'disp-match'))
 		filtered = self.stack.get()
@@ -978,6 +978,7 @@ class Guider:
 		self.pt0 = []
 		self.tid = tid
 		self.prev_t = 0
+		self.field_corr = None
 
 	def reset(self):
 		self.status['mode'] = 'start'
@@ -1024,7 +1025,6 @@ class Guider:
 		elif cmd == "capture-finished":
 			self.capture_in_progress = False
 			self.dither = (self.dither + 5) % 23
-			
 		elif cmd.startswith('aggressivness-dec-'):
 			try:
 				self.status['aggressivness_dec'] = float(cmd[len('aggressivness-dec-'):])
@@ -1041,7 +1041,6 @@ class Guider:
 			self.status['seq'] = cmd
 
 	def proc_frame(self, im, i):
-
 		t = time.time()
 
 		if im.ndim > 2:
@@ -1056,6 +1055,9 @@ class Guider:
 			im_sub = cv2.subtract(im, self.dark.get())
 		else:
 			im_sub = im
+
+		if self.field_corr is not None:
+			im_sub = cv2.remap(im_sub, self.field_corr, None, cv2.INTER_LINEAR)
 
 		if self.status['mode'] == 'close':
 			pt0, pt, match = centroid_list(im_sub, self.pt0, self.off)
@@ -1295,7 +1297,10 @@ class Guider:
 				else:
 					self.go_ra.out(0)
 				
-				self.ok = (err.real < 2 and err.real > -2)
+				self.ok = (err.real < 1.5 and err.real > -1.5)
+				if self.dec_coef != 0:
+					self.ok = (self.ok and err.imag < 1.5 and err.imag > -1.5)
+					
 				if not self.capture_in_progress and (self.status['seq'] == 'seq-guided' and self.ok or self.status['seq'] == 'seq-unguided'):
 					cmdQueue.put('capture')
 					self.capture_in_progress = True
@@ -1318,7 +1323,7 @@ class Guider:
 			else:
 				dither_off = complex(0, 0)
 			for p in self.pt0:
-				cv2.circle(disp, (int(p[1] + dither_off.imag + 0.5), int(p[0] + dither_off.real + 0.5)), 13, (255), 1)
+				cv2.circle(disp, (int(p[1] - dither_off.imag + 0.5), int(p[0] - dither_off.real + 0.5)), 13, (255), 1)
 
 		cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
 		ui.imshow(self.tid, disp)
@@ -1743,6 +1748,7 @@ class Runner(threading.Thread):
 						self.camera.cmd('z0')
 					self.guider.reset()
 					self.guider.pt0 = self.navigator.stack.get_xy()
+					self.guider.field_corr = self.navigator.field_corr
 					mode = 'guider'
 				elif cmd == 'z1':
 					if self.zoom_focuser is not None:
