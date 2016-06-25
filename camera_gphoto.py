@@ -252,7 +252,7 @@ class Camera_gphoto:
 			if cmd in ["f-3", "f-2", "f-1", "f+3", "f+2", "f+1"]:
 				if self.focuser is not None:
 					self.focuser.cmd(cmd)
-				else:
+				if self.focuser is None or self.focuser.testmode:
 					if cmd == "f-3":
 						self.set_config_choice('manualfocusdrive', 2)
 					if cmd == "f-2":

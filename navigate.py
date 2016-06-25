@@ -1426,8 +1426,10 @@ class Focuser:
 			self.dark.add(self.im)
 		if cmd.startswith('disp-'):
 			self.dispmode = cmd
-		if cmd == 'focus':
+		if cmd == 'af':
 			self.phase = 'seek'
+		if cmd == 'af_fast':
+			self.phase = 'fast_search_start'
 
 	def reset(self):
 		self.phase = 'wait'
@@ -1606,6 +1608,17 @@ class Focuser:
 				self.hfr = self.get_hfr(im_sub)
 			#self.phase_wait = 2
 			print "max", flux, self.max_flux
+		elif self.phase == 'fast_search_start':
+			self.phase_wait = 3
+			self.phase = 'fast_search'
+		elif self.phase == 'fast_search':
+			self.set_xy_from_stack(self.stack)
+			if self.focus_yx is None or len(self.focus_yx) == 0:
+				self.phase = 'seek' #slow mode
+			else:
+				cmdQueue.put('f+3')
+				self.phase_wait = 1
+				self.phase = 'prep_record_v'
 		elif self.phase == 'prep_record_v': # record v curve
 			self.hfr = self.get_hfr(im_sub)
 			if self.hfr < Focuser.hfr_size / 2:
@@ -1767,11 +1780,11 @@ class Runner(threading.Thread):
 						mode = 'navigator'
 					elif mode == 'focuser':
 						mode = 'navigator'
-				elif cmd == 'focus' and mode != 'zoom_focuser' and self.focuser is not None:
-					if mode == 'navigator':
-						self.focuser.set_xy_from_stack(self.navigator.stack)
+				elif (cmd == 'af' or cmd == 'af_fast') and mode != 'zoom_focuser' and self.focuser is not None:
+					#if mode == 'navigator':
+					#	self.focuser.set_xy_from_stack(self.navigator.stack)
 					mode = 'focuser'
-					self.focuser.cmd('focus')
+					self.focuser.cmd(cmd)
 				elif cmd == 'dark':
 					if mode == 'navigator':
 						self.navigator.cmd(cmd)
