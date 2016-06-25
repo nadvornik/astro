@@ -52,7 +52,8 @@ def sym_center(I):
 	rv = cv2.blur(rv, (3,3))
 	
 	r2 = ru * ru + rv * rv
-	w = r2 / (xm * xm + ym * ym + 0.00001)**0.5
+	rcx, rcy = centroid(r2)
+	w = r2 / ((xm - rcx) **2 + (ym - rcy) ** 2 + 0.00001)**0.5
 
 	m = cv2.divide(ru + rv, ru - rv)
 	m[np.where(np.isinf(m))] = 10000
@@ -62,11 +63,14 @@ def sym_center(I):
 
 if __name__ == "__main__":
 
-	I = np.array([  [ 0,   0,   0,   0,   0 ],
-			[ 0,   0,   0,   0,   0 ],
-			[ 0,   0,   1.0, 1.0, 0 ],
-			[ 0,   0,   1.0, 1.0, 0 ],
-			[ 0,   0,   0,   0,   0 ]])
+	I = np.array([  [ 0,   0,   0,   0,   0  , 0],
+			[ 0,   0,   0,   0,   0  , 0],
+			[ 0,   0,   0,   0,   0  , 0],
+			[ 0,   0,   1.0, 1.0, 0  , 0],
+			[ 0,   0,   1.0, 1.0, 0  , 0],
+			[ 0,   0,   0,   0,   0  , 0],
+			[ 0,   0,   0,   0,   0  , 0],
+			])
 
 	print I
 	print sym_center(I)
