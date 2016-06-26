@@ -32,6 +32,8 @@ def centerfit(m, b, w):
         smbw = np.sum(m * b * wm2p1)
         sbw  = np.sum(b * wm2p1)
         det = smw*smw - smmw*sw
+        if det == 0.0:
+		return 0.0, 0.0
         xc = (smbw*sw - smw*sbw)/det; 
         yc = (smbw*smw - smmw*sbw)/det;
         if np.isnan(xc) or np.isnan(yc):
