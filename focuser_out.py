@@ -1,6 +1,5 @@
 import time
 
-
 class FocuserOut:
 	def __init__(self):
 		self.pos = 0
@@ -22,6 +21,7 @@ class FocuserOut:
 				gpio.output(p, 0)
 		
 			gpio.output(pins[0], 1)
+			self.gpio = gpio
 		except:
 			print "Focuser test mode"
 			self.testmode = True
@@ -38,8 +38,8 @@ class FocuserOut:
 			
 			if not self.testmode:
 				for p in pins:
-					gpio.output(p, 0)
-				gpio.output(pins[ self.pos % 4 ], 1)
+					self.gpio.output(p, 0)
+				self.gpio.output(pins[ self.pos % 4 ], 1)
 				time.sleep(0.002)
 		print "focuser %d" % self.pos
 
@@ -48,17 +48,17 @@ class FocuserOut:
 	
 	def cmd(self, cmd):
 		if cmd == "f-3":
-			self.move(-3000)
+			self.move(-2048)
 		if cmd == "f-2":
-			self.move(-600)
+			self.move(-256)
 		if cmd == "f-1":
-			self.move(-50)
+			self.move(-32)
 		if cmd == "f+3":
-			self.move(3000)
+			self.move(2048)
 		if cmd == "f+2":
-			self.move(600)
+			self.move(256)
 		if cmd == "f+1":
-			self.move(50)
+			self.move(32)
 
 
 if __name__ == "__main__":
