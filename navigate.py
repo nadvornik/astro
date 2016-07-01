@@ -996,7 +996,7 @@ class Guider:
 		self.ok = False
 		self.capture_in_progress = False
 		self.i0 = 0
-		self.dither = 0
+		self.dither = complex(0, 0)
 
 	def dark_add_masked(self, im):
 		h, w = im.shape
@@ -1024,7 +1024,11 @@ class Guider:
 			self.capture_in_progress = True
 		elif cmd == "capture-finished":
 			self.capture_in_progress = False
-			self.dither = (self.dither + 5) % 23
+			if self.dec_coef != 0:
+				self.dither = complex(0, (self.dither.imag + 5) % 23)
+			else:
+				self.dither = complex((self.dither.real + 5) % 23, 0)
+
 		elif cmd.startswith('aggressivness-dec-'):
 			try:
 				self.status['aggressivness_dec'] = float(cmd[len('aggressivness-dec-'):])
@@ -1146,6 +1150,8 @@ class Guider:
 				
 					aresp = np.array(self.resp0)
 					aresp1 = aresp[aresp[:, 1] > 10]
+					if len(aresp1) < 3:
+						aresp1 = aresp
 					m, c = fit_line(aresp1)
 
 					self.status['pixpersec'] = m
@@ -1280,9 +1286,9 @@ class Guider:
 				
 					status += " err:%.1f %.1f corr:%.1f %.1f t_d:%.1f t_p:%.1f" % (err.real, err.imag, err_corr_ra, err_corr_dec, self.status['t_delay'], t_proc)
 					
-					if err_corr_dec > 0.5:
+					if err_corr_dec > 0.2:
 						self.go_dec.out(-1, -err_corr_dec / self.status['pixpersec_neg'])
-					elif err_corr_dec < -0.5:
+					elif err_corr_dec < -0.2:
 						self.go_dec.out(1, -err_corr_dec / self.status['pixpersec'])
 					else:
 						self.go_dec.out(0)
@@ -1315,6 +1321,7 @@ class Guider:
 				if i % 100 == 0:
 					np.save("resp0_%d.npy" % self.t0, np.array(self.resp0))
 					self.go_ra.save("go_ra_%d.npy" % self.t0)
+					self.go_dec.save("go_dec_%d.npy" % self.t0)
 					print "SAVED" 
 				
 		if len(self.pt0) > 0:
@@ -1941,6 +1948,8 @@ class Camera_test_g:
 		i = int((corr - self.go_ra.recent_avg(1))  + self.err)
 		print self.err, corr * 3, i
 		im = cv2.imread("test/testimg16_" + str(i + 50) + ".tif")
+		corr_dec = self.go_dec.recent_avg()
+		im = im[50 + int(corr_dec * 3):-50 + int(corr_dec * 3)]
 		return im, None
 
 	def shutdown(self):
