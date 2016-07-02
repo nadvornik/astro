@@ -1011,6 +1011,7 @@ class Guider:
 		self.go_dec.out(0)
 		self.cnt = 0
 		self.pt0 = []
+		self.pt0base = []
 		self.ok = False
 		self.capture_in_progress = False
 		self.i0 = 0
@@ -1042,10 +1043,18 @@ class Guider:
 			self.capture_in_progress = True
 		elif cmd == "capture-finished":
 			self.capture_in_progress = False
-			if self.dec_coef != 0:
-				self.dither = complex(0, (self.dither.imag + 5) % 23)
-			else:
-				self.dither = complex((self.dither.real + 5) % 23, 0)
+			try:
+				if self.dec_coef != 0:
+					self.dither = complex(0, (self.dither.imag + 5) % 23)
+				else:
+					self.dither = complex((self.dither.real + 5) % 23, 0)
+				dither_off = self.dither * self.ref_off
+				self.pt0 = np.array(self.pt0base, copy=True)
+				self.pt0[:, 0] += dither_off.real
+				self.pt0[:, 1] += dither_off.imag
+			except:
+				pass
+			
 
 		elif cmd.startswith('aggressivness-dec-'):
 			try:
@@ -1179,6 +1188,7 @@ class Guider:
 					print "pixpersec", self.status['pixpersec'], "pixperframe", self.pixperframe, "t_delay1", self.status['t_delay1']
 				
 					self.pt0 = np.array(self.pt0)[np.where(np.bincount(self.used_cnt) > self.cnt / 3)]
+					self.pt0base = self.pt0
 				
 					self.cnt = 0
 					self.status['mode'] = 'back'
@@ -1287,7 +1297,7 @@ class Guider:
 
 			if len(match) > 0:
 				self.off, weights = avg_pt(pt0, pt)
-				err = complex(*self.off) / self.ref_off + self.dither
+				err = complex(*self.off) / self.ref_off
 				self.resp0.append((t - self.t0, err.real, err.imag))
 
 				t_proc = time.time() - t
@@ -1340,12 +1350,8 @@ class Guider:
 					print "SAVED" 
 				
 		if len(self.pt0) > 0:
-			if self.dither != 0:
-				dither_off = self.dither * self.ref_off
-			else:
-				dither_off = complex(0, 0)
 			for p in self.pt0:
-				cv2.circle(disp, (int(p[1] - dither_off.imag + 0.5), int(p[0] - dither_off.real + 0.5)), 13, (255), 1)
+				cv2.circle(disp, (int(p[1] + 0.5), int(p[0] + 0.5)), 13, (255), 1)
 
 		cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
 		ui.imshow(self.tid, disp)
