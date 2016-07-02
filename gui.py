@@ -23,6 +23,7 @@ class MyGUI_CV2(threading.Thread):
 		
 		ord('t') : 'test-capture',
 		ord('y') : 'capture',
+		ord('u') : 'capture-finished', #debug only
 		
 		ord('1') : 'disp-normal',
 		ord('2') : 'disp-zoom-2',

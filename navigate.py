@@ -948,6 +948,25 @@ class Navigator:
 
 		else:
 			print "full-res not solved"
+	def get_xy_cor(self):
+		xy = self.stack.get_xy()
+		print xy
+		if self.field_corr is not None:
+			corr = []
+			for y, x, v in xy:
+				x0 = int(x)
+				xf = x - x0
+				y0 = int(y)
+				yf = y - y0
+				xn = (self.field_corr[y0, x0, 0] * (1.0 - yf) + self.field_corr[y0 + 1, x0, 0] * yf) * (1.0 - xf) + (self.field_corr[y0, x0 + 1, 0] * (1.0 - yf) + self.field_corr[y0 + 1, x0 + 1, 0] * yf) * xf
+				yn = (self.field_corr[y0, x0, 1] * (1.0 - yf) + self.field_corr[y0 + 1, x0, 1] * yf) * (1.0 - xf) + (self.field_corr[y0, x0 + 1, 1] * (1.0 - yf) + self.field_corr[y0 + 1, x0 + 1, 1] * yf) * xf
+
+				print "xycorr", x, y, xn, yn
+				corr.append((yn, xn, v))
+			xy = np.array(corr)
+		print xy
+		return xy
+
 
 def fit_line(xylist, sigma = 2):
 	a = np.array(xylist)
@@ -978,7 +997,6 @@ class Guider:
 		self.pt0 = []
 		self.tid = tid
 		self.prev_t = 0
-		self.field_corr = None
 
 	def reset(self):
 		self.status['mode'] = 'start'
@@ -1059,9 +1077,6 @@ class Guider:
 			im_sub = cv2.subtract(im, self.dark.get())
 		else:
 			im_sub = im
-
-		if self.field_corr is not None:
-			im_sub = cv2.remap(im_sub, self.field_corr, None, cv2.INTER_LINEAR)
 
 		if self.status['mode'] == 'close':
 			pt0, pt, match = centroid_list(im_sub, self.pt0, self.off)
@@ -1767,8 +1782,7 @@ class Runner(threading.Thread):
 					if mode == 'zoom_focuser':
 						self.camera.cmd('z0')
 					self.guider.reset()
-					self.guider.pt0 = self.navigator.stack.get_xy()
-					self.guider.field_corr = self.navigator.field_corr
+					self.guider.pt0 = self.navigator.get_xy_cor()
 					mode = 'guider'
 				elif cmd == 'z1':
 					if self.zoom_focuser is not None:
