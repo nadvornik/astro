@@ -655,7 +655,7 @@ def apply_gamma8(img, gamma):
 
 
 class Navigator:
-	def __init__(self, status, dark, polar, tid, polar_tid = None):
+	def __init__(self, status, dark, polar, tid, polar_tid = None, go_ra = None, go_dec = None):
 		self.status = status
 		self.dark = dark
 		self.stack = Stack()
@@ -681,6 +681,8 @@ class Navigator:
 		self.tid = tid
 		self.polar = polar
 		self.polar_tid = polar_tid
+		self.go_ra = go_ra
+		self.go_dec = go_dec
 		self.index_sources = []
 		self.status['i_solved'] = 0
 		self.status['i_solver'] = 0
@@ -912,6 +914,14 @@ class Navigator:
 				self.polar.set_gps((lat, lon))
 			except:
 				print "Error: " +  sys.exc_info().__str__()
+		if cmd.startswith('go-left-') and self.go_ra is not None:
+				self.go_ra.out(-1, float(cmd[len('go-left-'):]))
+		if cmd.startswith('go-right-') and self.go_ra is not None:
+				self.go_ra.out(1, float(cmd[len('go-right-'):]))
+		if cmd.startswith('go-down-') and self.go_dec is not None:
+				self.go_dec.out(-1, float(cmd[len('go-down-'):]))
+		if cmd.startswith('go-up-') and self.go_dec is not None:
+				self.go_dec.out(1, float(cmd[len('go-up-'):]))
 	
 	def proc_full_res(self, jpg):
 		t = time.time()
@@ -1005,6 +1015,7 @@ class Guider:
 		self.status['t_delay2'] = None
 		self.status['pixpersec'] = None
 		self.status['pixpersec_neg'] = None
+		self.status['pixpersec_dec'] = None
 		self.off = (0.0, 0.0)
 		self.off_t = None
 		self.go_ra.out(0)
@@ -1279,10 +1290,12 @@ class Guider:
 					elif err.imag - self.err0_dec > 0:
 						print "dec_pos"
 						self.dec_coef = 1
+						self.status['pixpersec_dec'] = (err.imag - self.err0_dec) / (t - self.t2 - self.status['t_delay'])
 					else:
 						print "dec_neg"
-
 						self.dec_coef = -1
+						self.status['pixpersec_dec'] = -(err.imag - self.err0_dec) / (t - self.t2 - self.status['t_delay'])
+
 
 					self.status['mode'] = 'track'
 					cmdQueue.put('interrupt')
@@ -1308,15 +1321,15 @@ class Guider:
 				err_corr_ra *= self.status['aggressivness']
 
 				if self.dec_coef != 0:
-					err_corr_dec = err.imag * self.dec_coef + self.go_dec.recent_avg(self.status['t_delay'] + t_proc, self.status['pixpersec'], self.status['pixpersec_neg'])
+					err_corr_dec = err.imag * self.dec_coef + self.go_dec.recent_avg(self.status['t_delay'] + t_proc, self.status['pixpersec_dec'], -self.status['pixpersec_dec'])
 					err_corr_dec *= self.status['aggressivness_dec']
 				
 					status += " err:%.1f %.1f corr:%.1f %.1f t_d:%.1f t_p:%.1f" % (err.real, err.imag, err_corr_ra, err_corr_dec, self.status['t_delay'], t_proc)
 					
 					if err_corr_dec > 0.2:
-						self.go_dec.out(-1, -err_corr_dec / self.status['pixpersec_neg'])
+						self.go_dec.out(-1, err_corr_dec / self.status['pixpersec_dec'])
 					elif err_corr_dec < -0.2:
-						self.go_dec.out(1, -err_corr_dec / self.status['pixpersec'])
+						self.go_dec.out(1, -err_corr_dec / self.status['pixpersec_dec'])
 					else:
 						self.go_dec.out(0)
 
@@ -2117,9 +2130,9 @@ def run_test_2():
 	cam1 = Camera_test(status.path(["navigator", "camera"]))
 	nav1 = Navigator(status.path(["navigator"]), dark1, polar, 'navigator', polar_tid = 'polar')
 
-	nav = Navigator(status.path(["guider", "navigator"]), dark2, polar, 'guider')
 	go_ra = GuideOut("./guide_out_ra")
 	go_dec = GuideOut("./guide_out_dec")
+	nav = Navigator(status.path(["guider", "navigator"]), dark2, polar, 'guider', go_ra = go_ra, go_dec = go_dec)
 
 	guider = Guider(status.path(["guider"]), go_ra, go_dec, dark2, 'guider')
 	cam = Camera_test_g(status.path(["guider", "navigator", "camera"]), go_ra, go_dec)
@@ -2196,9 +2209,9 @@ def run_2():
 	focuser = Focuser('navigator', dark = dark1)
 	zoom_focuser = Focuser('navigator')
 
-	nav = Navigator(status.path(["guider", "navigator"]), dark2, polar, 'guider')
 	go_ra = GuideOut("./guide_out_ra")
 	go_dec = GuideOut("./guide_out_dec")
+	nav = Navigator(status.path(["guider", "navigator"]), dark2, polar, 'guider', go_ra = go_ra, go_dec = go_dec)
 
 	guider = Guider(status.path(["guider"]), go_ra, go_dec, dark2, 'guider')
 

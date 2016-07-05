@@ -62,10 +62,10 @@
                             <td><button class='ajax' value='navigator!f+1'>f+1</button></td>
                         </tr>
                         <tr>
-                            <td/><td><button class='ajax' value='navigator!up'>left</button></td>
+                            <td/><td><button class='ajax' value='navigator!up'>up</button></td>
                         </tr>
                         <tr>
-                            <td><button class='ajax' value='navigator!left'>up</button></td>
+                            <td><button class='ajax' value='navigator!left'>left</button></td>
                             <td/>
                             <td><button class='ajax' value='navigator!right'>right</button></td>
                         </tr>
@@ -153,15 +153,34 @@
             </select>
             <div class='overlay_buttons'>
                 <div class='toggle_buttons' id='navigate2_buttons'>
-                    <button class='ajax' value='guider!solver-retry'>solver-retry</button>
-                    <button class='ajax' value='guider!solver-reset'>solver-reset</button>
-                    <br/>
-                    <button class='ajax' value='guider!dark'>dark</button>
-                    <button class='ajax' value='guider!hotpixels'>hotpixels</button>
-                    <br/>
-                    <button class='reflink' id='guide.html'>reload</button>
-                    <button class='ajax' value='polar-reset'>polar-reset</button>
-                    <button class='ajax' value='polar-align'>polar-align</button>
+                    <table>
+                        <tr>
+                            <td><button class='ajax' value='guider!solver-retry'>solver-retry</button>
+                            <td><button class='ajax' value='guider!solver-reset'>solver-reset</button>
+                            <td/>
+                        </tr>
+                        <tr>
+                            <td><button class='ajax' value='guider!dark'>dark</button>
+                            <td><button class='ajax' value='guider!hotpixels'>hotpixels</button>
+                            <td/>
+                        </tr>
+                        <tr>
+                            <td><button class='reflink' id='guide.html'>reload</button>
+                            <td><button class='ajax' value='polar-reset'>polar-reset</button>
+                            <td><button class='ajax' value='polar-align'>polar-align</button>
+                        </tr>
+                        <tr>
+                            <td/><td><button class='ajax' value='guider!go-up-5'>up</button></td>
+                        </tr>
+                        <tr>
+                            <td><button class='ajax' value='guider!go-left-5'>left</button></td>
+                            <td/>
+                            <td><button class='ajax' value='guider!go-right-5'>right</button></td>
+                        </tr>
+                        <tr>
+                            <td/><td><button class='ajax' value='guider!go-down-5'>down</button></td>
+                        </tr>
+                    </table>
                 </div>
             </div>
         </div>
