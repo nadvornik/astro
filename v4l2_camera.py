@@ -53,6 +53,7 @@ class Camera:
         self.i = 0
         self.dev_name = self.status.setdefault("device", "/dev/video0")
         self.status['lensname'] = 'default'
+        self.status.setdefault('exp-sec', 1.5)
         self.vd = None
 
     def _prepare(self, width, height, format = V4L2_PIX_FMT_SBGGR16):
@@ -173,7 +174,7 @@ class Camera:
 
         #sonix_write_sensor(self.vd, 0x30ea, 0x8c00) #disable black level compensation
         #sonix_write_sensor(self.vd, 0x3044, 0x0000) #disable row noise compensation
-        sonix_write_sensor(self.vd, 0x3012, 0x3000) #exposure time coarse
+        sonix_write_sensor(self.vd, 0x3012, int(0x2400 * self.status['exp-sec'])) #exposure time coarse
         
         # skip incorrectly set  frames at the beginning
         self.capture()
@@ -219,7 +220,9 @@ class Camera:
         time.sleep(0.01)
 
     def cmd(self, cmd):
-        print "camera:", cmd
+	if cmd.startswith('exp-sec-'):
+		self.status['exp-sec'] = float(cmd[len('exp-sec-'):])
+	        sonix_write_sensor(self.vd, 0x3012, int(0x2400 * self.status['exp-sec'])) #exposure time coarse
 
     def shutdown(self):
 	if self.vd is not None:

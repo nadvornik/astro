@@ -2035,21 +2035,22 @@ def run_gphoto():
 def run_v4l2_g():
 	global status
 	status = Status("run_v4l2_g.conf")
-	ui.namedWindow('navigator')
-	ui.namedWindow('polar')
-
-        polar = Polar(status.path(["polar"]), ['navigator'])
-
 	cam = Camera(status.path(["guider", "navigator", "camera"]))
 	cam.prepare(1280, 960)
 
+	ui.namedWindow('guider')
+	ui.namedWindow('polar')
+
+        polar = Polar(status.path(["polar"]), ['guider'])
+
+
 	dark = Median(5)
-	nav = Navigator(status.path(["guider", "navigator"]), dark, polar, 'navigator', polar_tid = 'polar')
+	nav = Navigator(status.path(["guider", "navigator"]), dark, polar, 'guider', polar_tid = 'polar')
 	go_ra = GuideOut("./guide_out_ra")
 	go_dec = GuideOut("./guide_out_dec")
-	guider = Guider(status.path(["guider"]), go_ra, go_dec, dark, 'navigator')
+	guider = Guider(status.path(["guider"]), go_ra, go_dec, dark, 'guider')
 
-	runner = Runner('navigator', cam, navigator = nav, guider = guider)
+	runner = Runner('guider', cam, navigator = nav, guider = guider)
 	runner.start()
 
 	main_loop()
