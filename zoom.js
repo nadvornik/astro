@@ -106,7 +106,15 @@ function isElementInViewport(el) {
           }
           var prefix = $(this).data('prefix');
           if (v == undefined) return;
-          if (prefix != undefined) v = prefix + v;
+          if ($(this).is("select")) {
+            $(this).children().each(function() {
+              var opt = $(this).val();
+              var optv = opt;
+              if (prefix != undefined) optv = opt.slice(prefix.length);
+              if (v == optv) v = opt;
+            });
+          }
+          else if (prefix != undefined) v = prefix + v;
           $(this).data('no_cb', 1)
           $(this).val(v);
           $(this).removeData('no_cb')
