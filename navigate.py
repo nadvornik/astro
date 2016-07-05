@@ -1151,8 +1151,10 @@ class Guider:
 					if i % int(2 + (i - self.i0) / self.dist) == 0:
 						self.dark.add(im)
 					self.resp0.append((t - self.t0, dist, 0))
-			
-				if (dist > self.dist and dist < self.dist + 20):
+				max_move = 30 * (t - self.t0)
+				if self.off_t is not None:
+					max_move =  self.dist + 30 * (t - self.off_t)
+				if (dist > self.dist and dist < max_move):
 					self.dist = dist
 					self.off = off
 					self.off_t = t
@@ -1270,7 +1272,7 @@ class Guider:
 				print abs(err.imag - self.err0_dec), 2 * self.status['pixpersec']
 			
 				if t > self.t2 + self.status['t_delay'] * 2 + 10 or abs(err.imag - self.err0_dec) > 50:
-					if abs(err.imag - self.err0_dec) < 2 * self.status['pixpersec']:
+					if abs(err.imag - self.err0_dec) < min(2 * self.status['pixpersec'], 10):
 						print "no dec axis"
 						self.dec_coef = 0
 						
@@ -1964,7 +1966,7 @@ class Camera_test_g:
 	def capture(self):
 		time.sleep(0.5)
 		self.err += random.random() * 2 - 1.1
-		corr = self.go_ra.recent_avg()
+		corr = self.go_ra.recent_avg() * 5
 		i = int((corr - self.go_ra.recent_avg(1))  + self.err)
 		print self.err, corr * 3, i
 		im = cv2.imread("test/testimg16_" + str(i + 50) + ".tif")
