@@ -8,6 +8,7 @@ import signal
 
 import pyfits
 from astrometry.util.util import Tan, anwcs_new_tan
+from astrometry.util.fits import fits_table
 from astrometry.blind.plotstuff import *
 import threading
 import math
@@ -232,6 +233,32 @@ class Solver(threading.Thread):
 			self.join()
 		
 
+def match_kdtree_catalog(rc, dc, rr, catfn):
+    from astrometry.libkd.spherematch import tree_open, tree_close, tree_build_radec, tree_free, trees_match, tree_permute
+    from astrometry.libkd import spherematch_c
+    from astrometry.util.starutil_numpy import deg2dist, xyztoradec
+    import numpy as np
+    import sys
+
+    #rc,dc = wcs.get_center()
+    #rr = wcs.get_radius()
+    kd = tree_open(catfn)
+    kd2 = tree_build_radec(np.array([rc]), np.array([dc]))
+    r = deg2dist(rr)
+    I,J,nil = trees_match(kd, kd2, r, permuted=False)
+    # HACK
+    #I2,J,d = trees_match(kd, kd2, r)
+    xyz = spherematch_c.kdtree_get_positions(kd, I.astype(np.uint32))
+    #print 'I', I
+    I2 = tree_permute(kd, I)
+    #print 'I2', I2
+    tree_free(kd2)
+    tree_close(kd)
+    tra,tdec = xyztoradec(xyz)
+    print tra, tdec, I2
+    return tra, tdec, I2
+
+
 class Plotter:
 	def __init__(self, wcs):
 		self.wcs = wcs
@@ -310,9 +337,22 @@ class Plotter:
 		ann.bright = (plot_area_deg < 60)
 		ann.ngc_fraction = 0.05 / scale
 
-		ann.HD = (plot_area_deg < 9)
-		ann.HD_labels = (plot_area_deg < 3)
-		ann.hd_catalog = "hd.fits"
+		ann.HD = False
+		#ann.HD = (plot_area_deg < 9)
+		#ann.HD_labels = (plot_area_deg < 3)
+		#ann.hd_catalog = "hd.fits"
+
+
+		if plot_area_deg < 9:
+			tra,tdec,I2 = match_kdtree_catalog(ra2, dec2, plot_area_deg, "tycho2.kd")
+			T = fits_table("tycho2.kd", hdu=6)
+			for r,d,t1,t2,t3 in zip(tra,tdec, T.tyc1[I2], T.tyc2[I2], T.tyc3[I2]):
+				if not new_wcs.is_inside(r, d):
+					continue
+				if plot_area_deg < 2:
+					ann.add_target(r, d, 'tyc %i-%i-%i' % (t1,t2,t3))
+				else:
+					ann.add_target(r, d, '')
 
 		for (r, d, name) in extra:
 			ann.add_target(r, d, name)
