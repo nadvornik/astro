@@ -31,6 +31,7 @@ class Camera_gphoto:
 		self.status['exp_in_progress'] = False
 		self.status['interrupt'] = False
 		self.focuser = focuser
+		self.fpshack = False
 
 	def get_config_value(self, name):
 		config = gp.check_result(gp.gp_camera_get_config(self.camera, self.context))
@@ -60,7 +61,6 @@ class Camera_gphoto:
 				continue
 
 	def set_config_value(self, name, value):
-		value = str(value)
 		for t in range(0, 20):
 			try:
 				config = gp.check_result(gp.gp_camera_get_config(self.camera, self.context))
@@ -79,6 +79,7 @@ class Camera_gphoto:
 
 	def set_config_value_checked(self, name, value):
 		value = str(value)
+		ret = False
 		for t in range(0, 20):
 			try:
 				config = gp.check_result(gp.gp_camera_get_config(self.camera, self.context))
@@ -90,8 +91,9 @@ class Camera_gphoto:
 					print "count", choice_count
 					for i in range(choice_count):
 						vi = gp.check_result(gp.gp_widget_get_choice(widget, i))
-						if vi == value:
+						if vi.lower() == value.lower():
 							num = i
+							value = vi
 							break
 						try:
 							if abs(float(vi) - float(value)) < 0.000001:
@@ -105,6 +107,7 @@ class Camera_gphoto:
 						print "set %s => %s (choice %d)" % (name, value, num)
 						# set value
 						gp.check_result(gp.gp_widget_set_value(widget, value))
+						ret = True
 					else:
 						print "cant't set %s => %s" % (name, value)
 				# set config
@@ -113,7 +116,9 @@ class Camera_gphoto:
 			except gp.GPhoto2Error as ex:
 				print ex.code
 				time.sleep(0.1)
+				ret = False
 				continue
+		return ret
 
 	def capture_bulb(self, test = False, callback = None):
 		if test:
@@ -121,7 +126,7 @@ class Camera_gphoto:
 
 			self.set_config_value_checked('iso', self.status['test-iso'])
 			try:
-				self.status['test-iso'] = int(self.set_config_value('iso'))
+				self.status['test-iso'] = int(self.get_config_value('iso'))
 			except:
 				pass
 			self.set_config_choice('capturetarget', 0) #mem
@@ -129,16 +134,19 @@ class Camera_gphoto:
 		else:
 			sec = self.status['exp-sec']
 
-			self.set_config_value('iso', self.status['iso'])
+			self.set_config_value_checked('iso', self.status['iso'])
 			try:
-				self.status['iso'] = int(self.set_config_value('iso'))
+				self.status['iso'] = int(self.get_config_value('iso'))
 			except:
 				pass
 			self.set_config_choice('capturetarget', 1) #card
 			#self.set_config_choice('imageformat', 24) #RAW 
 			self.set_config_choice('imageformat', 7) #RAW + Large Normal JPEG 
 		
-		self.set_config_value_checked('eosremoterelease', 'Immediate')
+		bulbmode = 'eosremoterelease'
+		if not self.set_config_value_checked('eosremoterelease', 'Immediate'):
+			self.set_config_value('bulb', 1)
+			bulbmode = 'bulb'
 		self.t_start = time.time()
 		self.status['exp_in_progress'] = True
 		self.status['interrupt'] = False
@@ -151,7 +159,10 @@ class Camera_gphoto:
 				self.status['cur_time'] = int(t)
 
 			if self.status['exp_in_progress'] and (t > sec or self.status['interrupt']):
-				self.set_config_value_checked('eosremoterelease', 'Release Full')
+				if bulbmode == 'bulb':
+					self.set_config_value('bulb', 0)
+				else:
+					self.set_config_value_checked('eosremoterelease', 'Release Full')
 				self.status['exp_in_progress'] = False
 
 			
@@ -187,14 +198,13 @@ class Camera_gphoto:
 		self.set_config_value_checked('eosremoterelease', 'Press Half')
 		self.set_config_value_checked('eosremoterelease', 'Release Half')
 	
-		time.sleep(.2)
-		self.set_config_choice('output', 1)
-		time.sleep(.2)
-		self.set_config_choice('output', 0)
-		time.sleep(3)
+		if self.fpshack:
+			time.sleep(.2)
+			self.set_config_choice('output', 1)
+			time.sleep(.2)
+			self.set_config_choice('output', 0)
+			time.sleep(3)
 		
-	
-	
 	def prepare(self):
 		self.shape = (704, 1056)
 		self.zoom_shape = (680, 1024)
@@ -221,29 +231,52 @@ class Camera_gphoto:
 		self.set_config_value_checked('eosremoterelease', 'Release Half')
 		self.set_config_value_checked('eosremoterelease', 'Release Full')
 		
-		cur_time = self.get_config_value('datetime')
-		if abs(time.time() - cur_time) > 1500:
-			print "adjusting time ", time.time(), cur_time
-			subprocess.call(['date', '--set', '@' + str(cur_time) ])
+		self.cameramodel = self.get_config_value('cameramodel')
+		print self.cameramodel
+		if self.cameramodel == "Canon EOS 40D":
+			self.shape = (670, 1010)
+			self.zoom_shape = (786, 754)
+			self.fpshack = False
+		elif self.cameramodel == "Canon EOS 7D":
+			self.shape = (704, 1056)
+			self.zoom_shape = (680, 1024)
+	                self.fpshack = True
+
 		
+		
+		cur_time = self.get_config_value('datetime')
+		if cur_time is None:
+			cur_time = self.get_config_value('datetimeutc')
+		try:
+			cur_time = int(cur_time)
+			if cur_time - time.time() > 1500:
+				print "adjusting time ", time.time(), cur_time
+				subprocess.call(['date', '--set', '@' + str(cur_time) ])
+		except:
+			pass
+			
 		self.set_config_value_checked('aperture', self.status['f-number'])
 		self.status['f-number'] = self.get_config_value('aperture')
 		self.status['lensname'] = self.get_config_value('lensname')
 		
 		self.set_config_choice('drivemode', 0)
-		self.set_config_value_checked('autoexposuremode', 'Bulb')
+		
+		self.set_config_value_checked('autoexposuremode', 'Manual')
+		if not self.set_config_value_checked('shutterspeed', 'Bulb'):
+			self.set_config_value_checked('autoexposuremode', 'Bulb')
 		
 		# required configuration will depend on camera type!
 		self.set_config_choice('capturesizeclass', 2)
 	
-		time.sleep(.2)
-		self.set_config_choice('output', 1)
-		time.sleep(.2)
-		self.set_config_choice('output', 0)
+	        if self.fpshack:
+			time.sleep(.2)
+			self.set_config_choice('output', 1)
+			time.sleep(.2)
+			self.set_config_choice('output', 0)
 	
 		self.zoom = 1
-		self.x = 3000
-		self.y = 2000
+		self.x = 800
+		self.y = 800
 		self.set_config_value('eoszoomposition', "%d,%d" % (self.x, self.y))
 		time.sleep(3)
 	
@@ -275,20 +308,22 @@ class Camera_gphoto:
 				self.set_config_value('eoszoomposition', "%d,%d" % (self.x, self.y))
 				self.set_config_value('eoszoom', '5')
 				time.sleep(.2)
-				self.set_config_choice('output', 1)
-				time.sleep(.2)
-				self.set_config_choice('output', 0)
-				time.sleep(12)
+			        if self.fpshack:
+					self.set_config_choice('output', 1)
+					time.sleep(.2)
+					self.set_config_choice('output', 0)
+					time.sleep(12)
 				self.capture()
         
 			if cmd == "z0":
 				zoom = 1
 				self.set_config_value('eoszoom', '1')
 				time.sleep(.2)
-				self.set_config_choice('output', 1)
-				time.sleep(.2)
-				self.set_config_choice('output', 0)
-				time.sleep(12)
+				if self.fpshack:
+					self.set_config_choice('output', 1)
+					time.sleep(.2)
+					self.set_config_choice('output', 0)
+					time.sleep(12)
 				self.capture()
 		
 			if cmd == 'left':
