@@ -31,7 +31,8 @@ class Camera_gphoto:
 		self.status['exp_in_progress'] = False
 		self.status['interrupt'] = False
 		self.focuser = focuser
-		self.fpshack = False
+		self.fpshack = ''
+		self.fpshackiso = 0
 
 	def get_config_value(self, name):
 		config = gp.check_result(gp.gp_camera_get_config(self.camera, self.context))
@@ -119,6 +120,17 @@ class Camera_gphoto:
 				ret = False
 				continue
 		return ret
+	
+	def do_fps_hack(self):
+		if self.fpshack == 'output':
+			time.sleep(.2)
+			self.set_config_choice('output', 1)
+			time.sleep(.2)
+			self.set_config_choice('output', 0)
+			time.sleep(3)
+		elif self.fpshack == 'iso':
+			self.fpshackiso = 5
+			
 
 	def capture_bulb(self, test = False, callback = None):
 		if test:
@@ -148,9 +160,12 @@ class Camera_gphoto:
 			self.set_config_value('bulb', 1)
 			bulbmode = 'bulb'
 		self.t_start = time.time()
+		t = 0
 		self.status['exp_in_progress'] = True
 		self.status['interrupt'] = False
 		while True:
+			if t < sec - 4:
+				time.sleep(3)
 			e, file_path =  gp.check_result(gp.gp_camera_wait_for_event(self.camera, 1000,self.context))
 			t = time.time() - self.t_start
 			print "camera event ", t, e, file_path
@@ -198,12 +213,7 @@ class Camera_gphoto:
 		self.set_config_value_checked('eosremoterelease', 'Press Half')
 		self.set_config_value_checked('eosremoterelease', 'Release Half')
 	
-		if self.fpshack:
-			time.sleep(.2)
-			self.set_config_choice('output', 1)
-			time.sleep(.2)
-			self.set_config_choice('output', 0)
-			time.sleep(3)
+		self.do_fps_hack()
 		
 	def prepare(self):
 		self.shape = (704, 1056)
@@ -234,13 +244,13 @@ class Camera_gphoto:
 		self.cameramodel = self.get_config_value('cameramodel')
 		print self.cameramodel
 		if self.cameramodel == "Canon EOS 40D":
-			self.shape = (670, 1010)
-			self.zoom_shape = (786, 754)
-			self.fpshack = False
+			self.shape = (680, 1024)
+			self.zoom_shape = (800, 768)
+			self.fpshack = 'iso'
 		elif self.cameramodel == "Canon EOS 7D":
 			self.shape = (704, 1056)
 			self.zoom_shape = (680, 1024)
-	                self.fpshack = True
+	                self.fpshack = 'output'
 
 		
 		
@@ -268,11 +278,7 @@ class Camera_gphoto:
 		# required configuration will depend on camera type!
 		self.set_config_choice('capturesizeclass', 2)
 	
-	        if self.fpshack:
-			time.sleep(.2)
-			self.set_config_choice('output', 1)
-			time.sleep(.2)
-			self.set_config_choice('output', 0)
+		self.do_fps_hack()
 	
 		self.zoom = 1
 		self.x = 800
@@ -308,23 +314,23 @@ class Camera_gphoto:
 				self.set_config_value('eoszoomposition', "%d,%d" % (self.x, self.y))
 				self.set_config_value('eoszoom', '5')
 				time.sleep(.2)
-			        if self.fpshack:
-					self.set_config_choice('output', 1)
-					time.sleep(.2)
-					self.set_config_choice('output', 0)
-					time.sleep(12)
-				self.capture()
+				self.do_fps_hack()
+				im, t = self.capture()
+				while im.shape[0] != self.zoom_shape[0] or im.shape[1] != self.zoom_shape[1]:
+					print "zoom shape", im.shape, self.zoom_shape
+					im, t = self.capture()
+				
         
 			if cmd == "z0":
 				zoom = 1
 				self.set_config_value('eoszoom', '1')
 				time.sleep(.2)
-				if self.fpshack:
-					self.set_config_choice('output', 1)
-					time.sleep(.2)
-					self.set_config_choice('output', 0)
-					time.sleep(12)
-				self.capture()
+				self.do_fps_hack()
+				im, t = self.capture()
+				while im.shape[0] != self.shape[0] or im.shape[1] != self.shape[1]:
+					print "shape", im.shape, self.shape
+					im, t = self.capture()
+				
 		
 			if cmd == 'left':
 				self.x = max(100, self.x - 100)
@@ -365,6 +371,7 @@ class Camera_gphoto:
 				self.prepare()
 
 	def capture(self):
+
 		while True:
 			try:
 				for i in range(0,20):
@@ -382,7 +389,11 @@ class Camera_gphoto:
 				#pil_image.save("testimg2_" + str(i) + ".tif")
 				im = np.array(pil_image)
 				im = apply_gamma(im, 2.2)
-	
+				if self.fpshackiso > 0:
+					self.set_config_value_checked('iso', 1600)
+					self.set_config_value_checked('iso', 100)
+					self.fpshackiso -= 1
+
 				return im, None
 	
 			except KeyboardInterrupt:
