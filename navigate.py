@@ -42,6 +42,7 @@ from PIL import Image;
 
 from focuser_out import FocuserOut
 from centroid import centroid, sym_center
+from polyfit import *
 
 class Status:
 	def __init__(self, conf_file):
@@ -653,7 +654,6 @@ def apply_gamma8(img, gamma):
 	return np.take(lut, img)
 
 
-
 class Navigator:
 	def __init__(self, status, dark, polar, tid, polar_tid = None, go_ra = None, go_dec = None):
 		self.status = status
@@ -696,6 +696,7 @@ class Navigator:
 		self.hotpix_cnt = None
 		
 		self.field_corr = None
+		self.field_corr_list = []
 		if self.status['field_corr'] is not None:
 			self.field_corr = np.load(self.status['field_corr'])
 		
@@ -792,6 +793,10 @@ class Navigator:
 				if save_conf:
 					cmdQueue.put('save')
 					
+				print "len", len(self.field_corr_list)
+				if len(self.field_corr_list) > 2500:
+					self.update_field_cor()
+					
 			else:
 				if self.status['radius'] > 0 and self.status['radius'] < 70:
 					self.status['radius'] = self.status['radius'] * 2 + 15
@@ -809,7 +814,7 @@ class Navigator:
 				self.status['i_solver'] = i
 				self.status['t_solver'] = t
 				self.solved_im = im
-				self.solver = Solver(sources_list = xy, field_w = im.shape[1], field_h = im.shape[0], ra = self.status['ra'], dec = self.status['dec'], field_deg = self.status['field_deg'], radius = self.status['radius'])
+				self.solver = Solver(sources_list = xy, field_w = im.shape[1], field_h = im.shape[0], ra = self.status['ra'], dec = self.status['dec'], field_deg = self.status['field_deg'], radius = self.status['radius'], field_corr = self.field_corr_list)
 				#self.solver = Solver(sources_img = filtered, field_w = im.shape[1], field_h = im.shape[0], ra = self.status['ra'], dec = self.status['dec'], field_deg = self.status['field_deg'])
 				self.solver.start()
 				self.solver_off = np.array([0.0, 0.0])
@@ -960,23 +965,47 @@ class Navigator:
 			print "full-res not solved"
 	def get_xy_cor(self):
 		xy = self.stack.get_xy()
-		print xy
 		if self.field_corr is not None:
-			corr = []
-			for y, x, v in xy:
-				x0 = int(x)
-				xf = x - x0
-				y0 = int(y)
-				yf = y - y0
-				xn = (self.field_corr[y0, x0, 0] * (1.0 - yf) + self.field_corr[y0 + 1, x0, 0] * yf) * (1.0 - xf) + (self.field_corr[y0, x0 + 1, 0] * (1.0 - yf) + self.field_corr[y0 + 1, x0 + 1, 0] * yf) * xf
-				yn = (self.field_corr[y0, x0, 1] * (1.0 - yf) + self.field_corr[y0 + 1, x0, 1] * yf) * (1.0 - xf) + (self.field_corr[y0, x0 + 1, 1] * (1.0 - yf) + self.field_corr[y0 + 1, x0 + 1, 1] * yf) * xf
-
-				print "xycorr", x, y, xn, yn
-				corr.append((yn, xn, v))
-			xy = np.array(corr)
-		print xy
+			xnew = interpolate2d(self.field_corr[:, :, 0], xy[:, 1], xy[:, 0])
+			ynew = interpolate2d(self.field_corr[:, :, 1], xy[:, 1], xy[:, 0])
+			
+			xy[:, 0] = ynew
+			xy[:, 1] = xnew
 		return xy
 
+	def update_field_cor(self):
+		field_corr_list = np.array(self.field_corr_list)
+		if self.field_corr is not None:
+			xnew = interpolate2d(self.field_corr[:, :, 0], field_corr_list[:, 0], field_corr_list[:, 1])
+			ynew = interpolate2d(self.field_corr[:, :, 1], field_corr_list[:, 0], field_corr_list[:, 1])
+			
+			field_corr_list[:, 0] = xnew
+			field_corr_list[:, 1] = ynew
+		print field_corr_list
+		xcorr = polyfit2d(field_corr_list[:, 2], field_corr_list[:, 3], field_corr_list[:, 0], [2, 2])
+		ycorr = polyfit2d(field_corr_list[:, 2], field_corr_list[:, 3], field_corr_list[:, 1], [2, 2])
+		
+		#print "xcorr"
+		#print xcorr
+		#print "ycorr"
+		#print ycorr
+		h, w = self.im.shape
+		xr = np.arange(0, w, dtype=np.float32)
+		yr = np.arange(0, h, dtype=np.float32)
+		
+		m = np.empty((h,w,2), dtype=np.float32)
+		m[:,:,0] = np.polynomial.polynomial.polygrid2d(xr, yr, xcorr).T
+		m[:,:,1] = np.polynomial.polynomial.polygrid2d(xr, yr, ycorr).T
+		
+		print "field_corr"
+		print self.field_corr
+		print "new"
+		print m
+		#np.save("oag_cor2.npy", m)
+		self.field_corr = m
+		#sys.exit(1)
+
+		self.field_corr_list = []
 
 def fit_line(xylist, sigma = 2):
 	a = np.array(xylist)
@@ -1791,6 +1820,11 @@ class Runner(threading.Thread):
 					if self.guider is not None:
 						self.guider.cmd('stop')
 					profiler.print_stats()
+					try:
+						self.camera.shutdown()
+					except:
+						pass
+						
 
 					return
 				elif cmd == 'navigator' and self.navigator is not None:
@@ -1808,12 +1842,14 @@ class Runner(threading.Thread):
 				elif cmd == 'z1':
 					if self.zoom_focuser is not None:
 						self.zoom_focuser.reset()
-						maxx = 300
-						maxy = 300
-						if mode == 'navigator':
-							(maxy, maxx, maxv) = self.navigator.stack.get_xy()[0]
-						elif mode == 'focuser':
-							(maxy, maxx, maxv) = self.focuser.stack.get_xy()[0]
+						try:
+							if mode == 'navigator':
+								(maxy, maxx, maxv) = self.navigator.stack.get_xy()[0]
+							elif mode == 'focuser':
+								(maxy, maxx, maxv) = self.focuser.stack.get_xy()[0]
+						except:
+							maxx = 300
+							maxy = 300
 						self.camera.cmd(cmd, x=maxx, y=maxy)
 						mode = 'zoom_focuser'
 				elif cmd == 'z0':
@@ -1864,8 +1900,9 @@ class Runner(threading.Thread):
 						self.zoom_focuser.cmd(cmd)
 	
 			im, t = self.camera.capture()
+			print i,t
 			
-			#cv2.imwrite("testimg20_" + str(i) + ".tif", im)
+			#cv2.imwrite("testimg23_" + str(i) + ".tif", im)
 			if mode == 'navigator':
 				self.navigator.proc_frame(im, i, t)
 			if mode == 'guider':
@@ -1928,13 +1965,13 @@ class Camera_test:
 			self.step = 1 - self.step
 	
 	def capture(self):
-		#time.sleep(3)
+		#time.sleep(2)
 		print self.i
 		#pil_image = Image.open("converted/IMG_%04d.jpg" % (146+self.i))
 		#pil_image.thumbnail((1000,1000), Image.ANTIALIAS)
 		#im = np.array(pil_image)
 		#im = cv2.imread("testimg16_" + str(self.i % 100 * 3 + int(self.i / 100) * 10) + ".tif")
-		im = cv2.imread("test/testimg16_" + str(self.i) + ".tif")
+		im = cv2.imread("testimg23_" + str(self.i) + ".tif")
 		#im = apply_gamma(im, 2.2)
 		if self.x != 0 or self.y != 0:
 			M = np.array([[1.0, 0.0, self.x],

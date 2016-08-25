@@ -76,13 +76,13 @@ def cor_map(wcs, orig_h):
 	return m
 	
 
-wcs = read_wcs("xxx.wcs")
+wcs = read_wcs("x1.wcs")
 print get_image_info(wcs)
 print get_coef(wcs, 'A')
 print get_coef(wcs, 'B')
 
 #img = cv2.imread("../guider1466281863.tif", cv2.IMREAD_UNCHANGED)
-img = cv2.imread("guider1466197486.tif", cv2.IMREAD_UNCHANGED)
+img = cv2.imread("navigator1467788659.tif", cv2.IMREAD_UNCHANGED)
 #img = cv2.imread("xxx.tif", cv2.IMREAD_UNCHANGED)
 print img
 print img.shape

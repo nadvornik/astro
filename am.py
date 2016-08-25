@@ -104,7 +104,7 @@ engines = EnginePool()
 
 
 class Solver(threading.Thread):
-	def __init__(self, sources_list = None, field_w = None, field_h = None, ra = None, dec = None, field_deg = None, radius = None):
+	def __init__(self, sources_list = None, field_w = None, field_h = None, ra = None, dec = None, field_deg = None, radius = None, field_corr = None):
 		threading.Thread.__init__(self)
 		self.sources_list = sources_list
 		self.field_w = field_w
@@ -113,6 +113,7 @@ class Solver(threading.Thread):
 		self.dec = dec
 		self.field_deg = field_deg
 		self.radius = radius
+		self.field_corr = field_corr
 		if self.ra is not None and field_deg is not None and radius is None:
 			self.radius = field_deg * 2.0
 		self.solved = False
@@ -134,13 +135,14 @@ class Solver(threading.Thread):
 		prihdr['ANVERUNI'] = True
 		prihdr['ANVERDUP'] = False
 		prihdr['ANCRPIXC'] = True
-		prihdr['ANTWEAK'] = True
-		prihdr['ANTWEAKO'] = 1
+		prihdr['ANTWEAK'] = False
+		prihdr['ANTWEAKO'] = 0
 		prihdr['ANSOLVED'] = tmp_dir + '/field.solved'
 		#prihdr['ANMATCH'] = tmp_dir + '/field.match'
 		prihdr['ANRDLS'] = tmp_dir + '/field.rdls'
 		prihdr['ANWCS'] = tmp_dir + '/field.wcs'
-		#prihdr['ANCORR'] = tmp_dir + '/field.corr'
+		if self.field_corr is not None:
+			prihdr['ANCORR'] = tmp_dir + '/field.corr'
 		prihdr['ANCANCEL'] = tmp_dir + '/field.solved'
 		
 		
@@ -217,6 +219,13 @@ class Solver(threading.Thread):
 			y = np.clip(int(y), 0, self.field_h - 1)
 			self.ind_sources.append((x,y))
 			self.ind_radec.append((l['ra'], l['dec']))
+		
+		if self.field_corr is not None:
+			corr = pyfits.open(solved + '.corr')
+			for l in corr[1].data:
+				self.field_corr.append((l['field_x'], l['field_y'], l['index_x'], l['field_y']))
+		
+		
 		shutil.rmtree(tmp_dir)
 		self.solved = True
 
@@ -255,7 +264,7 @@ def match_kdtree_catalog(rc, dc, rr, catfn):
     tree_free(kd2)
     tree_close(kd)
     tra,tdec = xyztoradec(xyz)
-    print tra, tdec, I2
+    #print tra, tdec, I2
     return tra, tdec, I2
 
 
