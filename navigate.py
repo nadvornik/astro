@@ -2292,7 +2292,7 @@ if __name__ == "__main__":
 	#run_2()
 	#run_test_g()
 	#run_2()
-	#run_test()
+	run_test()
 
 
 
