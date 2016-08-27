@@ -1282,6 +1282,12 @@ class Guider:
 				
 					print "pixpersec_neg", self.status['pixpersec_neg'], "pixperframe_neg", self.pixperframe_neg, "t_delay2", self.status['t_delay2']
 					self.status['t_delay'] = (self.status['t_delay1'] + self.status['t_delay2']) / 2
+					
+					#testing
+					try:
+						self.status['t_delay'] = self.status['camera']['exp_sec'] * 1.5
+					except:
+						pass
 				
 					self.err0_dec = err.imag
 					
