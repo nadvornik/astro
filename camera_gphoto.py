@@ -352,10 +352,16 @@ class Camera_gphoto:
 				self.status['test-iso'] = cmd[len('test-iso-'):]
         
 			if cmd.startswith('exp-sec-'):
-				self.status['exp-sec'] = int(cmd[len('exp-sec-'):])
+				try:
+					self.status['exp-sec'] = int(cmd[len('exp-sec-'):])
+				except:
+					pass
         
 			if cmd.startswith('test-exp-sec-'):
-				self.status['test-exp-sec'] = int(cmd[len('test-exp-sec-'):])
+				try:
+					self.status['test-exp-sec'] = int(cmd[len('test-exp-sec-'):])
+				except:
+					pass
 			
 			if cmd.startswith('f-number-'):
 				self.set_config_value('aperture', cmd[len('f-number-'):])
