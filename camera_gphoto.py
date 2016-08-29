@@ -164,7 +164,7 @@ class Camera_gphoto:
 		self.status['exp_in_progress'] = True
 		self.status['interrupt'] = False
 		while True:
-			if t < sec - 4:
+			if t < sec - 4 and not self.status['interrupt']:
 				time.sleep(3)
 			e, file_path =  gp.check_result(gp.gp_camera_wait_for_event(self.camera, 1000,self.context))
 			t = time.time() - self.t_start
