@@ -262,7 +262,7 @@ def centroid_list(im, pt0, off):
 		cm = np.array(im[y - centroid_size : y + centroid_size + 1, x - centroid_size : x + centroid_size + 1], dtype = np.float32)
 		
 		xs, ys = sym_center(cm)
-		print "xs, ys", xs, ys
+		#print "xs, ys", xs, ys
 		if abs(xs) > 5:
 			continue
 		if abs(ys) > 5:
@@ -1285,7 +1285,7 @@ class Guider:
 					
 					#testing
 					try:
-						self.status['t_delay'] = self.status['camera']['exp_sec'] * 1.5
+						self.status['t_delay'] = self.status['navigator']['camera']['exp-sec'] * 1.5
 					except:
 						pass
 				
@@ -1953,10 +1953,12 @@ def main_loop():
 
 class Camera_test:
 	def __init__(self, status):
+		self.status = status
 		self.i = 0
 		self.step = 1
 		self.x = 0
 		self.y = 0
+		self.status['exp-sec'] = 60
 	
 	def cmd(self, cmd):
 		if cmd == 'left':
@@ -1969,15 +1971,17 @@ class Camera_test:
 			self.y -= 1
 		if cmd == 'test-capture':
 			self.step = 1 - self.step
-	
+		if cmd.startswith('exp-sec-'):
+			self.status['exp-sec'] = float(cmd[len('exp-sec-'):])
+
 	def capture(self):
 		#time.sleep(2)
 		print self.i
 		#pil_image = Image.open("converted/IMG_%04d.jpg" % (146+self.i))
 		#pil_image.thumbnail((1000,1000), Image.ANTIALIAS)
 		#im = np.array(pil_image)
-		#im = cv2.imread("testimg16_" + str(self.i % 100 * 3 + int(self.i / 100) * 10) + ".tif")
-		im = cv2.imread("testimg23_" + str(self.i) + ".tif")
+		im = cv2.imread("test/testimg16_" + str(self.i % 100 * 3 + int(self.i / 100) * 10) + ".tif")
+		#im = cv2.imread("testimg23_" + str(self.i) + ".tif")
 		#im = apply_gamma(im, 2.2)
 		if self.x != 0 or self.y != 0:
 			M = np.array([[1.0, 0.0, self.x],
@@ -1996,6 +2000,7 @@ class Camera_test_shift:
 	def __init__(self, status, cam0, shift):
 		self.cam0 = cam0
 		self.shift = shift
+		self.status = status
 	
 	def cmd(self, cmd):
 		pass
@@ -2011,16 +2016,21 @@ class Camera_test_shift:
 
 class Camera_test_g:
 	def __init__(self, status, go_ra, go_dec):
+		self.status = status
 		self.i = 0
 		self.err = 0.0
 		self.go_ra = go_ra
 		self.go_dec = go_dec
+		self.status['exp-sec'] = 0.5
 	
 	def cmd(self, cmd):
 		print "camera:", cmd
+		if cmd.startswith('exp-sec-'):
+			self.status['exp-sec'] = float(cmd[len('exp-sec-'):])
+
 	
 	def capture(self):
-		time.sleep(0.5)
+		time.sleep(self.status['exp-sec'])
 		self.err += random.random() * 2 - 1.1
 		corr = self.go_ra.recent_avg() * 5
 		i = int((corr - self.go_ra.recent_avg(1))  + self.err)
@@ -2298,7 +2308,7 @@ if __name__ == "__main__":
 	#run_2()
 	#run_test_g()
 	#run_2()
-	run_test()
+	#run_test()
 
 
 
