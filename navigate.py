@@ -1752,7 +1752,7 @@ class Focuser:
 			
 			
 
-		status = "#%d Focuser: %s %s fps:%.1f hfr:%.2f" % (i, self.phase, self.dispmode, fps, self.hfr)
+		status = "#%d F: %s %s hfr:%.2f fps:%.1f" % (i, self.phase, self.dispmode, self.hfr, fps)
 	
 
 		if (self.dispmode == 'disp-orig'):
