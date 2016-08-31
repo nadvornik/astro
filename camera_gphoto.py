@@ -154,11 +154,25 @@ class Camera_gphoto:
 			self.set_config_choice('capturetarget', 1) #card
 			#self.set_config_choice('imageformat', 24) #RAW 
 			self.set_config_choice('imageformat', 7) #RAW + Large Normal JPEG 
+
+		self.set_config_value('aperture', self.status['f-number'])
+		self.status['f-number'] = self.get_config_value('aperture')
+
+		if sec <= 30:
+			bulbmode = None
+			self.set_config_value_checked('autoexposuremode', 'Manual')
+			self.set_config_value_checked('shutterspeed', sec)
+			gp.check_result(gp.gp_camera_trigger_capture(self.camera, self.context))
+			
+		else:
+			self.set_config_value_checked('autoexposuremode', 'Manual')
+			if not self.set_config_value_checked('shutterspeed', 'Bulb'):
+				self.set_config_value_checked('autoexposuremode', 'Bulb')
 		
-		bulbmode = 'eosremoterelease'
-		if not self.set_config_value_checked('eosremoterelease', 'Immediate'):
-			self.set_config_value('bulb', 1)
-			bulbmode = 'bulb'
+			bulbmode = 'eosremoterelease'
+			if not self.set_config_value_checked('eosremoterelease', 'Immediate'):
+				self.set_config_value('bulb', 1)
+				bulbmode = 'bulb'
 		self.t_start = time.time()
 		t = 0
 		self.status['exp_in_progress'] = True
@@ -176,7 +190,7 @@ class Camera_gphoto:
 			if self.status['exp_in_progress'] and (t > sec or self.status['interrupt']):
 				if bulbmode == 'bulb':
 					self.set_config_value('bulb', 0)
-				else:
+				elif  bulbmode == 'eosremoterelease':
 					self.set_config_value_checked('eosremoterelease', 'Release Full')
 				self.status['exp_in_progress'] = False
 
@@ -186,7 +200,8 @@ class Camera_gphoto:
 				filename, file_extension = os.path.splitext(file_path.name)
 				if file_extension == ".jpg" or file_extension == ".JPG":
 					break
-				
+		
+		self.status['exp_in_progress'] = False
 		self.status['cur_time'] = 0
 		self.status['interrupt'] = False
 	
