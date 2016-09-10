@@ -430,8 +430,11 @@ class Camera_gphoto:
 
 	
 	def shutdown(self):
+		time.sleep(1)
 		self.set_config_value_checked('eosremoterelease', 'Release Full')
+		self.set_config_value('viewfinder', 0)
 		gp.check_result(gp.gp_camera_exit(self.camera, self.context))
+		
 	
 	
 	
