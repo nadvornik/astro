@@ -1776,6 +1776,16 @@ class Focuser:
 				for p in self.focus_yx:
 					cv2.circle(disp, (int(p[1] + 0.5), int(p[0] + 0.5)), 20, (255), 1)
 			ui.imshow(self.tid, disp)
+		elif (self.dispmode.startswith('disp-zoom-')):
+			zoom = int(self.dispmode[len('disp-zoom-'):])
+			rect = np.array(self.stack_im.shape) / zoom
+			shift = np.array(self.stack_im.shape) / 2 - rect / 2
+			disp = self.stack_im[shift[0]:shift[0]+rect[0], shift[1]:shift[1]+rect[1]]
+			disp = normalize(disp)
+			disp = cv2.resize(disp, (self.stack_im.shape[1], self.stack_im.shape[0]))
+			disp = cv2.cvtColor(disp, cv2.COLOR_GRAY2RGB)
+			cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 0), 2)
+			ui.imshow(self.tid, disp)
 		else:
 			disp = cv2.cvtColor(normalize(self.stack_im), cv2.COLOR_GRAY2RGB)
 			cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 0), 2)
