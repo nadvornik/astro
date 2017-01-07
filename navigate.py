@@ -1432,7 +1432,8 @@ def smooth(x,window_len=11,window='hanning'):
     return y[window_len + window_len / 2: window_len + window_len / 2 + x.size]
 
 class Focuser:
-	def __init__(self, tid, dark = None):
+	def __init__(self, tid, status, dark = None):
+		self.status = status
 		self.stack = Stack(ratio=0.3)
 		if dark is None:
 			self.dark = Median(3)
@@ -1440,7 +1441,7 @@ class Focuser:
 			self.dark = dark
 		self.tid = tid
 		self.dispmode = 'disp-orig'
-		self.phase = 'wait'
+		self.status['phase'] = 'wait'
 		self.phase_wait = 0
 		self.hfr = Focuser.hfr_size
 		self.focus_yx = None
@@ -1459,6 +1460,7 @@ class Focuser:
 
 	@staticmethod
 	def v_param(v_curve):
+		v_curve = np.array(v_curve)
 		v_len = len(v_curve)
 		side_len = int(v_len * 0.4)
 
@@ -1478,8 +1480,8 @@ class Focuser:
 		c1 = v_curve_s[i1] - i1 * m1
 		c2 = v_curve_s[i2] - i2 * m2
 				
-		#m1, c1 = np.polyfit(range(0, side_len), self.v_curve[0:side_len], 1)
-		#m2, c2 = np.polyfit(range(v_len - side_len, v_len), self.v_curve[v_len - side_len: v_len], 1)
+		#m1, c1 = np.polyfit(range(0, side_len), self.status['v_curve'][0:side_len], 1)
+		#m2, c2 = np.polyfit(range(v_len - side_len, v_len), self.status['v_curve'][v_len - side_len: v_len], 1)
 		xmin =  (c2 - c1) / (m1 - m2)
 		side_len = xmin * 0.8
 		print "v_len", v_len, "side_len", side_len, "m1", m1, "c1", c1, "m2", m2, "c2", c2, "xmin", xmin
@@ -1505,12 +1507,12 @@ class Focuser:
 		if cmd.startswith('disp-'):
 			self.dispmode = cmd
 		if cmd == 'af':
-			self.phase = 'seek'
+			self.status['phase'] = 'seek'
 		if cmd == 'af_fast':
-			self.phase = 'fast_search_start'
+			self.status['phase'] = 'fast_search_start'
 
 	def reset(self):
-		self.phase = 'wait'
+		self.status['phase'] = 'wait'
 
 	def get_max_flux(self, im, xy, stddev):
 		ret = []
@@ -1642,23 +1644,31 @@ class Focuser:
 
 		if self.phase_wait > 0:
 			self.phase_wait -= 1
-		elif self.phase == 'seek': # move near, out of focus
+		elif self.status['phase'] == 'get_hfr_start':
+			self.phase_wait = 3
+			self.status['phase'] = 'get_hfr'
+		elif self.status['phase'] == 'get_hfr':
+			self.set_xy_from_stack(self.stack)
+			if self.focus_yx is not None:
+				self.hfr = self.get_hfr(im_sub)
+			self.status['phase'] = 'wait'
+		elif self.status['phase'] == 'seek': # move near, out of focus
 			self.hfr = self.get_hfr(im_sub)
 			print "in-focus hfr ", self.hfr
 			if self.hfr < Focuser.hfr_size / 3:
-				self.phase = 'prep_record_v'
+				self.status['phase'] = 'prep_record_v'
 				self.phase_wait = 3
 				cmdQueue.put('f+3')
 			else:
 				self.focus_yx = None
 				for i in range (0, 12):
 					cmdQueue.put('f-3')
-				self.phase = 'dark'
+				self.status['phase'] = 'dark'
 				self.phase_wait = 5
 				self.max_flux = 0
 				self.min_hfr = Focuser.hfr_size
 				self.dark_add = self.dark.n
-		elif self.phase == 'dark': # use current image as darkframes
+		elif self.status['phase'] == 'dark': # use current image as darkframes
 			if self.dark_add > 0:
 				self.dark_add -= 1
 				self.dark.add(self.im)
@@ -1669,11 +1679,11 @@ class Focuser:
 					cmdQueue.put('f+3')
 				self.phase_wait = 5
 				self.search_steps = 0
-				self.phase = 'search'
-		elif self.phase == 'search': # step far, record max flux
+				self.status['phase'] = 'search'
+		elif self.status['phase'] == 'search': # step far, record max flux
 			flux, hfr, yx = self.get_max_flux(self.stack_im, self.stack.get_xy(), self.stddev)
 			if flux < self.max_flux * 0.7 or hfr > self.min_hfr * 2 or self.search_steps > 120:
-				self.phase = 'prep_record_v'
+				self.status['phase'] = 'prep_record_v'
 				cmdQueue.put('f-1')
 			else:
 				if flux > self.max_flux:
@@ -1686,73 +1696,109 @@ class Focuser:
 				self.hfr = self.get_hfr(im_sub)
 			#self.phase_wait = 2
 			print "max", flux, self.max_flux
-		elif self.phase == 'fast_search_start':
+		elif self.status['phase'] == 'fast_search_start':
 			self.phase_wait = 3
-			self.phase = 'fast_search'
-		elif self.phase == 'fast_search':
+			self.status['phase'] = 'fast_search'
+		elif self.status['phase'] == 'fast_search':
 			self.set_xy_from_stack(self.stack)
 			if self.focus_yx is None or len(self.focus_yx) == 0:
-				self.phase = 'seek' #slow mode
+				self.status['phase'] = 'seek' #slow mode
 			else:
 				cmdQueue.put('f+3')
 				self.phase_wait = 1
-				self.phase = 'prep_record_v'
-		elif self.phase == 'prep_record_v': # record v curve
+				self.status['phase'] = 'prep_record_v'
+		elif self.status['phase'] == 'prep_record_v': # record v curve
 			self.hfr = self.get_hfr(im_sub)
 			if self.hfr < Focuser.hfr_size / 2:
-				self.v_curve = []
-				self.phase = 'record_v'
+				self.status['v_curve'] = []
+				self.status['v_curve2'] = []
+				self.status['xmin'] = None
+				self.status['side_len'] = None
+				self.status['smooth_size'] = None
+				self.status['c1'] = None
+				self.status['m1'] = None
+				self.status['c2'] = None
+				self.status['m2'] = None
+				self.status['v_curve_s'] = None
+				self.status['v_curve2_s'] = None
+				self.status['hyst'] = None
+				self.status['remaining_steps'] = None
+
+				self.status['phase'] = 'record_v'
 			cmdQueue.put('f-1')
-		elif self.phase == 'record_v': # record v curve
+		elif self.status['phase'] == 'record_v': # record v curve
 			self.hfr = self.get_hfr(im_sub)
-			self.v_curve.append(self.hfr)
-			if len(self.v_curve) > 20 and self.hfr > self.v_curve[0]:
-				self.phase = 'focus_v'
-				print "v_curve", self.v_curve[::-1]
-				
-				self.v_curve = np.array(self.v_curve)[::-1] # reverse
+			self.status['v_curve'].append(self.hfr)
 
-				self.xmin, self.side_len, self.smooth_size, self.c1, self.m1, c2, m2, v_curve_s = Focuser.v_param(self.v_curve)
+			if len(self.status['v_curve']) == 15:
+				self.status['start_hfr'] = np.median(self.status['v_curve'])
+				self.status['min_hfr'] = self.status['start_hfr']
+				self.status['cur_hfr'] = self.status['start_hfr']
 
-				self.v_curve2 = []
-				
-				cmdQueue.put('f+1')
-			else:
+			if len(self.status['v_curve']) > 15:
+				self.status['cur_hfr'] = np.median(self.status['v_curve'][-15:])
+				print 'cur_hfr', self.status['cur_hfr'], self.status['min_hfr'], self.status['start_hfr']
+
+				if self.status['cur_hfr'] < self.status['min_hfr']:
+					self.status['min_hfr'] = self.status['cur_hfr']
+
+			if len(self.status['v_curve']) > 30:
+				self.status['prev_hfr'] = np.median(self.status['v_curve'][-30:-15])
+
+				if (self.status['cur_hfr'] > self.status['start_hfr'] or 
+				    self.status['cur_hfr'] > self.status['min_hfr'] * 2 or
+				    self.status['cur_hfr'] > self.status['min_hfr'] * 1.1 and self.status['cur_hfr'] <= self.status['prev_hfr']):
+					self.status['phase'] = 'focus_v'
+					print "v_curve", self.status['v_curve'][::-1]
+
+					self.status['v_curve'] = self.status['v_curve'][::-1] # reverse
+
+					self.status['xmin'], self.status['side_len'], self.status['smooth_size'], self.status['c1'], self.status['m1'], self.status['c2'], self.status['m2'], v_curve_s = Focuser.v_param(self.status['v_curve'])
+					self.status['v_curve_s'] = v_curve_s.tolist()
+
+					self.status['v_curve2'] = []
+
+					cmdQueue.put('f+1')
+			if self.status['phase'] == 'record_v': # not changed
 				cmdQueue.put('f-1')
-		elif self.phase == 'focus_v': # go back, record first part of second v curve
+		elif self.status['phase'] == 'focus_v': # go back, record first part of second v curve
 			self.hfr = self.get_hfr(im_sub)
-			if len(self.v_curve2) < self.side_len:
-				self.v_curve2.append(self.hfr)
+			if len(self.status['v_curve2']) < self.status['side_len']:
+				self.status['v_curve2'].append(self.hfr)
 				cmdQueue.put('f+1')
 				self.phase_wait = 1
 			else:
-				hyst, v_curve2_s = Focuser.v_shift(np.array(self.v_curve2), self.smooth_size, self.c1, self.m1)
-				self.remaining_steps = round(self.xmin - self.side_len - hyst)
-				print "remaining", self.remaining_steps
-				self.phase = 'focus_v2'
-				self.v_curve2.append(self.hfr)
-		elif self.phase == 'focus_v2': # estimate maximum, go there
+				self.status['hyst'], v_curve2_s = Focuser.v_shift(np.array(self.status['v_curve2']), self.status['smooth_size'], self.status['c1'], self.status['m1'])
+				self.status['v_curve2_s'] = v_curve2_s.tolist()
+
+				self.status['remaining_steps'] = round(self.status['xmin'] - self.status['side_len'] - self.status['hyst'])
+				print "remaining", self.status['remaining_steps']
+				self.status['phase'] = 'focus_v2'
+				self.status['v_curve2'].append(self.hfr)
+		elif self.status['phase'] == 'focus_v2': # estimate maximum, go there
 			self.hfr = self.get_hfr(im_sub)
-			self.v_curve2.append(self.hfr)
-			if self.remaining_steps > 0:
-				self.remaining_steps -= 1
+			self.status['v_curve2'].append(self.hfr)
+			if self.status['remaining_steps'] > 0:
+				self.status['remaining_steps'] -= 1
 				cmdQueue.put('f+1')
 			else:
 				t = time.time()
-				np.save("v_curve1_%d.npy" % t, np.array(self.v_curve))
-				np.save("v_curve2_%d.npy" % t, np.array(self.v_curve2))
-				self.phase = 'wait'
+				np.save("v_curve1_%d.npy" % t, np.array(self.status['v_curve']))
+				np.save("v_curve2_%d.npy" % t, np.array(self.status['v_curve2']))
+				self.status['phase'] = 'wait'
 				
 			print "hfr", self.hfr
 
 		else:
 			if self.focus_yx is not None:
 				self.hfr = self.get_hfr(im_sub)
+			else:
+				self.status['phase'] = 'get_hfr_start'
 			
 			
 			
 
-		status = "#%d F: %s %s hfr:%.2f fps:%.1f" % (i, self.phase, self.dispmode, self.hfr, fps)
+		status = "#%d F: %s %s hfr:%.2f fps:%.1f" % (i, self.status['phase'], self.dispmode, self.hfr, fps)
 	
 
 		if (self.dispmode == 'disp-orig'):
@@ -2085,8 +2131,8 @@ def run_gphoto():
 
 	dark = Median(5)
 	nav = Navigator(status.path(["navigator"]), dark, polar, 'navigator', polar_tid = 'polar')
-	focuser = Focuser('navigator', dark = dark)
-	zoom_focuser = Focuser('navigator')
+	focuser = Focuser('navigator', status.path(["navigator", "focuser"]), dark = dark)
+	zoom_focuser = Focuser('navigator', status.path(["navigator", "focuser"]))
 
 	runner = Runner('navigator', cam, navigator = nav, focuser = focuser, zoom_focuser = zoom_focuser)
 	runner.start()
@@ -2225,7 +2271,7 @@ def run_test_2_gphoto():
 	dark2 = Median(5)
 	
 	nav1 = Navigator(status.path(["navigator"]), dark1, polar, 'navigator', polar_tid = 'polar')
-	focuser = Focuser('navigator', dark = dark1)
+	focuser = Focuser('navigator', status.path(["navigator", "focuser"]), dark = dark1)
 	zoom_focuser = Focuser('navigator')
 
 	nav = Navigator(status.path(["guider", "navigator"]), dark2, polar, 'guider')
@@ -2270,8 +2316,8 @@ def run_2():
 	dark2 = Median(5)
 	
 	nav1 = Navigator(status.path(["navigator"]), dark1, polar, 'navigator', polar_tid = 'polar')
-	focuser = Focuser('navigator', dark = dark1)
-	zoom_focuser = Focuser('navigator')
+	focuser = Focuser('navigator', status.path(["navigator", "focuser"]), dark = dark1)
+	zoom_focuser = Focuser('navigator', status.path(["navigator", "focuser"]))
 
 	go_ra = GuideOut("./guide_out_ra")
 	go_dec = GuideOut("./guide_out_dec")
@@ -2389,7 +2435,7 @@ if __name__ == "__main__":
 	sys.stderr = mystderr
 	
 
-	#run_gphoto()
+	run_gphoto()
 	#run_test_2()
 	#run_v4l2()
 	#run_test_2_gphoto()
