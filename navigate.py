@@ -43,6 +43,7 @@ from PIL import Image;
 from focuser_out import FocuserOut
 from centroid import centroid, sym_center, hfr
 from polyfit import *
+from quat import Quaternion
 
 class Status:
 	def __init__(self, conf_file):
@@ -655,7 +656,7 @@ def apply_gamma8(img, gamma):
 
 
 class Navigator:
-	def __init__(self, status, dark, polar, tid, polar_tid = None, go_ra = None, go_dec = None):
+	def __init__(self, status, dark, mount, tid, polar_tid = None, go_ra = None, go_dec = None):
 		self.status = status
 		self.dark = dark
 		self.stack = Stack()
@@ -679,7 +680,7 @@ class Navigator:
 		self.plotter = None
 		self.plotter_off = np.array([0.0, 0.0])
 		self.tid = tid
-		self.polar = polar
+		self.mount = mount
 		self.polar_tid = polar_tid
 		self.go_ra = go_ra
 		self.go_dec = go_dec
@@ -689,7 +690,7 @@ class Navigator:
 		self.status['t_solved'] = 0
 		self.status['t_solver'] = 0
 		self.prev_t = 0
-		self.status['ra'], self.status['dec'] = self.polar.zenith()
+		self.status['ra'], self.status['dec'] = self.mount.polar.zenith()
 		self.status['max_radius'] = 100
 		self.status['radius'] = self.status['max_radius']
 		self.hotpixels = None
@@ -786,10 +787,11 @@ class Navigator:
 				#print "self.solver.ind_radec", self.solver.ind_radec
 				#self.solver.wcs.write_to("log_%d.wcs" % self.ii)
 				#subprocess.call(['touch', '-r', "testimg17_" + str(i) + ".tif", "log_%d.wcs" % self.ii])
-				if self.polar.mode == 'solve':
-					self.polar.set_pos_tan(self.wcs, self.status['t_solver'], self.tid)
+				self.mount.set_pos_tan(self.wcs, self.status['t_solver'], self.tid)
+				if self.mount.polar.mode == 'solve':
+					self.mount.polar.set_pos_tan(self.wcs, self.status['t_solver'], self.tid)
 				if self.polar_tid is not None:
-					self.polar.solve()
+					self.mount.polar.solve()
 				if save_conf:
 					cmdQueue.put('save')
 					
@@ -801,7 +803,7 @@ class Navigator:
 				if self.status['radius'] > 0 and self.status['radius'] < 70:
 					self.status['radius'] = self.status['radius'] * 2 + 15
 				else:
-					self.status['ra'], self.status['dec'] = self.polar.zenith()
+					self.status['ra'], self.status['dec'] = self.mount.polar.zenith()
 					self.status['radius'] = self.status['max_radius']
 					self.wcs = None
 			self.solver = None
@@ -818,20 +820,20 @@ class Navigator:
 				#self.solver = Solver(sources_img = filtered, field_w = im.shape[1], field_h = im.shape[0], ra = self.status['ra'], dec = self.status['dec'], field_deg = self.status['field_deg'])
 				self.solver.start()
 				self.solver_off = np.array([0.0, 0.0])
-		if self.polar.mode == 'solve' and self.polar_tid is not None:
-			polar_plot = self.polar.plot2()
-			p_status = "#%d %s solv#%d r:%.1f fps:%.1f" % (i, self.polar.mode, i - self.status['i_solver'], self.status['radius'], fps)
+		if self.mount.polar.mode == 'solve' and self.polar_tid is not None:
+			polar_plot = self.mount.polar.plot2()
+			p_status = "#%d %s solv#%d r:%.1f fps:%.1f" % (i, self.mount.polar.mode, i - self.status['i_solver'], self.status['radius'], fps)
 			cv2.putText(polar_plot, p_status, (10, polar_plot.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255,255,0), 2)
 			ui.imshow(self.polar_tid, polar_plot)
-		elif self.polar.mode == 'adjust' and self.wcs is not None:
-			self.polar.set_pos_tan(self.wcs, self.status['t_solver'], self.tid, off = self.plotter_off)
+		elif self.mount.polar.mode == 'adjust' and self.wcs is not None:
+			self.mount.polar.set_pos_tan(self.wcs, self.status['t_solver'], self.tid, off = self.plotter_off)
 			if self.polar_tid is not None:
-				polar_plot = self.polar.plot2()
-				p_status = "#%d %s solv#%d r:%.1f fps:%.1f" % (i, self.polar.mode, i - self.status['i_solved'], self.status['radius'], fps)
+				polar_plot = self.mount.polar.plot2()
+				p_status = "#%d %s solv#%d r:%.1f fps:%.1f" % (i, self.mount.polar.mode, i - self.status['i_solved'], self.status['radius'], fps)
 				cv2.putText(polar_plot, p_status, (10, polar_plot.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2)
 				ui.imshow(self.polar_tid, polar_plot)
 			
-		status = "#%d %s %s  solv#%d r:%.1f fps:%.1f hp:%d" % (i, self.status['dispmode'], self.polar.mode, i - self.status['i_solver'], self.status['radius'], fps, n_hotpixels)
+		status = "#%d %s %s  solv#%d r:%.1f fps:%.1f hp:%d" % (i, self.status['dispmode'], self.mount.polar.mode, i - self.status['i_solver'], self.status['radius'], fps, n_hotpixels)
 		if (self.status['dispmode'] == 'disp-orig'):
 			disp = normalize(im)
 			cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
@@ -849,8 +851,8 @@ class Navigator:
 		
 				extra_lines = []
 				
-				if self.polar.mode == 'adjust':
-					transf_index = self.polar.transform_ra_dec_list(self.index_sources)
+				if self.mount.polar.mode == 'adjust':
+					transf_index = self.mount.polar.transform_ra_dec_list(self.index_sources)
 					extra_lines = [ (si[0], si[1], ti[0], ti[1]) for si, ti in zip(self.index_sources, transf_index) ]
 					
 				plot_bg(self.tid, status, self.plotter.plot, disp, self.plotter_off, extra_lines = extra_lines)
@@ -860,7 +862,10 @@ class Navigator:
 		elif (self.status['dispmode'].startswith('disp-zoom-')):
 			if self.plotter is not None:
 				zoom = self.status['dispmode'][len('disp-zoom-'):]
-				plot_bg(self.tid, status, self.plotter.plot, normalize(filtered), self.plotter_off, scale=zoom)
+				extra_lines = []
+				if self.tid == 'navigator':
+					extra_lines = self.mount.get_guider_plot()
+				plot_bg(self.tid, status, self.plotter.plot, normalize(filtered), self.plotter_off, scale=zoom, extra_lines = extra_lines)
 			else:
 				disp = normalize(filtered)
 				cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
@@ -882,13 +887,13 @@ class Navigator:
 			self.status['field_deg'] = None
 			self.solver = None
 			self.plotter = None
-			self.status['ra'], self.status['dec'] = self.polar.zenith()
+			self.status['ra'], self.status['dec'] = self.mount.polar.zenith()
 			self.status['radius'] = self.status['max_radius']
 
 		if cmd == 'solver-retry':
 			if self.solver is not None:
 				self.solver.terminate(wait=False)
-			self.status['ra'], self.status['dec'] = self.polar.zenith()
+			self.status['ra'], self.status['dec'] = self.mount.polar.zenith()
 			self.status['radius'] = self.status['max_radius']
 
 		if cmd == 'dark':
@@ -907,16 +912,16 @@ class Navigator:
 
 		if cmd == 'polar-reset':
 			if self.polar_tid is not None:
-				self.polar.reset()
+				self.mount.polar.reset()
 
 		if cmd == 'polar-align':
-			self.polar.set_mode('adjust')
+			self.mount.polar.set_mode('adjust')
 
 		if cmd.startswith('gps') and self.polar_tid is not None:
 			try:
 				str_gps = cmd[len('gps'):]
 				(lat, lon) = [float(n) for n in str_gps.split(',')]
-				self.polar.set_gps((lat, lon))
+				self.mount.polar.set_gps((lat, lon))
 			except:
 				print "Error: " +  sys.exc_info().__str__()
 		if cmd.startswith('go-left-') and self.go_ra is not None:
@@ -949,7 +954,7 @@ class Navigator:
 			self.status['dec'] = solver.dec
 			self.status['field_deg'] = solver.field_deg
 			self.status['radius'] = solver.field_deg
-			self.polar.set_pos_tan(solver.wcs, t, "full-res")
+			self.mount.polar.set_pos_tan(solver.wcs, t, "full-res")
 
 			if (self.status['dispmode'].startswith('disp-zoom-')):
 				zoom = self.status['dispmode'][len('disp-zoom-'):]
@@ -1829,6 +1834,94 @@ class Focuser:
 			ui.imshow(self.tid, disp)
 		self.prev_t = t
 
+class Mount:
+	def __init__(self, status, polar):
+		self.status = status
+		self.polar = polar
+		self.status.setdefault('oag', True)
+		if self.status['oag']:
+			self.status.setdefault('oag_pos', None)
+			self.status.setdefault('t_dif', 120)
+		else:
+			self.status['oag_pos'] = None
+			self.status['t_dif'] = 120
+		self.main_t = None
+		self.guider_t = None
+		
+	def tan_to_euler(self, tan, off=(0,0)):
+		ra, dec = tan.radec_center()
+		# the field moved by given offset pixels from the position in self.wcs
+		(crpix1, crpix2) = tan.crpix
+		ra, dec = tan.pixelxy2radec(crpix1 - off[1], crpix2 - off[0])
+
+		cd11, cd12, cd21, cd22 = tan.cd
+		
+		det = cd11 * cd22 - cd12 * cd21
+		if det >= 0:
+			parity = 1.
+		else:
+			parity = -1.
+		T = parity * cd11 + cd22
+		A = parity * cd21 - cd12
+		orient = math.degrees(math.atan2(A, T))
+		#orient = math.degrees(math.atan2(cd21, cd11))
+		
+		return ra, dec, orient
+
+	def set_pos_tan(self, tan, t, camera):
+		#ra, dec, orient = self.tan_to_euler(tan, off)
+		#print ra, dec, orient
+		#self.set_pos(ra, dec, orient, t, camera)
+
+		if camera == 'navigator':
+			self.main_tan = tan
+			self.main_t = t
+		elif camera == 'guider':
+			self.guider_tan = tan
+			self.guider_t = t
+		
+		if self.main_t is not None and self.guider_t is not None and np.abs(self.main_t - self.guider_t) < self.status['t_dif']:
+			self.status['t_dif'] = self.main_t - self.guider_t
+
+			guider_w = self.guider_tan.get_width()
+			guider_h = self.guider_tan.get_height()
+			
+			mra, mdec, mroll = self.tan_to_euler(self.main_tan)
+			mq = Quaternion([mra, mdec, mroll])
+			
+			res = []
+			for x, y in [(0, 0), (guider_w - 1, 0), (guider_w - 1, guider_h - 1), (0, guider_h - 1)]:
+				ra, dec = self.guider_tan.pixelxy2radec(x, y)
+				q = Quaternion([ra, dec, 0])
+				
+				sq = mq.inv() * q
+				
+				res.append(sq.to_euler().tolist())
+			self.status['oag_pos'] = res
+	
+	def get_guider_plot(self):
+		if self.status['oag_pos'] is not None:
+			res = []
+			for e in self.status['oag_pos']:
+				sq = Quaternion(e)
+				mra, mdec, mroll = self.tan_to_euler(self.main_tan)
+				mq = Quaternion([mra, mdec, mroll])
+				q =  mq * sq
+				ra, dec, roll = q.to_euler()
+				res.append((ra, dec))
+			res2 = []
+			for i, e in enumerate(res):
+				res2.append((res[i - 1][0], res[i - 1][1], e[0], e[1]))
+			return res2
+		else:
+			return []
+				
+			
+
+
+
+
+
 class Runner(threading.Thread):
 	def __init__(self, tid, camera, navigator = None, guider = None, zoom_focuser = None, focuser = None):
                 threading.Thread.__init__(self)
@@ -2097,10 +2190,11 @@ def run_v4l2():
 	ui.namedWindow('polar')
 
         polar = Polar(status.path(["polar"]), ['navigator'])
+        mount = Mount(status.path(["mount"]), polar)
 	cam = Camera(status.path(["navigator", "camera"]))
 	cam.prepare(1280, 960)
 	dark = Median(5)
-	nav = Navigator(status.path(["navigator"]), dark, polar, 'navigator', polar_tid = 'polar')
+	nav = Navigator(status.path(["navigator"]), dark, mount, 'navigator', polar_tid = 'polar')
 
 	runner = Runner('navigator', cam, navigator = nav)
 	runner.start()
@@ -2119,9 +2213,10 @@ def run_gphoto():
 	ui.namedWindow('full_res')
 
         polar = Polar(status.path(["polar"]), ['navigator', 'full-res'])
+        mount = Mount(status.path(["mount"]), polar)
 
 	dark = Median(5)
-	nav = Navigator(status.path(["navigator"]), dark, polar, 'navigator', polar_tid = 'polar')
+	nav = Navigator(status.path(["navigator"]), dark, mount, 'navigator', polar_tid = 'polar')
 	focuser = Focuser('navigator', status.path(["navigator", "focuser"]), dark = dark)
 	zoom_focuser = Focuser('navigator', status.path(["navigator", "focuser"]))
 
@@ -2142,10 +2237,11 @@ def run_v4l2_g():
 	ui.namedWindow('polar')
 
         polar = Polar(status.path(["polar"]), ['guider'])
+        mount = Mount(status.path(["mount"]), polar)
 
 
 	dark = Median(5)
-	nav = Navigator(status.path(["guider", "navigator"]), dark, polar, 'guider', polar_tid = 'polar')
+	nav = Navigator(status.path(["guider", "navigator"]), dark, mount, 'guider', polar_tid = 'polar')
 	go_ra = GuideOut("./guide_out_ra")
 	go_dec = GuideOut("./guide_out_dec")
 	guider = Guider(status.path(["guider"]), go_ra, go_dec, dark, 'guider')
@@ -2163,12 +2259,13 @@ def run_gphoto_g():
 	ui.namedWindow('polar')
 
         polar = Polar(status.path(["polar"]), ['navigator', 'full-res'])
+        mount = Mount(status.path(["mount"]), polar)
 
 	cam = Camera_gphoto(status.path(["guider", "navigator", "camera"]))
 	cam.prepare()
 
 	dark = Median(5)
-	nav = Navigator(status.path(["guider", "navigator"]), dark, polar, 'navigator', polar_tid = 'polar')
+	nav = Navigator(status.path(["guider", "navigator"]), dark, mount, 'navigator', polar_tid = 'polar')
 	go_ra = GuideOut("./guide_out_ra")
 	go_dec = GuideOut("./guide_out_dec")
 
@@ -2188,7 +2285,7 @@ def run_test_g():
         polar = Polar(status.path(["polar"]), ['guider'])
 
 	dark = Median(5)
-	nav = Navigator(status.path(["guider", "navigator"]), dark, polar, 'guider', polar_tid = 'polar')
+	nav = Navigator(status.path(["guider", "navigator"]), dark, mount, 'guider', polar_tid = 'polar')
 	go_ra = GuideOut("./guide_out_ra")
 	go_dec = GuideOut("./guide_out_dec")
 	guider = Guider(status.path(["guider"]), go_ra, go_dec, dark, 'guider')
@@ -2206,10 +2303,11 @@ def run_test():
 	ui.namedWindow('polar')
 
         polar = Polar(status.path(["polar"]), ['navigator'])
+        mount = Mount(status.path(["mount"]), polar)
 
 	cam = Camera_test(status.path(["navigator", "camera"]))
 	dark = Median(5)
-	nav = Navigator(status.path(["navigator"]), dark, polar, 'navigator', polar_tid = 'polar')
+	nav = Navigator(status.path(["navigator"]), dark, mount, 'navigator', polar_tid = 'polar')
 
 	runner = Runner('navigator', cam, navigator = nav)
 	runner.start()
@@ -2224,19 +2322,21 @@ def run_test_2():
 	ui.namedWindow('polar')
 
         polar = Polar(status.path(["polar"]), ['navigator', 'guider'])
+        mount = Mount(status.path(["mount"]), polar)
 
 	dark1 = Median(5)
 	dark2 = Median(5)
 
 	cam1 = Camera_test(status.path(["navigator", "camera"]))
-	nav1 = Navigator(status.path(["navigator"]), dark1, polar, 'navigator', polar_tid = 'polar')
+	nav1 = Navigator(status.path(["navigator"]), dark1, mount, 'navigator', polar_tid = 'polar')
 
 	go_ra = GuideOut("./guide_out_ra")
 	go_dec = GuideOut("./guide_out_dec")
-	nav = Navigator(status.path(["guider", "navigator"]), dark2, polar, 'guider', go_ra = go_ra, go_dec = go_dec)
+	nav = Navigator(status.path(["guider", "navigator"]), dark2, mount, 'guider', go_ra = go_ra, go_dec = go_dec)
 
 	guider = Guider(status.path(["guider"]), go_ra, go_dec, dark2, 'guider')
-	cam = Camera_test_g(status.path(["guider", "navigator", "camera"]), go_ra, go_dec)
+	cam = Camera_test(status.path(["guider", "navigator", "camera"]))
+	#cam = Camera_test_g(status.path(["guider", "navigator", "camera"]), go_ra, go_dec)
 	
 	runner = Runner('navigator', cam1, navigator = nav1)
 	runner.start()
@@ -2257,15 +2357,16 @@ def run_test_2_gphoto():
 	cam1.prepare()
 
         polar = Polar(status.path(["polar"]), ['navigator', 'guider', 'full-res'])
+        mount = Mount(status.path(["mount"]), polar)
 
 	dark1 = Median(5)
 	dark2 = Median(5)
 	
-	nav1 = Navigator(status.path(["navigator"]), dark1, polar, 'navigator', polar_tid = 'polar')
+	nav1 = Navigator(status.path(["navigator"]), dark1, mount, 'navigator', polar_tid = 'polar')
 	focuser = Focuser('navigator', status.path(["navigator", "focuser"]), dark = dark1)
 	zoom_focuser = Focuser('navigator')
 
-	nav = Navigator(status.path(["guider", "navigator"]), dark2, polar, 'guider')
+	nav = Navigator(status.path(["guider", "navigator"]), dark2, mount, 'guider')
 	go_ra = GuideOut("./guide_out_ra")
 	go_dec = GuideOut("./guide_out_dec")
 
@@ -2302,17 +2403,18 @@ def run_2():
 	cam1.prepare()
 
         polar = Polar(status.path(["polar"]), ['navigator', 'guider', 'full-res'])
+        mount = Mount(status.path(["mount"]), polar)
 
 	dark1 = Median(5)
 	dark2 = Median(5)
 	
-	nav1 = Navigator(status.path(["navigator"]), dark1, polar, 'navigator', polar_tid = 'polar')
+	nav1 = Navigator(status.path(["navigator"]), dark1, mount, 'navigator', polar_tid = 'polar')
 	focuser = Focuser('navigator', status.path(["navigator", "focuser"]), dark = dark1)
 	zoom_focuser = Focuser('navigator', status.path(["navigator", "focuser"]))
 
 	go_ra = GuideOut("./guide_out_ra")
 	go_dec = GuideOut("./guide_out_dec")
-	nav = Navigator(status.path(["guider", "navigator"]), dark2, polar, 'guider', go_ra = go_ra, go_dec = go_dec)
+	nav = Navigator(status.path(["guider", "navigator"]), dark2, mount, 'guider', go_ra = go_ra, go_dec = go_dec)
 
 	guider = Guider(status.path(["guider"]), go_ra, go_dec, dark2, 'guider')
 
@@ -2426,8 +2528,8 @@ if __name__ == "__main__":
 	sys.stderr = mystderr
 	
 
-	run_gphoto()
-	#run_test_2()
+	#run_gphoto()
+	run_test_2()
 	#run_v4l2()
 	#run_test_2_gphoto()
 	#run_v4l2_g()
