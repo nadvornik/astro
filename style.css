@@ -57,3 +57,9 @@ button, select {
 .toggle_buttons {
   display: none;
 }
+
+
+.plot {
+  width: 90vmin;
+  height: 30vmin;
+}

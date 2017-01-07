@@ -5,6 +5,7 @@
 
   <script type="text/javascript" src="jquery.min.js"></script>
   <script type="text/javascript" src="jquery.touchSwipe.js"></script>
+  <script type="text/javascript" src="jquery.flot.js"></script>
   <script type="text/javascript" src="zoom.js"></script>
 </head>
 
@@ -71,6 +72,9 @@
                         </tr>
                         <tr>
                             <td/><td><button class='ajax' value='navigator!down'>down</button></td>
+                        </tr>
+                        <tr rowspan=3>
+                            <td colspan=3><div id="plot_hfr" class='ajax_up plot' data-jsonp='navigator.focuser'></div></td>
                         </tr>
                     </table>
                 </div>

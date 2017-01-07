@@ -116,7 +116,10 @@ function isElementInViewport(el) {
           }
           else if (prefix != undefined) v = prefix + v;
           
-          if ($(this).is(".ajax_sem")) {
+          if ($(this).is("#plot_hfr")) {
+            plot_hfr_data(this, v);
+          }
+          else if ($(this).is(".ajax_sem")) {
             if (v) $(this).addClass("ajaxrun");
             else $(this).removeClass("ajaxrun");
           }
@@ -133,6 +136,25 @@ function isElementInViewport(el) {
     });
   }
  
+  var plot_hfr;
+  function plot_hfr_data(canvas, data) {
+    var res = []
+    var names = ['v_curve', 'v_curve_s', 'v_curve2', 'v_curve2_s'];
+    for (var j = 0; j < names.length; ++j) {
+        var cn = names[j];
+        if (!(cn in data)) continue;
+        if (!$.isArray(data[cn]) ||  data[cn].length == 0) continue;
+        var curv = [];
+        for (var i = 0; i < data[cn].length; ++i) {
+          curv.push([i, data[cn][i]]);
+        }
+        res.push(curv);
+    }
+    plot_hfr.setData(res);
+    plot_hfr.setupGrid();
+    plot_hfr.draw();
+
+  }
  
   function update_transform(transform, zoom, tx, ty, center_x, center_y) {
     var new_zoom = transform.zoom * zoom;
@@ -374,6 +396,14 @@ function isElementInViewport(el) {
     setInterval(update_status, 5000);
     
     //document.body.addEventListener('touchstart', function(e){ e.preventDefault(); });
-    $('html, body').animate({scrollTop: $(".viewportbox").first().offset().top}, 200);  
+    $('html, body').animate({scrollTop: $(".viewportbox").first().offset().top}, 200);
+    
+    plot_hfr = $.plot($("#plot_hfr"), [ ], {
+                        series: {
+                                shadowSize: 0   // Drawing is faster without shadows
+                        },
+                        xaxis: {
+                                show: false
+                        }});
   });
  
