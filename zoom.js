@@ -115,9 +115,19 @@ function isElementInViewport(el) {
             });
           }
           else if (prefix != undefined) v = prefix + v;
-          $(this).data('no_cb', 1)
-          $(this).val(v);
-          $(this).removeData('no_cb')
+          
+          if ($(this).is(".ajax_sem")) {
+            if (v) $(this).addClass("ajaxrun");
+            else $(this).removeClass("ajaxrun");
+          }
+          else if ($(this).is("span")) {
+            $(this).text(v);
+          }
+          else {
+            $(this).data('no_cb', 1)
+            $(this).val(v);
+            $(this).removeData('no_cb')
+          }
         });
       }
     });
