@@ -1285,7 +1285,7 @@ class Guider:
 					
 					#testing
 					try:
-						self.status['t_delay'] = self.status['navigator']['camera']['exp-sec'] * 1.5
+						self.status['t_delay'] = self.status['navigator']['camera']['exp-sec'] * 1.0
 					except:
 						pass
 				
@@ -2297,6 +2297,85 @@ def run_2():
 	
 	runner.join()
 	runner2.join()
+
+def run_calibrate_v4l2_g():
+	global status
+	status = Status("run_calibrate_v4l2_g.conf")
+	cam = Camera(status.path(["camera"]))
+	status.save()
+	cam.prepare(1280, 960)
+
+	ui.namedWindow('guider')
+	go_dec = GuideOut("./guide_out_dec")
+	dark = Median(5)
+
+	try:
+		from pyA20.gpio import gpio
+		from pyA20.gpio import port
+		from pyA20.gpio import connector
+
+		gpio.init() #Initialize module. Always called first
+		pins = [ port.PA8, port.PA9, port.PA10, port.PA20 ]
+
+		for p in pins:
+			gpio.setcfg(p, gpio.OUTPUT)  #Configure LED1 as output
+			gpio.output(p, 0)
+
+	except:
+		pass
+
+	vals = []
+	for exp in np.arange(0.1, 1.5, 0.1):
+		go_dec.out(0)
+		cam.cmd('exp-sec-%f' % exp)
+		out = 0
+
+		for i in range(0,10):
+			im, t = cam.capture()
+			if im.ndim > 2:
+				im = cv2.min(cv2.min(im[:, :, 0], im[:, :, 1]), im[:, :, 2])
+			dark.add(im)
+			ui.imshow('guider', normalize(im))
+
+		for test in range(0, 100):
+			im, t = cam.capture()
+			t = time.time()
+			if im.ndim > 2:
+				im = cv2.min(cv2.min(im[:, :, 0], im[:, :, 1]), im[:, :, 2])
+
+			im = cv2.subtract(im, dark.get())
+			ui.imshow('guider', normalize(im))
+			val = int(np.amax(im))
+			print exp, test, out, val
+
+			if test == 10:
+				val0 = val
+				go_dec.out(1)
+			elif test == 20:
+				val1 = val
+				go_dec.out(0)
+				t0 = time.time()
+				print exp, "range", val0, val1
+				valm = (val1 + val0) / 2
+				out = 0
+
+			elif test > 20 and out == 0 and val < valm:
+				print "change", exp, t - t0
+				vals.append((exp, t - t0))
+				go_dec.out(1)
+				t0 = time.time()
+				out = 1
+			elif test > 20 and out == 1 and val > valm:
+				print "change", exp, t - t0
+				vals.append((exp, t - t0))
+				go_dec.out(0)
+				t0 = time.time()
+				out = 0
+
+	print "line", fit_line(vals)
+
+
+	cmdQueue.put('exit')
 
 if __name__ == "__main__":
 	os.environ["LC_NUMERIC"] = "C"
