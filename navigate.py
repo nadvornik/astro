@@ -41,7 +41,7 @@ import json
 from PIL import Image;
 
 from focuser_out import FocuserOut
-from centroid import centroid, sym_center
+from centroid import centroid, sym_center, hfr
 from polyfit import *
 
 class Status:
@@ -1448,15 +1448,6 @@ class Focuser:
 		self.prev_t = 0
 
 	hfr_size = 30
-	hfr_mat_mask = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (hfr_size * 2 + 1, hfr_size * 2 + 1))
-	hfr_mat = cv2.multiply(np.array([[(x**2 + y**2)**0.5 for x in range(-hfr_size, hfr_size + 1) ] for y in range(-hfr_size, hfr_size + 1) ], dtype=np.float), hfr_mat_mask, dtype=cv2.CV_32FC1)
-	@staticmethod
-	def hfr(a):
-		s = cv2.sumElems(cv2.multiply(a,  Focuser.hfr_mat_mask, dtype=cv2.CV_32FC1))[0]
-		if s == 0.0:
-			return Focuser.hfr_size
-		r = cv2.sumElems(cv2.multiply(a,  Focuser.hfr_mat, dtype=cv2.CV_32FC1))[0] / s
-		return r
 
 	@staticmethod
 	def v_param(v_curve):
@@ -1516,7 +1507,7 @@ class Focuser:
 
 	def get_max_flux(self, im, xy, stddev):
 		ret = []
-		hfr = None
+		cur_hfr = None
 		(h, w) = im.shape
 		for p in xy:
 			if p[2] < stddev * 3:
@@ -1532,24 +1523,24 @@ class Focuser:
 				continue
 			if (y > h - Focuser.hfr_size * 2 - 1):
 				continue
-			if hfr is None:
-				hfr = Focuser.hfr(im[y - Focuser.hfr_size : y + Focuser.hfr_size + 1, x - Focuser.hfr_size : x + Focuser.hfr_size + 1])
-				if hfr > Focuser.hfr_size * 0.5:
-					hfr = None
+			if cur_hfr is None:
+				cur_hfr = hfr(im[y - Focuser.hfr_size : y + Focuser.hfr_size + 1, x - Focuser.hfr_size : x + Focuser.hfr_size + 1])
+				if cur_hfr > Focuser.hfr_size * 0.5:
+					cur_hfr = None
 					continue
 				ret.append(p)
 			else:
-				if Focuser.hfr(im[y - Focuser.hfr_size : y + Focuser.hfr_size + 1, x - Focuser.hfr_size : x + Focuser.hfr_size + 1]) < hfr + 1:
+				if hfr(im[y - Focuser.hfr_size : y + Focuser.hfr_size + 1, x - Focuser.hfr_size : x + Focuser.hfr_size + 1]) < cur_hfr + 1:
 					ret.append(p)
 		print "hfr", hfr, ret
 				
 		if len(ret) > 0:
-			return ret[0][2], hfr, np.array(ret)
+			return ret[0][2], cur_hfr, np.array(ret)
 		else:
 			return 0, None, None
 
 	def get_hfr(self, im):
-		hfr = 0
+		cur_hfr = 0
 		(h, w) = im.shape
 		if self.focus_yx is None or len(self.focus_yx) == 0:
 			return Focuser.hfr_size
@@ -1587,7 +1578,7 @@ class Focuser:
 
 			filtered.append( (y, x, v) )
 			original.append( p )
-			hfr_list.append( Focuser.hfr(im[iy - Focuser.hfr_size : iy + Focuser.hfr_size + 1, ix - Focuser.hfr_size : ix + Focuser.hfr_size + 1]) )
+			hfr_list.append( hfr(im[iy - Focuser.hfr_size : iy + Focuser.hfr_size + 1, ix - Focuser.hfr_size : ix + Focuser.hfr_size + 1]) )
 
 		if len(filtered) == 0:
 			return Focuser.hfr_size
@@ -1600,14 +1591,14 @@ class Focuser:
 		self.focus_yx = filtered
 		print "hfr_list", hfr_list, weights
 		
-		hfr = np.average(hfr_list, weights = weights)
-		d2 = (np.array(hfr_list) - hfr) ** 2
+		cur_hfr = np.average(hfr_list, weights = weights)
+		d2 = (np.array(hfr_list) - cur_hfr) ** 2
 		var = np.average(d2, weights = weights)
 		noise = 2
 		weights[np.where(d2 > var * noise**2)] = 1.0
-		hfr = np.average(hfr_list, weights = weights)
+		cur_hfr = np.average(hfr_list, weights = weights)
 		print "hfr_list_filt", hfr_list, weights
-		return hfr
+		return cur_hfr
 
 
 	def set_xy_from_stack(self, stack):

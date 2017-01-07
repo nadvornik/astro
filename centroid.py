@@ -65,6 +65,27 @@ def sym_center(I):
 	b = ym - m*xm
 	return centerfit(m, b, w)
 
+
+hfr_mat_cache = {}
+def hfr(a):
+	h, w = a.shape
+	key = "%d %d" % a.shape
+	if key not in hfr_mat_cache:
+		x = np.arange(0, w, dtype = np.float32) - w / 2.0 + 0.5
+		y = np.arange(0, h, dtype = np.float32) - h / 2.0 + 0.5
+		mask = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (w, h))
+		xx, yy = np.meshgrid(x, y)
+		mat = cv2.multiply((xx**2 + yy**2)**0.5, mask, dtype=cv2.CV_32FC1)
+		hfr_mat_cache[key] = (mat, mask)
+	else:
+		(mat, mask) = hfr_mat_cache[key]
+	s = cv2.sumElems(cv2.multiply(a,  mask, dtype=cv2.CV_32FC1))[0]
+	if s == 0.0:
+		return h / 2
+	r = cv2.sumElems(cv2.multiply(a,  mat, dtype=cv2.CV_32FC1))[0] / s
+	return r
+
+
 if __name__ == "__main__":
 
 	I = np.array([  [ 0,   0,   0,   0,   0  , 0],
@@ -79,3 +100,4 @@ if __name__ == "__main__":
 	print I
 	print sym_center(I)
 	print centroid(I)
+	print hfr(I)
