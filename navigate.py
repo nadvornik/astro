@@ -273,7 +273,7 @@ def centroid_list(im, pt0, off):
 		
 		cm = cv2.GaussianBlur(cm, (9, 9), 0)
 		mean, stddev = cv2.meanStdDev(cm)
-		if cm[centroid_size + ys, centroid_size + xs] < mean + stddev * 3:
+		if cm[int(centroid_size + ys + 0.5), int(centroid_size + xs + 0.5)] < mean + stddev * 3:
 			continue
 		
 		i2 = len(pt)
@@ -544,6 +544,43 @@ def pt_transform_opt(pt1m, pt2m, noise = 2, pt_func = pt_translation):
 	
 	return m, weights
 	
+def get_hfr_list(im, pts, hfr_size = 20):
+	cur_hfr = hfr_size
+	(h, w) = im.shape
+		
+	hfr_list = []
+		
+	sum_w = 0.0
+	for p in pts:
+			(y, x) = p[:2]
+			ix = int(x + 0.5)
+			iy = int(y + 0.5)
+			if (ix < hfr_size):
+				continue
+			if (iy < hfr_size):
+				continue
+			if (ix > w - hfr_size - 1):
+				continue
+			if (iy > h - hfr_size - 1):
+				continue
+
+			hfr_list.append( hfr(im[iy - hfr_size : iy + hfr_size + 1, ix - hfr_size : ix + hfr_size + 1]) )
+
+	if len(hfr_list) == 0:
+		return hfr_size
+
+	print "hfr_list", hfr_list
+	hfr_list = np.array(hfr_list)
+	cur_hfr = np.average(hfr_list)
+	d2 = (hfr_list - cur_hfr) ** 2
+	var = np.average(d2)
+	noise = 2
+	hfr_list = hfr_list[np.where(d2 < var * noise**2)]
+	cur_hfr = np.average(hfr_list)
+	print "hfr_list_filt", hfr_list
+	return cur_hfr
+
+
 class Stack:
 	def __init__(self, ratio = 0.1):
 		self.img = None
@@ -702,6 +739,7 @@ class Navigator:
 			self.field_corr = np.load(self.status['field_corr'])
 		
 		self.i_dark = 0
+		self.status['full_hfr'] = []
 
 
 	def hotpix_find(self):
@@ -943,6 +981,9 @@ class Navigator:
 		pts = find_max(im, 12, 100)
 		w = im.shape[1]
 		h = im.shape[0]
+		
+		full_hfr = get_hfr_list(im, pts)
+		self.status['full_hfr'].append(full_hfr)
 		del im
 
 		solver = Solver(sources_list = pts, field_w = w, field_h = h, ra = self.status['ra'], dec = self.status['dec'], field_deg = self.status['field_deg'], radius = 100)
@@ -1050,6 +1091,10 @@ class Guider:
 		self.status['pixpersec'] = None
 		self.status['pixpersec_neg'] = None
 		self.status['pixpersec_dec'] = None
+		self.status['curr_err_list'] = []
+		self.status['curr_hfr_list'] = []
+		self.status['err_list'] = []
+		self.status['hfr_list'] = []
 		self.off = (0.0, 0.0)
 		self.off_t = None
 		self.go_ra.out(0)
@@ -1099,7 +1144,8 @@ class Guider:
 				self.pt0[:, 1] += dither_off.imag
 			except:
 				pass
-			
+			self.status['err_list'].append(np.mean(self.status['curr_err_list'], axis = 0).to_list())
+			self.status['hfr_list'].append(np.mean(self.status['curr_hfr_list']))
 
 		elif cmd.startswith('aggressivness-dec-'):
 			try:
@@ -1390,6 +1436,12 @@ class Guider:
 				if not self.capture_in_progress and (self.status['seq'] == 'seq-guided' and self.ok or self.status['seq'] == 'seq-unguided'):
 					cmdQueue.put('capture')
 					self.capture_in_progress = True
+					self.status['curr_err_list'] = []
+					self.status['curr_hfr_list'] = []
+				
+				if self.capture_in_progress or True:
+					self.status['curr_err_list'].append((err.real, err.imag))
+					self.status['curr_hfr_list'].append(get_hfr_list(im_sub, pt))
 				
 				if self.ok:
 					self.status['mode'] = 'close'
@@ -2171,11 +2223,11 @@ class Camera_test_g:
 	
 	def capture(self):
 		time.sleep(self.status['exp-sec'])
-		self.err += random.random() * 2 - 1.1
+		self.err += random.random() * 2 - 1.5
 		corr = self.go_ra.recent_avg() * 5
 		i = int((corr - self.go_ra.recent_avg(1))  + self.err)
 		print self.err, corr * 3, i
-		im = cv2.imread("test/testimg16_" + str(i + 50) + ".tif")
+		im = cv2.imread("test/testimg16_" + str(i + 100) + ".tif")
 		corr_dec = self.go_dec.recent_avg()
 		im = im[50 + int(corr_dec * 3):-50 + int(corr_dec * 3)]
 		return im, None
@@ -2283,6 +2335,7 @@ def run_test_g():
 	ui.namedWindow('polar')
 
         polar = Polar(status.path(["polar"]), ['guider'])
+        mount = Mount(status.path(["mount"]), polar)
 
 	dark = Median(5)
 	nav = Navigator(status.path(["guider", "navigator"]), dark, mount, 'guider', polar_tid = 'polar')
@@ -2528,13 +2581,13 @@ if __name__ == "__main__":
 	sys.stderr = mystderr
 	
 
-	run_gphoto()
+	#run_gphoto()
 	#run_test_2()
 	#run_v4l2()
 	#run_test_2_gphoto()
 	#run_v4l2_g()
 	#run_2()
-	#run_test_g()
+	run_test_g()
 	#run_2()
 	#run_test()
 
