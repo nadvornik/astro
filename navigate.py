@@ -693,7 +693,7 @@ def apply_gamma8(img, gamma):
 
 
 class Navigator:
-	def __init__(self, status, dark, mount, tid, polar_tid = None, go_ra = None, go_dec = None):
+	def __init__(self, status, dark, mount, tid, polar_tid = None):
 		self.status = status
 		self.dark = dark
 		self.stack = Stack()
@@ -719,8 +719,6 @@ class Navigator:
 		self.tid = tid
 		self.mount = mount
 		self.polar_tid = polar_tid
-		self.go_ra = go_ra
-		self.go_dec = go_dec
 		self.index_sources = []
 		self.status['i_solved'] = 0
 		self.status['i_solver'] = 0
@@ -962,14 +960,14 @@ class Navigator:
 				self.mount.polar.set_gps((lat, lon))
 			except:
 				print "Error: " +  sys.exc_info().__str__()
-		if cmd.startswith('go-left-') and self.go_ra is not None:
-				self.go_ra.out(-1, float(cmd[len('go-left-'):]))
-		if cmd.startswith('go-right-') and self.go_ra is not None:
-				self.go_ra.out(1, float(cmd[len('go-right-'):]))
-		if cmd.startswith('go-down-') and self.go_dec is not None:
-				self.go_dec.out(-1, float(cmd[len('go-down-'):]))
-		if cmd.startswith('go-up-') and self.go_dec is not None:
-				self.go_dec.out(1, float(cmd[len('go-up-'):]))
+		if cmd.startswith('go-left-'):
+				self.mount.move_main_px(-self.im.shape[1] / 2, 0, self.tid)
+		if cmd.startswith('go-right-'):
+				self.mount.move_main_px(self.im.shape[1] / 2, 0, self.tid)
+		if cmd.startswith('go-down-'):
+				self.mount.move_main_px(0, -self.im.shape[0] / 2, self.tid)
+		if cmd.startswith('go-up-') and self.mount.go_dec is not None:
+				self.mount.move_main_px(0, self.im.shape[0] / 2, self.tid)
 	
 	def proc_full_res(self, jpg):
 		t = time.time()
@@ -1067,12 +1065,11 @@ def fit_line(xylist, sigma = 2):
 	return m, c
 
 class Guider:
-	def __init__(self, status, go_ra, go_dec, dark, tid):
+	def __init__(self, status, mount, dark, tid):
 		self.status = status
 		self.status.setdefault('aggressivness', 0.6)
 		self.status.setdefault('aggressivness_dec', 0.1)
-		self.go_ra = go_ra
-		self.go_dec = go_dec
+		self.mount = mount
 		
 		self.dark = dark
 		self.status['seq'] = 'seq-stop'
@@ -1097,8 +1094,8 @@ class Guider:
 		self.status['hfr_list'] = []
 		self.off = (0.0, 0.0)
 		self.off_t = None
-		self.go_ra.out(0)
-		self.go_dec.out(0)
+		self.mount.go_ra.out(0)
+		self.mount.go_dec.out(0)
 		self.cnt = 0
 		self.pt0 = []
 		self.pt0base = []
@@ -1125,8 +1122,8 @@ class Guider:
 
 	def cmd(self, cmd):
 		if cmd == "stop":
-			self.go_ra.out(0)
-			self.go_dec.out(0)
+			self.mount.go_ra.out(0)
+			self.mount.go_dec.out(0)
 			
 
 		elif cmd == "capture-started":
@@ -1134,7 +1131,7 @@ class Guider:
 		elif cmd == "capture-finished":
 			self.capture_in_progress = False
 			try:
-				if self.dec_coef != 0:
+				if self.parity != 0:
 					self.dither = complex(0, (self.dither.imag + 5) % 23)
 				else:
 					self.dither = complex((self.dither.real + 5) % 23, 0)
@@ -1170,8 +1167,8 @@ class Guider:
 		
 		if len(self.pt0) == 0:
 			cmdQueue.put('navigator')
-			self.go_ra.out(0)
-			self.go_dec.out(0)
+			self.mount.go_ra.out(0)
+			self.mount.go_dec.out(0)
 
 		if (self.dark.len() >= 4):
 			im_sub = cv2.subtract(im, self.dark.get())
@@ -1205,7 +1202,7 @@ class Guider:
 			self.used_cnt = []
 			self.cnt = 0
 			self.dist = 1.0
-			self.go_ra.out(1)
+			self.mount.go_ra.out(1)
 			self.status['mode'] = 'move'
 			self.t0 = time.time()
 			self.resp0 = []
@@ -1263,7 +1260,7 @@ class Guider:
 				if self.dist > 100 and len(self.resp0) > 15 or len(self.resp0) > 60:
 					self.t1 = time.time()
 					dt = t - self.t0
-					self.go_ra.out(-1)
+					self.mount.go_ra.out(-1)
 				
 					aresp = np.array(self.resp0)
 					aresp1 = aresp[aresp[:, 1] > 10]
@@ -1286,7 +1283,7 @@ class Guider:
 					self.cnt = 0
 					self.status['mode'] = 'back'
 				
-					self.go_ra.out(-1, self.dist / self.status['pixpersec'])
+					self.mount.go_ra.out(-1, self.dist / self.status['pixpersec'])
 					cmdQueue.put('interrupt')
 
 			for p in pt:
@@ -1315,7 +1312,7 @@ class Guider:
 
 				for p in pt:
 					cv2.circle(disp, (int(p[1] + 0.5), int(p[0] + 0.5)), 10, (255), 1)
-				self.go_ra.out(-1, err.real / self.status['pixpersec'])
+				self.mount.go_ra.out(-1, err.real / self.status['pixpersec'])
 				
 				if err.real < self.status['pixpersec'] * self.status['t_delay1'] + self.pixperframe:
 					self.t2 = t
@@ -1325,8 +1322,8 @@ class Guider:
 					aresp1 = aresp[aresp[:, 0] > self.t1 + self.status['t_delay1'] - self.t0]
 					m, c = fit_line(aresp1)
 
-					self.status['pixpersec_neg'] = m
-					self.status['t_delay2'] = max(0.5, (c + self.status['t_delay1'] * self.status['pixpersec']) / (self.status['pixpersec'] - self.status['pixpersec_neg']) - self.t1 + self.t0)
+					self.status['pixpersec_neg'] = -m
+					self.status['t_delay2'] = max(0.5, (c + self.status['t_delay1'] * self.status['pixpersec']) / (self.status['pixpersec'] + self.status['pixpersec_neg']) - self.t1 + self.t0)
 
 
 					self.pixperframe_neg = self.status['pixpersec_neg'] * dt / self.cnt
@@ -1342,11 +1339,13 @@ class Guider:
 				
 					self.err0_dec = err.imag
 					
-					if self.go_dec is not None:
-						self.go_dec.out(1, self.status['t_delay'] * 2 + 3)
+					if self.mount.go_dec is not None:
+						self.mount.go_dec.out(1, self.status['t_delay'] * 2 + 5)
 						self.status['mode'] = 'move_dec'
 					else:
 						self.status['mode'] = 'track'
+						self.status['pixpersec_dec'] = None
+						self.mount.set_guider_calib(np.angle(self.ref_off, deg=True), 0, self.status['pixpersec'], self.status['pixpersec_neg'], 0, 0)
 						cmdQueue.put('interrupt')
 
 		elif self.status['mode'] == 'move_dec':
@@ -1371,20 +1370,25 @@ class Guider:
 				if t > self.t2 + self.status['t_delay'] * 2 + 10 or abs(err.imag - self.err0_dec) > 50:
 					if abs(err.imag - self.err0_dec) < min(2 * self.status['pixpersec'], 10):
 						print "no dec axis"
-						self.dec_coef = 0
+						self.parity = 0
+						self.status['pixpersec_dec'] = None
 						
 					elif err.imag - self.err0_dec > 0:
 						print "dec_pos"
-						self.dec_coef = 1
+						self.parity = -1
 						self.status['pixpersec_dec'] = (err.imag - self.err0_dec) / (t - self.t2 - self.status['t_delay'])
 					else:
 						print "dec_neg"
-						self.dec_coef = -1
+						self.parity = 1
 						self.status['pixpersec_dec'] = -(err.imag - self.err0_dec) / (t - self.t2 - self.status['t_delay'])
 
 
 					self.status['mode'] = 'track'
 					cmdQueue.put('interrupt')
+					self.mount.set_guider_calib(np.angle(self.ref_off, deg=True), self.parity, self.status['pixpersec'], self.status['pixpersec_neg'], self.status['pixpersec_dec'], self.status['pixpersec_dec'])
+
+				for p in pt:
+					cv2.circle(disp, (int(p[1] + 0.5), int(p[0] + 0.5)), 10, (255), 1)
 
 
 		elif self.status['mode'] == 'track' or self.status['mode'] == 'close':
@@ -1403,34 +1407,34 @@ class Guider:
 
 				t_proc = time.time() - t
 
-				err_corr_ra = err.real + self.go_ra.recent_avg(self.status['t_delay'] + t_proc, self.status['pixpersec'], self.status['pixpersec_neg'])
+				err_corr_ra = err.real + self.mount.go_ra.recent_avg(self.status['t_delay'] + t_proc, self.status['pixpersec'], -self.status['pixpersec_neg'])
 				err_corr_ra *= self.status['aggressivness']
 
-				if self.dec_coef != 0:
-					err_corr_dec = err.imag * self.dec_coef + self.go_dec.recent_avg(self.status['t_delay'] + t_proc, self.status['pixpersec_dec'], -self.status['pixpersec_dec'])
+				if self.parity != 0:
+					err_corr_dec = err.imag * self.parity - self.mount.go_dec.recent_avg(self.status['t_delay'] + t_proc, self.status['pixpersec_dec'], -self.status['pixpersec_dec'])
 					err_corr_dec *= self.status['aggressivness_dec']
 				
 					status += " err:%.1f %.1f corr:%.1f %.1f t_d:%.1f t_p:%.1f" % (err.real, err.imag, err_corr_ra, err_corr_dec, self.status['t_delay'], t_proc)
 					
 					if err_corr_dec > 0.2:
-						self.go_dec.out(-1, err_corr_dec / self.status['pixpersec_dec'])
+						self.mount.go_dec.out(1, err_corr_dec / self.status['pixpersec_dec'])
 					elif err_corr_dec < -0.2:
-						self.go_dec.out(1, -err_corr_dec / self.status['pixpersec_dec'])
+						self.mount.go_dec.out(-1, -err_corr_dec / self.status['pixpersec_dec'])
 					else:
-						self.go_dec.out(0)
+						self.mount.go_dec.out(0)
 
 				else:
 					status += " err:%.1f %.1f corr:%.1f t_d:%.1f t_p:%.1f" % (err.real, err.imag, err_corr_ra, self.status['t_delay'], t_proc)
 				
 				if err_corr_ra > 0.2:
-					self.go_ra.out(-1, -err_corr_ra / self.status['pixpersec_neg'])
+					self.mount.go_ra.out(-1, err_corr_ra / self.status['pixpersec_neg'])
 				elif err_corr_ra < -0.2:
-					self.go_ra.out(1, -err_corr_ra / self.status['pixpersec'])
+					self.mount.go_ra.out(1, -err_corr_ra / self.status['pixpersec'])
 				else:
-					self.go_ra.out(0)
+					self.mount.go_ra.out(0)
 				
 				self.ok = (err.real < 1.5 and err.real > -1.5)
-				if self.dec_coef != 0:
+				if self.parity != 0:
 					self.ok = (self.ok and err.imag < 1.5 and err.imag > -1.5)
 					
 				if not self.capture_in_progress and (self.status['seq'] == 'seq-guided' and self.ok or self.status['seq'] == 'seq-unguided'):
@@ -1452,8 +1456,8 @@ class Guider:
 
 				if i % 100 == 0:
 					np.save("resp0_%d.npy" % self.t0, np.array(self.resp0))
-					self.go_ra.save("go_ra_%d.npy" % self.t0)
-					self.go_dec.save("go_dec_%d.npy" % self.t0)
+					self.mount.go_ra.save("go_ra_%d.npy" % self.t0)
+					self.mount.go_dec.save("go_dec_%d.npy" % self.t0)
 					print "SAVED" 
 				
 		if len(self.pt0) > 0:
@@ -1887,18 +1891,36 @@ class Focuser:
 		self.prev_t = t
 
 class Mount:
-	def __init__(self, status, polar):
+	def __init__(self, status, polar, go_ra = None, go_dec = None):
 		self.status = status
 		self.polar = polar
+		self.go_ra = go_ra
+		self.go_dec = go_dec
 		self.status.setdefault('oag', True)
 		if self.status['oag']:
 			self.status.setdefault('oag_pos', None)
 			self.status.setdefault('t_dif', 120)
+			if self.status['oag_pos'] is None:
+				self.status['t_dif'] = 120
+			self.status.setdefault('guider_roll', None)
 		else:
 			self.status['oag_pos'] = None
 			self.status['t_dif'] = 120
+			self.status['guider_roll'] = None
+
+		self.status.setdefault('guider_pixscale', None)
+		self.status.setdefault('guider_parity', 1)
+
+		self.status.setdefault('arcsec_per_sec_ra_plus', 1)
+		self.status.setdefault('arcsec_per_sec_ra_minus', 1)
+		self.status.setdefault('arcsec_per_sec_dec_plus', 1)
+		self.status.setdefault('arcsec_per_sec_dec_minus', 1)
+
+
 		self.main_t = None
 		self.guider_t = None
+		self.main_tan = None
+		self.guider_tan = None
 		
 	def tan_to_euler(self, tan, off=(0,0)):
 		ra, dec = tan.radec_center()
@@ -1917,8 +1939,9 @@ class Mount:
 		A = parity * cd21 - cd12
 		orient = math.degrees(math.atan2(A, T))
 		#orient = math.degrees(math.atan2(cd21, cd11))
+		pixscale = 3600.0 * math.sqrt(abs(det))
 		
-		return ra, dec, orient
+		return ra, dec, orient, pixscale, parity
 
 	def set_pos_tan(self, tan, t, camera):
 		#ra, dec, orient = self.tan_to_euler(tan, off)
@@ -1928,35 +1951,40 @@ class Mount:
 		if camera == 'navigator':
 			self.main_tan = tan
 			self.main_t = t
+			
 		elif camera == 'guider':
 			self.guider_tan = tan
 			self.guider_t = t
+			ra, dec, roll, pixscale, parity = self.tan_to_euler(tan)
+			self.status['guider_pixscale'] = pixscale
+			self.status['guider_parity'] = parity
+			self.status['guider_roll'] = roll
+			
 		
-		if self.main_t is not None and self.guider_t is not None and np.abs(self.main_t - self.guider_t) < self.status['t_dif']:
-			self.status['t_dif'] = self.main_t - self.guider_t
+		if self.main_t is not None and self.guider_t is not None and np.abs(self.main_t - self.guider_t) < max(20, self.status['t_dif']):
+			self.status['t_dif'] = np.abs(self.main_t - self.guider_t)
 
 			guider_w = self.guider_tan.get_width()
 			guider_h = self.guider_tan.get_height()
 			
-			mra, mdec, mroll = self.tan_to_euler(self.main_tan)
+			mra, mdec, mroll, mpixscale, mparity = self.tan_to_euler(self.main_tan)
 			mq = Quaternion([mra, mdec, mroll])
 			
 			res = []
-			for x, y in [(0, 0), (guider_w - 1, 0), (guider_w - 1, guider_h - 1), (0, guider_h - 1)]:
+			for x, y in [(0, 0), (guider_w - 1, 0), (guider_w - 1, guider_h - 1), (0, guider_h - 1), (guider_w / 2.0 - 0.5, guider_h / 2.0 - 0.5)]:
 				ra, dec = self.guider_tan.pixelxy2radec(x, y)
-				q = Quaternion([ra, dec, 0])
+				q = Quaternion([ra, dec, mroll])
 				
 				sq = mq.inv() * q
 				
 				res.append(sq.to_euler().tolist())
 			self.status['oag_pos'] = res
-	
 	def get_guider_plot(self):
-		if self.status['oag_pos'] is not None:
+		if self.status['oag_pos'] is not None and self.main_tan is not None:
 			res = []
-			for e in self.status['oag_pos']:
+			for e in self.status['oag_pos'][0:4]:
 				sq = Quaternion(e)
-				mra, mdec, mroll = self.tan_to_euler(self.main_tan)
+				mra, mdec, mroll, mpixscale, mparity = self.tan_to_euler(self.main_tan)
 				mq = Quaternion([mra, mdec, mroll])
 				q =  mq * sq
 				ra, dec, roll = q.to_euler()
@@ -1969,6 +1997,75 @@ class Mount:
 			return []
 				
 			
+	def set_guider_calib(self, roll, parity, pixpersec_ra_plus, pixpersec_ra_minus, pixpersec_dec_plus, pixpersec_dec_minus):
+		if parity != 0:
+			print 'parity', parity, self.status['guider_parity']
+			self.status['guider_parity'] = parity
+		print 'roll', 90 + roll * self.status['guider_parity'], self.status['guider_roll']
+		self.status['guider_roll'] = 90 + roll * self.status['guider_parity']
+		if self.status['guider_pixscale'] is not None:
+			if self.guider_tan is not None and time.time() - self.guider_t < 60:
+				gra, gdec, groll, gpixscale, gparity = self.tan_to_euler(self.guider_tan)
+			elif self.status['oag_pos'] is not None and self.main_tan is not None:
+				sq = Quaternion(self.status['oag_pos'][4])
+				mra, mdec, mroll, mpixscale, mparity = self.tan_to_euler(self.main_tan)
+				mq = Quaternion([mra, mdec, mroll])
+				q =  mq * sq
+				gra, gdec, groll = q.to_euler()
+			elif self.main_tan is not None:
+				gra, gdec, groll, gpixscale, gparity = self.tan_to_euler(self.main_tan)
+			else:
+				return
+			gdec = np.deg2rad(gdec)
+		
+			self.status['arcsec_per_sec_ra_plus'] = pixpersec_ra_plus * self.status['guider_pixscale'] / np.max([np.cos(gdec), 0.2])
+			self.status['arcsec_per_sec_ra_minus'] = pixpersec_ra_minus * self.status['guider_pixscale'] / np.max([np.cos(gdec), 0.2])
+			if pixpersec_dec_plus is not None:
+				self.status['arcsec_per_sec_dec_plus'] = pixpersec_dec_plus * self.status['guider_pixscale']
+			if pixpersec_dec_minus is not None:
+				self.status['arcsec_per_sec_dec_minus'] = pixpersec_dec_minus * self.status['guider_pixscale']
+
+	def get_guider_calib(self):
+		pass
+		# return roll, parity, pixpersec_ra_plus, pixpersec_ra_minus, pixpersec_dec_plus, pixpersec_dec_minus
+
+	def move_main_px(self, dx, dy, camera):
+		if camera == 'navigator':
+			if self.main_tan is None:
+				return
+                        print "move pix", dx, dy
+
+			mra, mdec, mroll, mpixscale, mparity = self.tan_to_euler(self.main_tan)
+			
+			mroll = -np.deg2rad(mroll)
+			ra = (np.cos(mroll) * dx - np.sin(mroll) * dy) * mpixscale / np.max([np.cos(np.deg2rad(mdec)), 0.2])
+                        dec =(np.sin(mroll) * dx + np.cos(mroll) * dy) * mpixscale
+                        
+                        dec *= mparity
+                        
+                        print "move arcsec", ra, dec
+                        if self.go_ra is not None:
+				if ra > 0:
+					print "move_ra sec", ra / self.status['arcsec_per_sec_ra_plus']
+					self.go_ra.out(1, ra / self.status['arcsec_per_sec_ra_plus'])
+				elif ra < 0:
+					print "move_ra sec", ra / self.status['arcsec_per_sec_ra_minus']
+					self.go_ra.out(-1, -ra / self.status['arcsec_per_sec_ra_minus'])
+				else:
+					self.go_ra.out(0)
+
+                        if self.go_dec is not None:
+				if dec > 0:
+					print "move_dec sec", dec / self.status['arcsec_per_sec_dec_plus']
+					self.go_dec.out(-1, dec / self.status['arcsec_per_sec_dec_plus'])
+				elif dec < 0:
+					print "move_dec sec", dec / self.status['arcsec_per_sec_dec_minus']
+					self.go_dec.out(1, -dec / self.status['arcsec_per_sec_dec_minus'])
+				else:
+					self.go_dec.out(0)
+
+	def move_to(self, ra, dec):
+		pass
 
 
 
@@ -2228,8 +2325,10 @@ class Camera_test_g:
 		i = int((corr - self.go_ra.recent_avg(1))  + self.err)
 		print self.err, corr * 3, i
 		im = cv2.imread("test/testimg16_" + str(i + 100) + ".tif")
+		print im, "test/testimg16_" + str(i + 100) + ".tif"
 		corr_dec = self.go_dec.recent_avg()
 		im = im[50 + int(corr_dec * 3):-50 + int(corr_dec * 3)]
+		#im = cv2.flip(im, 1)
 		return im, None
 
 	def shutdown(self):
@@ -2289,14 +2388,16 @@ def run_v4l2_g():
 	ui.namedWindow('polar')
 
         polar = Polar(status.path(["polar"]), ['guider'])
-        mount = Mount(status.path(["mount"]), polar)
+        
+        go_ra = GuideOut("./guide_out_ra")
+	go_dec = GuideOut("./guide_out_dec")
+	
+        mount = Mount(status.path(["mount"]), polar, go_ra, go_dec)
 
 
 	dark = Median(5)
 	nav = Navigator(status.path(["guider", "navigator"]), dark, mount, 'guider', polar_tid = 'polar')
-	go_ra = GuideOut("./guide_out_ra")
-	go_dec = GuideOut("./guide_out_dec")
-	guider = Guider(status.path(["guider"]), go_ra, go_dec, dark, 'guider')
+	guider = Guider(status.path(["guider"]), mount, dark, 'guider')
 
 	runner = Runner('guider', cam, navigator = nav, guider = guider)
 	runner.start()
@@ -2311,17 +2412,19 @@ def run_gphoto_g():
 	ui.namedWindow('polar')
 
         polar = Polar(status.path(["polar"]), ['navigator', 'full-res'])
-        mount = Mount(status.path(["mount"]), polar)
+	
+	go_ra = GuideOut("./guide_out_ra")
+	go_dec = GuideOut("./guide_out_dec")
+
+        mount = Mount(status.path(["mount"]), polar, go_ra, go_dec)
 
 	cam = Camera_gphoto(status.path(["guider", "navigator", "camera"]))
 	cam.prepare()
 
 	dark = Median(5)
 	nav = Navigator(status.path(["guider", "navigator"]), dark, mount, 'navigator', polar_tid = 'polar')
-	go_ra = GuideOut("./guide_out_ra")
-	go_dec = GuideOut("./guide_out_dec")
-
-	guider = Guider(status.path(["guider"]), go_ra, go_dec, dark, 'navigator')
+	
+	guider = Guider(status.path(["guider"]), mount, dark, 'navigator')
 
 	runner = Runner('navigator', cam, navigator = nav, guider = guider)
 	runner.start()
@@ -2335,13 +2438,15 @@ def run_test_g():
 	ui.namedWindow('polar')
 
         polar = Polar(status.path(["polar"]), ['guider'])
-        mount = Mount(status.path(["mount"]), polar)
+	
+	go_ra = GuideOut("./guide_out_ra")
+	go_dec = GuideOut("./guide_out_dec")
+        
+        mount = Mount(status.path(["mount"]), polar, go_ra, go_dec)
 
 	dark = Median(5)
 	nav = Navigator(status.path(["guider", "navigator"]), dark, mount, 'guider', polar_tid = 'polar')
-	go_ra = GuideOut("./guide_out_ra")
-	go_dec = GuideOut("./guide_out_dec")
-	guider = Guider(status.path(["guider"]), go_ra, go_dec, dark, 'guider')
+	guider = Guider(status.path(["guider"]), mount, dark, 'guider')
 	cam = Camera_test_g(status.path(["guider", "navigator", "camera"]), go_ra, go_dec)
 
 	runner = Runner('guider', cam, navigator = nav, guider = guider)
@@ -2375,7 +2480,11 @@ def run_test_2():
 	ui.namedWindow('polar')
 
         polar = Polar(status.path(["polar"]), ['navigator', 'guider'])
-        mount = Mount(status.path(["mount"]), polar)
+
+	go_ra = GuideOut("./guide_out_ra")
+	go_dec = GuideOut("./guide_out_dec")
+
+        mount = Mount(status.path(["mount"]), polar, go_ra, go_dec)
 
 	dark1 = Median(5)
 	dark2 = Median(5)
@@ -2383,13 +2492,50 @@ def run_test_2():
 	cam1 = Camera_test(status.path(["navigator", "camera"]))
 	nav1 = Navigator(status.path(["navigator"]), dark1, mount, 'navigator', polar_tid = 'polar')
 
+	nav = Navigator(status.path(["guider", "navigator"]), dark2, mount, 'guider')
+
+	guider = Guider(status.path(["guider"]), mount, dark2, 'guider')
+	#cam = Camera_test(status.path(["guider", "navigator", "camera"]))
+	cam = Camera_test_g(status.path(["guider", "navigator", "camera"]), go_ra, go_dec)
+	
+	runner = Runner('navigator', cam1, navigator = nav1)
+	runner.start()
+	
+	runner2 = Runner('guider', cam, navigator = nav, guider = guider)
+	runner2.start()
+	
+	main_loop()
+	
+	runner.join()
+	runner2.join()
+
+
+def run_test_2_kstars():
+	from kstars_camera import Camera_test_kstars, Camera_test_kstars_g
+	global status
+	status = Status("run_test_2.conf")
+	ui.namedWindow('navigator')
+	ui.namedWindow('guider')
+	ui.namedWindow('polar')
+
+        polar = Polar(status.path(["polar"]), ['navigator', 'guider'])
+
 	go_ra = GuideOut("./guide_out_ra")
 	go_dec = GuideOut("./guide_out_dec")
-	nav = Navigator(status.path(["guider", "navigator"]), dark2, mount, 'guider', go_ra = go_ra, go_dec = go_dec)
 
-	guider = Guider(status.path(["guider"]), go_ra, go_dec, dark2, 'guider')
-	cam = Camera_test(status.path(["guider", "navigator", "camera"]))
-	#cam = Camera_test_g(status.path(["guider", "navigator", "camera"]), go_ra, go_dec)
+        mount = Mount(status.path(["mount"]), polar, go_ra, go_dec)
+
+	dark1 = Median(5)
+	dark2 = Median(5)
+
+	cam1 = Camera_test_kstars(status.path(["navigator", "camera"]), go_ra, go_dec)
+	nav1 = Navigator(status.path(["navigator"]), dark1, mount, 'navigator', polar_tid = 'polar')
+
+	nav = Navigator(status.path(["guider", "navigator"]), dark2, mount, 'guider')
+
+	guider = Guider(status.path(["guider"]), mount, dark2, 'guider')
+	#cam = Camera_test(status.path(["guider", "navigator", "camera"]))
+	cam = Camera_test_kstars_g(status.path(["guider", "navigator", "camera"]), cam1)
 	
 	runner = Runner('navigator', cam1, navigator = nav1)
 	runner.start()
@@ -2410,7 +2556,11 @@ def run_test_2_gphoto():
 	cam1.prepare()
 
         polar = Polar(status.path(["polar"]), ['navigator', 'guider', 'full-res'])
-        mount = Mount(status.path(["mount"]), polar)
+
+	go_ra = GuideOut("./guide_out_ra")
+	go_dec = GuideOut("./guide_out_dec")
+
+        mount = Mount(status.path(["mount"]), polar, go_ra, go_dec)
 
 	dark1 = Median(5)
 	dark2 = Median(5)
@@ -2420,10 +2570,8 @@ def run_test_2_gphoto():
 	zoom_focuser = Focuser('navigator')
 
 	nav = Navigator(status.path(["guider", "navigator"]), dark2, mount, 'guider')
-	go_ra = GuideOut("./guide_out_ra")
-	go_dec = GuideOut("./guide_out_dec")
 
-	guider = Guider(status.path(["guider"]), go_ra, go_dec, dark2, 'guider')
+	guider = Guider(status.path(["guider"]), mount, dark2, 'guider')
 	cam = Camera_test_g(status.path(["guider", "navigator", "camera"]), go)
 
 	ui.namedWindow('navigator')
@@ -2456,7 +2604,11 @@ def run_2():
 	cam1.prepare()
 
         polar = Polar(status.path(["polar"]), ['navigator', 'guider', 'full-res'])
-        mount = Mount(status.path(["mount"]), polar)
+
+	go_ra = GuideOut("./guide_out_ra")
+	go_dec = GuideOut("./guide_out_dec")
+
+        mount = Mount(status.path(["mount"]), polar, go_ra, go_dec)
 
 	dark1 = Median(5)
 	dark2 = Median(5)
@@ -2465,11 +2617,9 @@ def run_2():
 	focuser = Focuser('navigator', status.path(["navigator", "focuser"]), dark = dark1)
 	zoom_focuser = Focuser('navigator', status.path(["navigator", "focuser"]))
 
-	go_ra = GuideOut("./guide_out_ra")
-	go_dec = GuideOut("./guide_out_dec")
-	nav = Navigator(status.path(["guider", "navigator"]), dark2, mount, 'guider', go_ra = go_ra, go_dec = go_dec)
+	nav = Navigator(status.path(["guider", "navigator"]), dark2, mount, 'guider')
 
-	guider = Guider(status.path(["guider"]), go_ra, go_dec, dark2, 'guider')
+	guider = Guider(status.path(["guider"]), mount, dark2, 'guider')
 
 	ui.namedWindow('navigator')
 	ui.namedWindow('guider')
@@ -2582,12 +2732,12 @@ if __name__ == "__main__":
 	
 
 	#run_gphoto()
-	#run_test_2()
+	run_test_2_kstars()
 	#run_v4l2()
 	#run_test_2_gphoto()
 	#run_v4l2_g()
 	#run_2()
-	run_test_g()
+	#run_test_g()
 	#run_2()
 	#run_test()
 
