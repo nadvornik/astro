@@ -30,15 +30,51 @@
             <button class="toggle" id='focus' title="Focus">Focus</button>
             <div class='overlay_buttons'>
             <div class='toggle_buttons' id='navigate_buttons'>
-                    <button class='ajax' value='navigator!solver-retry'>solver-retry</button>
-                    <button class='ajax' value='navigator!solver-reset'>solver-reset</button>
-                    <br/>
-                    <button class='ajax' value='navigator!dark'>dark</button>
-                    <button class='ajax' value='navigator!hotpixels'>hotpixels</button>
-                    <br/>
-                    <button class='reflink' id='navig.html'>reload</button>
-                    <button class='ajax' value='polar-reset'>polar-reset</button>
-                    <button class='ajax' value='polar-align'>polar-align</button>
+                    <table>
+                        <tr>
+                            <td><button class='ajax' value='navigator!solver-retry'>solver-retry</button></td>
+                            <td><button class='ajax' value='navigator!solver-reset'>solver-reset</button></td>
+                        </tr>
+                        <tr>
+                            <td><button class='ajax' value='navigator!dark'>dark</button></td>
+                            <td><button class='ajax' value='navigator!hotpixels'>hotpixels</button></td>
+                        </tr>
+                        <tr>
+                            <td><button class='reflink' id='navig.html'>reload</button></td>
+                            <td><button class='ajax' value='polar-reset'>polar-reset</button></td>
+                            <td><button class='ajax' value='polar-align'>polar-align</button></td>
+                        </tr>
+                        <tr>
+                            <td/>
+                        </tr>
+                        <tr>
+                            <td><button class='ajax' value='navigator!center-ul'>*</button></td>
+                            <td><button class='ajax' value='navigator!go-up'>up</button></td>
+                            <td><button class='ajax' value='navigator!center-ur'>*</button></td>
+                        </tr>
+                        <tr>
+                            <td><button class='ajax' value='navigator!go-left'>left</button></td>
+                            <td>
+                                <select class='ajax ajax_up' data-jsonp='navigator.go_by' data-prefix='navigator!go-by-'>
+                                <option value='navigator!go-by-0.1'>0.1</option>
+                                <option value='navigator!go-by-0.2'>0.2</option>
+                                <option value='navigator!go-by-0.3'>0.3</option>
+                                <option value='navigator!go-by-0.4'>0.4</option>
+                                <option value='navigator!go-by-0.5'>0.5</option>
+                                <option value='navigator!go-by-0.6'>0.6</option>
+                                <option value='navigator!go-by-0.7'>0.7</option>
+                                <option value='navigator!go-by-0.8'>0.8</option>
+                                <option value='navigator!go-by-0.9'>0.9</option>
+                                </select>
+                            </td>
+                            <td><button class='ajax' value='navigator!go-right'>right</button></td>
+                        </tr>
+                        <tr>
+                            <td><button class='ajax' value='navigator!center-ll'>*</button></td>
+                            <td><button class='ajax' value='navigator!go-down'>down</button></td>
+                            <td><button class='ajax' value='navigator!center-lr'>*</button></td>
+                        </tr>
+                    </table>
                 </div>
                 <div class='toggle_buttons' id='focus_buttons'>
                     <table>
@@ -61,17 +97,6 @@
                             <td><button class='ajax' value='navigator!f+3'>f+3</button></td>
                             <td><button class='ajax' value='navigator!f+2'>f+2</button></td>
                             <td><button class='ajax' value='navigator!f+1'>f+1</button></td>
-                        </tr>
-                        <tr>
-                            <td/><td><button class='ajax' value='navigator!up'>up</button></td>
-                        </tr>
-                        <tr>
-                            <td><button class='ajax' value='navigator!left'>left</button></td>
-                            <td/>
-                            <td><button class='ajax' value='navigator!right'>right</button></td>
-                        </tr>
-                        <tr>
-                            <td/><td><button class='ajax' value='navigator!down'>down</button></td>
                         </tr>
                         <tr rowspan=3>
                             <td colspan=3><div id="plot_hfr" class='ajax_up plot' data-jsonp='navigator.focuser'></div></td>

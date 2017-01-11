@@ -738,6 +738,7 @@ class Navigator:
 		
 		self.i_dark = 0
 		self.status['full_hfr'] = []
+		self.status.setdefault('go_by', 0.1)
 
 
 	def hotpix_find(self):
@@ -960,14 +961,37 @@ class Navigator:
 				self.mount.polar.set_gps((lat, lon))
 			except:
 				print "Error: " +  sys.exc_info().__str__()
-		if cmd.startswith('go-left-'):
-				self.mount.move_main_px(-self.im.shape[1] / 2, 0, self.tid)
-		if cmd.startswith('go-right-'):
-				self.mount.move_main_px(self.im.shape[1] / 2, 0, self.tid)
-		if cmd.startswith('go-down-'):
-				self.mount.move_main_px(0, -self.im.shape[0] / 2, self.tid)
-		if cmd.startswith('go-up-') and self.mount.go_dec is not None:
-				self.mount.move_main_px(0, self.im.shape[0] / 2, self.tid)
+		if cmd.startswith('go-left'):
+				self.mount.move_main_px(-self.im.shape[1] * self.status['go_by'], 0, self.tid)
+		if cmd.startswith('go-right'):
+				self.mount.move_main_px(self.im.shape[1] * self.status['go_by'], 0, self.tid)
+		if cmd.startswith('go-down'):
+				self.mount.move_main_px(0, self.im.shape[0] * self.status['go_by'], self.tid)
+		if cmd.startswith('go-up') and self.mount.go_dec is not None:
+				self.mount.move_main_px(0, -self.im.shape[0] * self.status['go_by'], self.tid)
+		if cmd.startswith('go-by-'):
+			try:
+				self.status['go_by'] = float(cmd[len('go-by-'):])
+			except:
+				pass
+		if cmd.startswith('center-'):
+			w = self.im.shape[1]
+			h = self.im.shape[0]
+			reg = (0, 0, w, h)
+			if cmd == 'center-ul':
+				reg = (0, 0, w * 0.51, h * 0.51)
+			if cmd == 'center-ur':
+				reg = (w * 0.49, 0, w, h * 0.51)
+			if cmd == 'center-ll':
+				reg = (0, h * 0.49, w * 0.51, h)
+			if cmd == 'center-lr':
+				reg = (w * 0.49, h * 0.49, w, h)
+			
+			for y, x, v in self.stack.get_xy():
+				if x >= reg[0] and y >= reg[1] and x < reg[2] and y < reg[3] and (x - w / 2)**2 + (y - h / 2)**2 > 400:
+					self.mount.move_main_px(x - w / 2, y - h / 2, self.tid)
+					break
+		
 	
 	def proc_full_res(self, jpg):
 		t = time.time()
@@ -1961,7 +1985,8 @@ class Mount:
 			self.status['guider_roll'] = roll
 			
 		
-		if self.main_t is not None and self.guider_t is not None and np.abs(self.main_t - self.guider_t) < max(20, self.status['t_dif']):
+		if self.main_t is not None and self.guider_t is not None and (np.abs(self.main_t - self.guider_t) < self.status['t_dif'] or 
+		   self.guider_t >= self.main_t and self.guider_t - self.main_t < 20) :
 			self.status['t_dif'] = np.abs(self.main_t - self.guider_t)
 
 			guider_w = self.guider_tan.get_width()
@@ -2037,7 +2062,7 @@ class Mount:
 
 			mra, mdec, mroll, mpixscale, mparity = self.tan_to_euler(self.main_tan)
 			
-			mroll = -np.deg2rad(mroll)
+			mroll = np.deg2rad(mroll)
 			ra = (np.cos(mroll) * dx - np.sin(mroll) * dy) * mpixscale / np.max([np.cos(np.deg2rad(mdec)), 0.2])
                         dec =(np.sin(mroll) * dx + np.cos(mroll) * dy) * mpixscale
                         
@@ -2057,10 +2082,10 @@ class Mount:
                         if self.go_dec is not None:
 				if dec > 0:
 					print "move_dec sec", dec / self.status['arcsec_per_sec_dec_plus']
-					self.go_dec.out(-1, dec / self.status['arcsec_per_sec_dec_plus'])
+					self.go_dec.out(1, dec / self.status['arcsec_per_sec_dec_plus'])
 				elif dec < 0:
 					print "move_dec sec", dec / self.status['arcsec_per_sec_dec_minus']
-					self.go_dec.out(1, -dec / self.status['arcsec_per_sec_dec_minus'])
+					self.go_dec.out(-1, -dec / self.status['arcsec_per_sec_dec_minus'])
 				else:
 					self.go_dec.out(0)
 
@@ -2137,15 +2162,15 @@ class Runner(threading.Thread):
 				elif cmd == 'z1':
 					if self.zoom_focuser is not None:
 						self.zoom_focuser.reset()
-						try:
-							if mode == 'navigator':
-								(maxy, maxx, maxv) = self.navigator.stack.get_xy()[0]
-							elif mode == 'focuser':
-								(maxy, maxx, maxv) = self.focuser.stack.get_xy()[0]
-						except:
-							maxx = 300
-							maxy = 300
-						self.camera.cmd(cmd, x=maxx, y=maxy)
+						#try:
+						#	if mode == 'navigator':
+						#		(maxy, maxx, maxv) = self.navigator.stack.get_xy()[0]
+						#	elif mode == 'focuser':
+						#		(maxy, maxx, maxv) = self.focuser.stack.get_xy()[0]
+						#except:
+						#	maxx = 300
+						#	maxy = 300
+						self.camera.cmd(cmd)
 						mode = 'zoom_focuser'
 				elif cmd == 'z0':
 					if mode == 'zoom_focuser':

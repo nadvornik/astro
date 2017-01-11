@@ -324,9 +324,9 @@ class Camera_gphoto:
         
 				zoom = 5
 							
-				self.x = x * zoom - self.zoom_shape[1] / 2
-				self.y = y * zoom - self.zoom_shape[0] / 2
-				self.set_config_value('eoszoomposition', "%d,%d" % (self.x, self.y))
+				#self.x = x * zoom - self.zoom_shape[1] / 2
+				#self.y = y * zoom - self.zoom_shape[0] / 2
+				#self.set_config_value('eoszoomposition', "%d,%d" % (self.x, self.y))
 				self.set_config_value('eoszoom', '5')
 				time.sleep(.2)
 				self.do_fps_hack()
