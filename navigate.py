@@ -1112,7 +1112,8 @@ class Guider:
 		self.status['pixpersec'] = None
 		self.status['pixpersec_neg'] = None
 		self.status['pixpersec_dec'] = None
-		self.status['curr_err_list'] = []
+		self.status['curr_ra_err_list'] = []
+		self.status['curr_dec_err_list'] = []
 		self.status['curr_hfr_list'] = []
 		self.status['err_list'] = []
 		self.status['hfr_list'] = []
@@ -1165,7 +1166,8 @@ class Guider:
 				self.pt0[:, 1] += dither_off.imag
 			except:
 				pass
-			self.status['err_list'].append(np.mean(self.status['curr_err_list'], axis = 0).to_list())
+			self.status['ra_err_list'].append(np.mean(self.status['curr_ra_err_list']))
+			self.status['dec_err_list'].append(np.mean(self.status['curr_dec_err_list']))
 			self.status['hfr_list'].append(np.mean(self.status['curr_hfr_list']))
 
 		elif cmd.startswith('aggressivness-dec-'):
@@ -1464,11 +1466,13 @@ class Guider:
 				if not self.capture_in_progress and (self.status['seq'] == 'seq-guided' and self.ok or self.status['seq'] == 'seq-unguided'):
 					cmdQueue.put('capture')
 					self.capture_in_progress = True
-					self.status['curr_err_list'] = []
+					self.status['curr_ra_err_list'] = []
+					self.status['curr_dec_err_list'] = []
 					self.status['curr_hfr_list'] = []
 				
 				if self.capture_in_progress or True:
-					self.status['curr_err_list'].append((err.real, err.imag))
+					self.status['curr_ra_err_list'].append(err.real)
+					self.status['curr_dec_err_list'].append(err.imag)
 					self.status['curr_hfr_list'].append(get_hfr_list(im_sub, pt))
 				
 				if self.ok:

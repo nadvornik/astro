@@ -119,6 +119,9 @@ function isElementInViewport(el) {
           if ($(this).is("#plot_hfr")) {
             plot_hfr_data(this, v);
           }
+          if ($(this).is("#plot_guider")) {
+            plot_guider_data(this, v);
+          }
           else if ($(this).is(".ajax_sem")) {
             if (v) $(this).addClass("ajaxrun");
             else $(this).removeClass("ajaxrun");
@@ -155,6 +158,26 @@ function isElementInViewport(el) {
     plot_hfr.draw();
 
   }
+
+  var plot_guider;
+  function plot_guider_data(canvas, data) {
+    var res = []
+    var names = ['curr_hfr_list', 'curr_ra_err_list', 'curr_dec_err_list'];
+    for (var j = 0; j < names.length; ++j) {
+        var cn = names[j];
+        if (!(cn in data)) continue;
+        if (!$.isArray(data[cn]) ||  data[cn].length == 0) continue;
+        var curv = [];
+        for (var i = 0; i < data[cn].length; ++i) {
+          curv.push([i, data[cn][i]]);
+        }
+        res.push(curv);
+    }
+    plot_guider.setData(res);
+    plot_guider.setupGrid();
+    plot_guider.draw();
+  }
+
  
   function update_transform(transform, zoom, tx, ty, center_x, center_y) {
     var new_zoom = transform.zoom * zoom;
@@ -399,6 +422,14 @@ function isElementInViewport(el) {
     $('html, body').animate({scrollTop: $(".viewportbox").first().offset().top}, 200);
     
     plot_hfr = $.plot($("#plot_hfr"), [ ], {
+                        series: {
+                                shadowSize: 0   // Drawing is faster without shadows
+                        },
+                        xaxis: {
+                                show: false
+                        }});
+
+    plot_guider = $.plot($("#plot_guider"), [ ], {
                         series: {
                                 shadowSize: 0   // Drawing is faster without shadows
                         },
