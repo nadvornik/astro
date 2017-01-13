@@ -693,7 +693,7 @@ def apply_gamma8(img, gamma):
 
 
 class Navigator:
-	def __init__(self, status, dark, mount, tid, polar_tid = None):
+	def __init__(self, status, dark, mount, tid, polar_tid = None, full_res = None):
 		self.status = status
 		self.dark = dark
 		self.stack = Stack()
@@ -737,7 +737,9 @@ class Navigator:
 			self.field_corr = np.load(self.status['field_corr'])
 		
 		self.i_dark = 0
-		self.status['full_hfr'] = []
+		self.full_res = full_res
+		if self.full_res is not None:
+			self.full_res['full_hfr'] = []
 		self.status.setdefault('go_by', 0.1)
 
 
@@ -1005,7 +1007,8 @@ class Navigator:
 		h = im.shape[0]
 		
 		full_hfr = get_hfr_list(im, pts)
-		self.status['full_hfr'].append(full_hfr)
+		if self.full_res is not None:
+			self.full_res['full_hfr'].append(full_hfr)
 		del im
 
 		solver = Solver(sources_list = pts, field_w = w, field_h = h, ra = self.status['ra'], dec = self.status['dec'], field_deg = self.status['field_deg'], radius = 100)
@@ -1089,19 +1092,21 @@ def fit_line(xylist, sigma = 2):
 	return m, c
 
 class Guider:
-	def __init__(self, status, mount, dark, tid):
+	def __init__(self, status, mount, dark, tid, full_res):
 		self.status = status
 		self.status.setdefault('aggressivness', 0.6)
 		self.status.setdefault('aggressivness_dec', 0.1)
 		self.mount = mount
 		
 		self.dark = dark
+		self.tid = tid
+		self.full_res = full_res
 		self.status['seq'] = 'seq-stop'
+
 		self.reset()
 		self.t0 = 0
 		self.resp0 = []
 		self.pt0 = []
-		self.tid = tid
 		self.prev_t = 0
 
 	def reset(self):
@@ -1115,8 +1120,10 @@ class Guider:
 		self.status['curr_ra_err_list'] = []
 		self.status['curr_dec_err_list'] = []
 		self.status['curr_hfr_list'] = []
-		self.status['err_list'] = []
-		self.status['hfr_list'] = []
+		if self.full_res is not None:
+			self.full_res['ra_err_list'] = []
+			self.full_res['dec_err_list'] = []
+			self.full_res['guider_hfr'] = []
 		self.off = (0.0, 0.0)
 		self.off_t = None
 		self.mount.go_ra.out(0)
@@ -1166,9 +1173,10 @@ class Guider:
 				self.pt0[:, 1] += dither_off.imag
 			except:
 				pass
-			self.status['ra_err_list'].append(np.mean(self.status['curr_ra_err_list']))
-			self.status['dec_err_list'].append(np.mean(self.status['curr_dec_err_list']))
-			self.status['hfr_list'].append(np.mean(self.status['curr_hfr_list']))
+			if self.full_res is not None:
+				self.full_res['ra_err_list' ].append(np.mean(np.array(self.status['curr_ra_err_list' ]) ** 2) ** 0.5)
+				self.full_res['dec_err_list'].append(np.mean(np.array(self.status['curr_dec_err_list']) ** 2) ** 0.5)
+				self.full_res['guider_hfr'].append(np.mean(self.status['curr_hfr_list']))
 
 		elif cmd.startswith('aggressivness-dec-'):
 			try:
@@ -1711,6 +1719,8 @@ class Focuser:
 		im = cv2.medianBlur(im, 3)
 
 		if (self.dark.len() > 0):
+			print im.shape
+			print self.dark.get().shape
 			im_sub = cv2.subtract(im, self.dark.get())
 		else:
 			im_sub = im
@@ -2546,8 +2556,9 @@ def run_test_2_kstars():
 	ui.namedWindow('navigator')
 	ui.namedWindow('guider')
 	ui.namedWindow('polar')
+	ui.namedWindow('full_res')
 
-        polar = Polar(status.path(["polar"]), ['navigator', 'guider'])
+        polar = Polar(status.path(["polar"]), ['navigator', 'guider', 'full-res'])
 
 	go_ra = GuideOut("./guide_out_ra")
 	go_dec = GuideOut("./guide_out_dec")
@@ -2557,16 +2568,21 @@ def run_test_2_kstars():
 	dark1 = Median(5)
 	dark2 = Median(5)
 
-	cam1 = Camera_test_kstars(status.path(["navigator", "camera"]), go_ra, go_dec)
-	nav1 = Navigator(status.path(["navigator"]), dark1, mount, 'navigator', polar_tid = 'polar')
+	fo = FocuserOut()
+	cam1 = Camera_test_kstars(status.path(["navigator", "camera"]), go_ra, go_dec, fo)
+	nav1 = Navigator(status.path(["navigator"]), dark1, mount, 'navigator', polar_tid = 'polar', full_res = status.path(["full_res"]))
 
 	nav = Navigator(status.path(["guider", "navigator"]), dark2, mount, 'guider')
 
-	guider = Guider(status.path(["guider"]), mount, dark2, 'guider')
+	guider = Guider(status.path(["guider"]), mount, dark2, 'guider', full_res = status.path(["full_res"]))
 	#cam = Camera_test(status.path(["guider", "navigator", "camera"]))
 	cam = Camera_test_kstars_g(status.path(["guider", "navigator", "camera"]), cam1)
+
+
+	focuser = Focuser('navigator', status.path(["navigator", "focuser"]), dark = dark1)
+	zoom_focuser = Focuser('navigator', status.path(["navigator", "focuser"]))
 	
-	runner = Runner('navigator', cam1, navigator = nav1)
+	runner = Runner('navigator', cam1, navigator = nav1, focuser = focuser, zoom_focuser = zoom_focuser)
 	runner.start()
 	
 	runner2 = Runner('guider', cam, navigator = nav, guider = guider)
@@ -2594,13 +2610,13 @@ def run_test_2_gphoto():
 	dark1 = Median(5)
 	dark2 = Median(5)
 	
-	nav1 = Navigator(status.path(["navigator"]), dark1, mount, 'navigator', polar_tid = 'polar')
+	nav1 = Navigator(status.path(["navigator"]), dark1, mount, 'navigator', polar_tid = 'polar', full_res = status.path(["full_res"]))
 	focuser = Focuser('navigator', status.path(["navigator", "focuser"]), dark = dark1)
 	zoom_focuser = Focuser('navigator')
 
 	nav = Navigator(status.path(["guider", "navigator"]), dark2, mount, 'guider')
 
-	guider = Guider(status.path(["guider"]), mount, dark2, 'guider')
+	guider = Guider(status.path(["guider"]), mount, dark2, 'guider', full_res = status.path(["full_res"]))
 	cam = Camera_test_g(status.path(["guider", "navigator", "camera"]), go)
 
 	ui.namedWindow('navigator')
@@ -2642,13 +2658,13 @@ def run_2():
 	dark1 = Median(5)
 	dark2 = Median(5)
 	
-	nav1 = Navigator(status.path(["navigator"]), dark1, mount, 'navigator', polar_tid = 'polar')
+	nav1 = Navigator(status.path(["navigator"]), dark1, mount, 'navigator', polar_tid = 'polar', full_res = status.path(["full_res"]))
 	focuser = Focuser('navigator', status.path(["navigator", "focuser"]), dark = dark1)
 	zoom_focuser = Focuser('navigator', status.path(["navigator", "focuser"]))
 
 	nav = Navigator(status.path(["guider", "navigator"]), dark2, mount, 'guider')
 
-	guider = Guider(status.path(["guider"]), mount, dark2, 'guider')
+	guider = Guider(status.path(["guider"]), mount, dark2, 'guider', full_res = status.path(["full_res"]))
 
 	ui.namedWindow('navigator')
 	ui.namedWindow('guider')
