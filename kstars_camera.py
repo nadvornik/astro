@@ -7,6 +7,8 @@ import random
 import math
 import cv2
 import numpy as np
+from PIL import Image
+import io
 
 def apply_gamma(img, gamma):
 	lut = np.fromiter( ( (x / 255.0)**gamma * 65535.0 for x in xrange(256)), dtype=np.uint16 )
@@ -17,13 +19,16 @@ def apply_gamma(img, gamma):
 
 
 class Camera_test_kstars:
-	def __init__(self, status, go_ra, go_dec):
+	def __init__(self, status, go_ra, go_dec, focuser):
 		self.status = status
 		self.go_ra = go_ra
 		self.go_dec = go_dec
-		self.status['exp-sec'] = 0.5
+		self.focuser = focuser
+		self.status['exp-sec'] = 60
+		self.status['test-exp-sec'] = 1
 		self.e_ra = 70
 		self.e_dec = 65
+		
 		import gobject
 
 		gobject.threads_init()
@@ -49,6 +54,9 @@ class Camera_test_kstars:
 		if cmd.startswith('exp-sec-'):
 			self.status['exp-sec'] = float(cmd[len('exp-sec-'):])
 
+		if cmd in ["f-3", "f-2", "f-1", "f+3", "f+2", "f+1"]:
+			self.focuser.cmd(cmd)
+
 	
 	def capture(self):
 		
@@ -60,14 +68,42 @@ class Camera_test_kstars:
 		
 		print "set ra, dec %f,%f" % (ra,dec)
 		self.iface.setRaDec(ra / 360.0 * 24.0, dec)
-		time.sleep(self.status['exp-sec'])
+		time.sleep(0.5)
 		
 		self.iface.exportImage("/tmp/kstars.jpg") #,2000,2000, signature='sii')
 
 		im = cv2.imread("/tmp/kstars.jpg")
 		self.im = apply_gamma(im, 2.2)
 		h, w, c = self.im.shape
-		return np.rot90(self.im[:, 0:w/2]), time.time()
+		im = np.rot90(self.im[:, 0:w/2])
+		
+		print "focuser %d" % self.focuser.pos
+		bl = np.abs(self.focuser.pos / 150.0)**2 + 0.3
+		ibl = int(bl + 1)
+		#im = cv2.blur(im, (ibl, ibl))
+		#im = cv2.blur(im, (ibl, ibl))
+		im = cv2.GaussianBlur(im, (51, 51), bl)
+		
+		return im, time.time()
+
+
+	def capture_bulb(self, test = False, callback = None):
+		if test:
+			sec = self.status['test-exp-sec']
+		else:
+			sec = self.status['exp-sec']
+		time.sleep(sec)
+		
+		h, w, c = self.im.shape
+		im = np.rot90(self.im[:, 0:w/2])
+		if callback is not None:
+			im = np.array(im, dtype=np.uint8)
+			tmpFile = io.BytesIO()
+			pil_image = Image.fromarray(im)
+			pil_image.save(tmpFile,'JPEG')
+			file_data = tmpFile.getvalue()
+			callback(file_data)
+
 
 	def shutdown(self):
 		pass
@@ -86,6 +122,7 @@ class Camera_test_kstars_g:
 	
 	def capture(self):
 		time.sleep(self.status['exp-sec'])
+		self.cam0.capture()
 		im = self.cam0.im
 		h, w, c = im.shape
 		return cv2.flip(im[h/4:h/4*3, w/2:], 1), time.time()
