@@ -733,6 +733,7 @@ class Navigator:
 		
 		self.field_corr = None
 		self.field_corr_list = []
+		self.field_corr_limit = 2000
 		if self.status['field_corr'] is not None:
 			try:
 				self.field_corr = np.load(self.status['field_corr'])
@@ -838,8 +839,9 @@ class Navigator:
 					cmdQueue.put('save')
 					
 				print "field corr len", len(self.field_corr_list)
-				if len(self.field_corr_list) > 2500:
+				if len(self.field_corr_list) > self.field_corr_limit:
 					self.update_field_cor()
+					self.field_corr_limit *= 2
 					
 			else:
 				if self.status['radius'] > 0 and self.status['radius'] < 70:
