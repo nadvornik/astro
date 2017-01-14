@@ -28,6 +28,7 @@ class Camera_test_kstars:
 		self.status['test-exp-sec'] = 1
 		self.e_ra = 70
 		self.e_dec = 65
+		self.status['exp_in_progress'] = False
 		
 		import gobject
 
@@ -92,8 +93,12 @@ class Camera_test_kstars:
 			sec = self.status['test-exp-sec']
 		else:
 			sec = self.status['exp-sec']
-		time.sleep(sec)
+		self.status['exp_in_progress'] = True
+		for i in range(0, int(sec + 0.5)):
+			time.sleep(1)
+			self.status['cur_time'] = i
 		
+		self.status['exp_in_progress'] = False
 		h, w, c = self.im.shape
 		im = np.rot90(self.im[:, 0:w/2])
 		if callback is not None:
