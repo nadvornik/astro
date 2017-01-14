@@ -102,7 +102,7 @@
                             <td><button class='ajax' value='navigator!f+1'>f+1</button></td>
                         </tr>
                         <tr rowspan=3>
-                            <td colspan=3><div id="plot_hfr" class='ajax_up plot' data-jsonp='navigator.focuser'></div></td>
+                            <td colspan=3><div id="plot_hfr" class='ajax_up plot' data-jsonp='navigator.focuser' data-series='v_curve,v_curve_s,v_curve2,v_curve2_s' ></div></td>
                         </tr>
                     </table>
                 </div>
@@ -246,7 +246,7 @@
                     </table>
                 </div>
             </div>
-            <div id="plot_guider" class='ajax_up plot' data-jsonp='guider'></div></td>
+            <div id="plot_guider" class='ajax_up plot' data-jsonp='guider' data-series='curr_hfr_list,curr_ra_err_list,curr_dec_err_list' ></div></td>
         </div>
         <div class="imgbox">
             <img class='reloader imagecanvas' src="guider.jpg"/>
@@ -322,8 +322,11 @@
             <button class='ajax' value='interrupt'>interrupt</button>
             
             <span class='ajax_up ajax_sem' data-jsonp='navigator.camera.exp_in_progress'>Exp 
-            <span class='ajax_up' data-jsonp='navigator.camera.cur_time'/>
+                <span class='ajax_up' data-jsonp='navigator.camera.cur_time'/>
             </span>
+
+            <br/>
+            <div id="plot_full_res" class='ajax_up plot' data-jsonp='full_res' data-series='full_hfr,guider_hfr,ra_err_list,dec_err_list'></div>
             
         </div>
         <div class="imgbox">
@@ -332,7 +335,7 @@
     </div>
     <div class="viewportbox">
         <div class="textbox">
-            <pre id='json'></pre>
+            <pre id='json'>JSON</pre>
         </div>
     </div>
     <div class="viewportbox">

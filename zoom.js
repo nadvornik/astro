@@ -115,12 +115,8 @@ function isElementInViewport(el) {
             });
           }
           else if (prefix != undefined) v = prefix + v;
-          
-          if ($(this).is("#plot_hfr")) {
-            plot_hfr_data(this, v);
-          }
-          if ($(this).is("#plot_guider")) {
-            plot_guider_data(this, v);
+          if ($(this).is(".plot")) {
+            plot_data(this, v);
           }
           else if ($(this).is(".ajax_sem")) {
             if (v) $(this).addClass("ajaxrun");
@@ -139,10 +135,10 @@ function isElementInViewport(el) {
     });
   }
  
-  var plot_hfr;
-  function plot_hfr_data(canvas, data) {
+  function plot_data(placeholder, data) {
     var res = []
-    var names = ['v_curve', 'v_curve_s', 'v_curve2', 'v_curve2_s'];
+    var names = $(placeholder).data('series').split(",");
+ //   alert(JSON.stringify(names));
     for (var j = 0; j < names.length; ++j) {
         var cn = names[j];
         if (!(cn in data)) continue;
@@ -153,31 +149,15 @@ function isElementInViewport(el) {
         }
         res.push(curv);
     }
-    plot_hfr.setData(res);
-    plot_hfr.setupGrid();
-    plot_hfr.draw();
-
+ //   alert(JSON.stringify(res));
+    $(placeholder).plot(res, {
+                        series: {
+                                shadowSize: 0   // Drawing is faster without shadows
+                        },
+                        xaxis: {
+                                show: false
+                        }});
   }
-
-  var plot_guider;
-  function plot_guider_data(canvas, data) {
-    var res = []
-    var names = ['curr_hfr_list', 'curr_ra_err_list', 'curr_dec_err_list'];
-    for (var j = 0; j < names.length; ++j) {
-        var cn = names[j];
-        if (!(cn in data)) continue;
-        if (!$.isArray(data[cn]) ||  data[cn].length == 0) continue;
-        var curv = [];
-        for (var i = 0; i < data[cn].length; ++i) {
-          curv.push([i, data[cn][i]]);
-        }
-        res.push(curv);
-    }
-    plot_guider.setData(res);
-    plot_guider.setupGrid();
-    plot_guider.draw();
-  }
-
  
   function update_transform(transform, zoom, tx, ty, center_x, center_y) {
     var new_zoom = transform.zoom * zoom;
@@ -286,7 +266,7 @@ function isElementInViewport(el) {
   $(document).ready(function(){
     if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(function(position){
-           cmd = "gps" + position.coords.latitude + ',' + position.coords.longitude;
+           var cmd = "gps" + position.coords.latitude + ',' + position.coords.longitude;
            $.ajax({type: "POST", url: "button", data: {cmd: cmd}});
         });
     } 
@@ -420,21 +400,5 @@ function isElementInViewport(el) {
     
     //document.body.addEventListener('touchstart', function(e){ e.preventDefault(); });
     $('html, body').animate({scrollTop: $(".viewportbox").first().offset().top}, 200);
-    
-    plot_hfr = $.plot($("#plot_hfr"), [ ], {
-                        series: {
-                                shadowSize: 0   // Drawing is faster without shadows
-                        },
-                        xaxis: {
-                                show: false
-                        }});
-
-    plot_guider = $.plot($("#plot_guider"), [ ], {
-                        series: {
-                                shadowSize: 0   // Drawing is faster without shadows
-                        },
-                        xaxis: {
-                                show: false
-                        }});
-  });
+   });
  
