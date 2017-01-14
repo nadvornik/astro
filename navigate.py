@@ -569,15 +569,15 @@ def get_hfr_list(im, pts, hfr_size = 20):
 	if len(hfr_list) == 0:
 		return hfr_size
 
-	print "hfr_list", hfr_list
+	#print "hfr_list", hfr_list
 	hfr_list = np.array(hfr_list)
 	cur_hfr = np.average(hfr_list)
 	d2 = (hfr_list - cur_hfr) ** 2
 	var = np.average(d2)
 	noise = 2
-	hfr_list = hfr_list[np.where(d2 < var * noise**2)]
+	hfr_list = hfr_list[np.where(d2 <= var * noise**2 + 0.001)]
 	cur_hfr = np.average(hfr_list)
-	print "hfr_list_filt", hfr_list
+	#print "hfr_list_filt", hfr_list
 	return cur_hfr
 
 
@@ -1103,6 +1103,11 @@ class Guider:
 		self.full_res = full_res
 		self.status['seq'] = 'seq-stop'
 
+		if self.full_res is not None:
+			self.full_res['ra_err_list'] = []
+			self.full_res['dec_err_list'] = []
+			self.full_res['guider_hfr'] = []
+
 		self.reset()
 		self.t0 = 0
 		self.resp0 = []
@@ -1120,10 +1125,6 @@ class Guider:
 		self.status['curr_ra_err_list'] = []
 		self.status['curr_dec_err_list'] = []
 		self.status['curr_hfr_list'] = []
-		if self.full_res is not None:
-			self.full_res['ra_err_list'] = []
-			self.full_res['dec_err_list'] = []
-			self.full_res['guider_hfr'] = []
 		self.off = (0.0, 0.0)
 		self.off_t = None
 		self.mount.go_ra.out(0)
@@ -1174,9 +1175,18 @@ class Guider:
 			except:
 				pass
 			if self.full_res is not None:
-				self.full_res['ra_err_list' ].append(np.mean(np.array(self.status['curr_ra_err_list' ]) ** 2) ** 0.5)
-				self.full_res['dec_err_list'].append(np.mean(np.array(self.status['curr_dec_err_list']) ** 2) ** 0.5)
-				self.full_res['guider_hfr'].append(np.mean(self.status['curr_hfr_list']))
+				if len(self.status['curr_ra_err_list' ]) > 0:
+					self.full_res['ra_err_list' ].append(np.mean(np.array(self.status['curr_ra_err_list' ]) ** 2) ** 0.5)
+				else:
+					self.full_res['ra_err_list' ].append(0.0)
+				if len(self.status['curr_dec_err_list']) > 0:
+					self.full_res['dec_err_list'].append(np.mean(np.array(self.status['curr_dec_err_list']) ** 2) ** 0.5)
+				else:
+					self.full_res['dec_err_list'].append(0.0)
+				if len(self.status['curr_hfr_list']) > 0:
+					self.full_res['guider_hfr'].append(np.mean(self.status['curr_hfr_list']))
+				else:
+					self.full_res['guider_hfr'].append(0.0)
 
 		elif cmd.startswith('aggressivness-dec-'):
 			try:
