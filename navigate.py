@@ -734,7 +734,10 @@ class Navigator:
 		self.field_corr = None
 		self.field_corr_list = []
 		if self.status['field_corr'] is not None:
-			self.field_corr = np.load(self.status['field_corr'])
+			try:
+				self.field_corr = np.load(self.status['field_corr'])
+			except:
+				self.field_corr = None
 		
 		self.i_dark = 0
 		self.full_res = full_res
@@ -834,7 +837,7 @@ class Navigator:
 				if save_conf:
 					cmdQueue.put('save')
 					
-				print "len", len(self.field_corr_list)
+				print "field corr len", len(self.field_corr_list)
 				if len(self.field_corr_list) > 2500:
 					self.update_field_cor()
 					
@@ -1072,7 +1075,12 @@ class Navigator:
 		print self.field_corr
 		print "new"
 		print m
-		#np.save("oag_cor2.npy", m)
+		fn = self.status['field_corr']
+		if fn is not None:
+			if fn.endswith('.npy'):
+				fn = fn[:-4]
+			fn = "%s.%d.npy" % (fn, int(time.time()))
+			np.save(fn, m)
 		self.field_corr = m
 		#sys.exit(1)
 

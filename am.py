@@ -223,7 +223,7 @@ class Solver(threading.Thread):
 		if self.field_corr is not None:
 			corr = pyfits.open(solved + '.corr')
 			for l in corr[1].data:
-				self.field_corr.append((l['field_x'], l['field_y'], l['index_x'], l['field_y']))
+				self.field_corr.append((l['field_x'], l['field_y'], l['index_x'], l['index_y']))
 		
 		
 		shutil.rmtree(tmp_dir)
