@@ -1058,6 +1058,14 @@ class Navigator:
 			field_corr_list[:, 0] = xnew
 			field_corr_list[:, 1] = ynew
 		print field_corr_list
+
+
+		M = pt_translation_rotate(field_corr_list[:, 2:4], field_corr_list[:, 0:2], np.ones((field_corr_list.shape[0])))
+		print M
+		field_corr_list[:, 2:4] = np.insert(field_corr_list[:, 2:4], 2, 1.0, axis=1).dot(M).A
+		print field_corr_list
+
+
 		xcorr = polyfit2d(field_corr_list[:, 2], field_corr_list[:, 3], field_corr_list[:, 0], [2, 2])
 		ycorr = polyfit2d(field_corr_list[:, 2], field_corr_list[:, 3], field_corr_list[:, 1], [2, 2])
 		
