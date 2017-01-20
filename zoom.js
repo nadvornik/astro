@@ -147,7 +147,7 @@ function isElementInViewport(el) {
         for (var i = 0; i < data[cn].length; ++i) {
           curv.push([i, data[cn][i]]);
         }
-        res.push(curv);
+        res.push({ data: curv, label: cn});
     }
  //   alert(JSON.stringify(res));
     $(placeholder).plot(res, {
@@ -156,7 +156,11 @@ function isElementInViewport(el) {
                         },
                         xaxis: {
                                 show: false
-                        }});
+                        },
+                        legend: {
+                                backgroundOpacity: 0
+                        }
+                        });
   }
  
   function update_transform(transform, zoom, tx, ty, center_x, center_y) {
