@@ -727,6 +727,8 @@ class Navigator:
 		self.prev_t = 0
 		self.status['ra'], self.status['dec'] = self.mount.polar.zenith()
 		self.status['max_radius'] = 100
+		if tid == 'guider':
+			self.status['ra'], self.status['dec'], self.status['max_radius'] = self.mount.get_oag_pos()
 		self.status['radius'] = self.status['max_radius']
 		self.hotpixels = None
 		self.hotpix_cnt = None
@@ -844,11 +846,14 @@ class Navigator:
 					self.field_corr_limit *= 2
 					
 			else:
-				if self.status['radius'] > 0 and self.status['radius'] < 70:
+				if self.status['radius'] > 0 and self.status['radius'] * 2 + 15 < self.status['max_radius']:
 					self.status['radius'] = self.status['radius'] * 2 + 15
 				else:
-					self.status['ra'], self.status['dec'] = self.mount.polar.zenith()
-					self.status['radius'] = self.status['max_radius']
+					if self.tid == 'guider':
+						self.status['ra'], self.status['dec'], self.status['max_radius'] = self.mount.get_oag_pos()
+					else:
+						self.status['ra'], self.status['dec'] = self.mount.polar.zenith()
+						self.status['radius'] = self.status['max_radius']
 					self.wcs = None
 			self.solver = None
 			self.solved_im = None
@@ -2063,7 +2068,22 @@ class Mount:
 		else:
 			return []
 				
-			
+	def get_oag_pos(self):
+		if self.status['oag_pos'] is not None and self.main_tan is not None:
+			sq = Quaternion(self.status['oag_pos'][4])
+			mra, mdec, mroll, mpixscale, mparity = self.tan_to_euler(self.main_tan)
+			mq = Quaternion([mra, mdec, mroll])
+			q =  mq * sq
+			gra, gdec, groll = q.to_euler()
+			return gra, gdec, 1.0
+		elif self.main_tan is not None and self.status['oag']:
+			mra, mdec, mroll, mpixscale, mparity = self.tan_to_euler(self.main_tan)
+			return mra, mdec, 5.0
+		else:
+			zra, zdec = self.polar.zenith()
+			return zra,zdec, 100
+	
+	
 	def set_guider_calib(self, roll, parity, pixpersec_ra_plus, pixpersec_ra_minus, pixpersec_dec_plus, pixpersec_dec_minus):
 		if parity != 0:
 			print 'parity', parity, self.status['guider_parity']
