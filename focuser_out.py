@@ -1,46 +1,33 @@
 import time
+import sys
+import subprocess
+import atexit
+
 
 class FocuserOut:
 	def __init__(self):
 		self.pos = 0
-		self.testmode = False
+		self.rt_cmd = None
+		self.testmode = True
 		try:
-			from pyA20.gpio import gpio
-			from pyA20.gpio import port
-			from pyA20.gpio import connector
-			global pins
-
-			gpio.init() #Initialize module. Always called first
-			pins = [ port.PA8, port.PA9, port.PA10, port.PA20 ]
-
-		
-			for p in pins:
-				gpio.setcfg(p, gpio.OUTPUT)  #Configure LED1 as output
-				gpio.output(p, 1)
-				time.sleep(0.01)
-				gpio.output(p, 0)
-		
-			gpio.output(pins[0], 1)
-			self.gpio = gpio
+			self.rt_cmd = subprocess.Popen("./focuser_out", close_fds=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, bufsize=1 )
+			atexit.register(self.rt_cmd.terminate)
+			self.testmode = False
 		except:
+			print "Error: " +  sys.exc_info().__str__()
 			print "Focuser test mode"
-			self.testmode = True
-
 
 	
 	def move(self, m):
-		step = 1
-		if m < 0:
-			step = -1
-
-		for i in range(0, m, step):
-			self.pos += step
+		self.pos += m
+		if self.rt_cmd is not None:
+			try:
+				self.rt_cmd.stdin.write("%d\n" % (m))
+				line = self.rt_cmd.stdout.readline()
+				self.pos = int(line)
+			except:
+				print "Error: " +  sys.exc_info().__str__()
 			
-			if not self.testmode:
-				for p in pins:
-					self.gpio.output(p, 0)
-				self.gpio.output(pins[ self.pos % 4 ], 1)
-				time.sleep(0.002)
 		print "focuser %d" % self.pos
 
 			
