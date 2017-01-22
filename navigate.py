@@ -544,7 +544,7 @@ def pt_transform_opt(pt1m, pt2m, noise = 2, pt_func = pt_translation):
 	
 	return m, weights
 	
-def get_hfr_list(im, pts, hfr_size = 20):
+def get_hfr_list(im, pts, hfr_size = 20, sub_bg = False):
 	cur_hfr = hfr_size
 	(h, w) = im.shape
 		
@@ -564,7 +564,7 @@ def get_hfr_list(im, pts, hfr_size = 20):
 			if (iy > h - hfr_size - 1):
 				continue
 
-			hfr_list.append( hfr(im[iy - hfr_size : iy + hfr_size + 1, ix - hfr_size : ix + hfr_size + 1]) )
+			hfr_list.append( hfr(im[iy - hfr_size : iy + hfr_size + 1, ix - hfr_size : ix + hfr_size + 1], sub_bg) )
 
 	if len(hfr_list) == 0:
 		return hfr_size
@@ -1011,7 +1011,7 @@ class Navigator:
 		w = im.shape[1]
 		h = im.shape[0]
 		
-		full_hfr = get_hfr_list(im, pts)
+		full_hfr = get_hfr_list(im, pts, sub_bg = True)
 		if self.full_res is not None:
 			self.full_res['full_hfr'].append(full_hfr)
 		del im

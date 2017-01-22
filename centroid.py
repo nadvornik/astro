@@ -67,7 +67,7 @@ def sym_center(I):
 
 
 hfr_mat_cache = {}
-def hfr(a):
+def hfr(a, sub_bg = False):
 	h, w = a.shape
 	key = "%d %d" % a.shape
 	if key not in hfr_mat_cache:
@@ -79,6 +79,11 @@ def hfr(a):
 		hfr_mat_cache[key] = (mat, mask)
 	else:
 		(mat, mask) = hfr_mat_cache[key]
+	
+	if sub_bg:
+		bg = np.median(a[np.where(mask == 0)])
+		a = cv2.subtract(a, bg)
+	
 	s = cv2.sumElems(cv2.multiply(a,  mask, dtype=cv2.CV_32FC1))[0]
 	if s == 0.0:
 		return h / 2
