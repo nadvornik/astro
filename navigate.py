@@ -1411,7 +1411,7 @@ class Guider:
 					self.err0_dec = err.imag
 					
 					if self.mount.go_dec is not None:
-						self.mount.go_dec.out(1, self.status['t_delay'] * 2 + 5)
+						self.mount.go_dec.out(1, self.status['t_delay'] * 2 + 12)
 						self.status['mode'] = 'move_dec'
 					else:
 						self.status['mode'] = 'track'
@@ -1439,20 +1439,25 @@ class Guider:
 				print abs(err.imag - self.err0_dec), 2 * self.status['pixpersec']
 			
 				if t > self.t2 + self.status['t_delay'] * 2 + 10 or abs(err.imag - self.err0_dec) > 50:
+					aresp = np.array(self.resp0)
+					aresp1 = aresp[aresp[:, 0] > self.t2 + self.status['t_delay1'] - self.t0, ::2]
+					m, c = fit_line(aresp1)
+
 					if abs(err.imag - self.err0_dec) < min(2 * self.status['pixpersec'], 10):
 						print "no dec axis"
 						self.parity = 0
 						self.status['pixpersec_dec'] = None
 						
-					elif err.imag - self.err0_dec > 0:
+					elif m > 0:
 						print "dec_pos"
 						self.parity = -1
-						self.status['pixpersec_dec'] = (err.imag - self.err0_dec) / (t - self.t2 - self.status['t_delay'])
+						self.status['pixpersec_dec'] = m
 					else:
 						print "dec_neg"
 						self.parity = 1
-						self.status['pixpersec_dec'] = -(err.imag - self.err0_dec) / (t - self.t2 - self.status['t_delay'])
+						self.status['pixpersec_dec'] = -m
 
+						print "move_dec test2", self.status['pixpersec_dec'], m
 
 					self.status['mode'] = 'track'
 					cmdQueue.put('interrupt')
