@@ -853,7 +853,7 @@ class Navigator:
 						self.status['ra'], self.status['dec'], self.status['max_radius'] = self.mount.get_oag_pos()
 					else:
 						self.status['ra'], self.status['dec'] = self.mount.polar.zenith()
-						self.status['radius'] = self.status['max_radius']
+					self.status['radius'] = self.status['max_radius']
 					self.wcs = None
 			self.solver = None
 			self.solved_im = None
@@ -936,13 +936,19 @@ class Navigator:
 			self.status['field_deg'] = None
 			self.solver = None
 			self.plotter = None
-			self.status['ra'], self.status['dec'] = self.mount.polar.zenith()
+			if self.tid == 'guider':
+				self.status['ra'], self.status['dec'], self.status['max_radius'] = self.mount.get_oag_pos()
+			else:
+				self.status['ra'], self.status['dec'] = self.mount.polar.zenith()
 			self.status['radius'] = self.status['max_radius']
 
 		if cmd == 'solver-retry':
 			if self.solver is not None:
 				self.solver.terminate(wait=False)
-			self.status['ra'], self.status['dec'] = self.mount.polar.zenith()
+			if self.tid == 'guider':
+				self.status['ra'], self.status['dec'], self.status['max_radius'] = self.mount.get_oag_pos()
+			else:
+				self.status['ra'], self.status['dec'] = self.mount.polar.zenith()
 			self.status['radius'] = self.status['max_radius']
 
 		if cmd == 'dark':
