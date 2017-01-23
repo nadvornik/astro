@@ -1450,11 +1450,11 @@ class Guider:
 						
 					elif m > 0:
 						print "dec_pos"
-						self.parity = -1
+						self.parity = 1
 						self.status['pixpersec_dec'] = m
 					else:
 						print "dec_neg"
-						self.parity = 1
+						self.parity = -1
 						self.status['pixpersec_dec'] = -m
 
 						print "move_dec test2", self.status['pixpersec_dec'], m
@@ -1487,15 +1487,15 @@ class Guider:
 				err_corr_ra *= self.status['aggressivness']
 
 				if self.parity != 0:
-					err_corr_dec = err.imag * self.parity - self.mount.go_dec.recent_avg(self.status['t_delay'] + t_proc, self.status['pixpersec_dec'], -self.status['pixpersec_dec'])
+					err_corr_dec = err.imag * self.parity + self.mount.go_dec.recent_avg(self.status['t_delay'] + t_proc, self.status['pixpersec_dec'], -self.status['pixpersec_dec'])
 					err_corr_dec *= self.status['aggressivness_dec']
 				
 					status += " err:%.1f %.1f corr:%.1f %.1f t_d:%.1f t_p:%.1f" % (err.real, err.imag, err_corr_ra, err_corr_dec, self.status['t_delay'], t_proc)
 					
 					if err_corr_dec > 0.2:
-						self.mount.go_dec.out(1, err_corr_dec / self.status['pixpersec_dec'])
+						self.mount.go_dec.out(-1, err_corr_dec / self.status['pixpersec_dec'])
 					elif err_corr_dec < -0.2:
-						self.mount.go_dec.out(-1, -err_corr_dec / self.status['pixpersec_dec'])
+						self.mount.go_dec.out(1, -err_corr_dec / self.status['pixpersec_dec'])
 					else:
 						self.mount.go_dec.out(0)
 
