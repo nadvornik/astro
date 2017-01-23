@@ -3,12 +3,12 @@
 import numpy as np
 
 def polyfit2d(x, y, f, deg):
-	deg = np.asarray(deg)
-	vander = np.polynomial.polynomial.polyvander2d(x, y, deg)
-	vander = vander.reshape((-1,vander.shape[-1]))
+	vander = np.polynomial.polynomial.polyvander2d(x, y, (deg, deg))[:, np.where(np.flipud(np.tri(deg + 1)).ravel())[0]]
 	f = f.reshape((vander.shape[0],))
 	c = np.linalg.lstsq(vander, f)[0]
-	return c.reshape(deg+1)
+	res = np.zeros((deg + 1, deg + 1))
+	res[np.where(np.flipud(np.tri(deg + 1)))] = c
+	return res
 
 def interpolate2d(a, x, y):
 	x0=np.array(x, dtype=np.int)
@@ -23,3 +23,9 @@ def interpolate2d(a, x, y):
 
 
 
+
+if __name__ == '__main__':
+	x = [ 1.0, 2.0, 3.0]
+	y = [ 1.0, 1.0, 1.0]
+	r = np.array([ 2.0, 3.0, 4.0])
+	print polyfit2d(x, y, r, 2)

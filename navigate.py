@@ -700,6 +700,7 @@ class Navigator:
 		self.solver = None
 		self.solver_off = np.array([0.0, 0.0])
 		self.status.setdefault("dispmode", 'disp-normal')
+		self.status.setdefault("field_corr_limit", 10)
 		self.status.setdefault("field_corr", None)
 		try:
 			if self.status['lensname'] == self.status['camera']['lensname']:
@@ -735,7 +736,6 @@ class Navigator:
 		
 		self.field_corr = None
 		self.field_corr_list = []
-		self.field_corr_limit = 2000
 		if self.status['field_corr'] is not None:
 			try:
 				self.field_corr = np.load(self.status['field_corr'])
@@ -841,9 +841,9 @@ class Navigator:
 					cmdQueue.put('save')
 					
 				print "field corr len", len(self.field_corr_list)
-				if len(self.field_corr_list) > self.field_corr_limit:
+				if len(self.field_corr_list) > self.status['field_corr_limit']:
 					self.update_field_cor()
-					self.field_corr_limit *= 2
+					self.status['field_corr_limit'] *= 2
 					
 			else:
 				if self.status['radius'] > 0 and self.status['radius'] * 2 + 15 < self.status['max_radius']:
@@ -1070,9 +1070,13 @@ class Navigator:
 		field_corr_list[:, 2:4] = np.insert(field_corr_list[:, 2:4], 2, 1.0, axis=1).dot(M).A
 		print field_corr_list
 
+		if len(field_corr_list) < 1000:
+			deg = 1
+		else:
+			deg = 2
 
-		xcorr = polyfit2d(field_corr_list[:, 2], field_corr_list[:, 3], field_corr_list[:, 0], [2, 2])
-		ycorr = polyfit2d(field_corr_list[:, 2], field_corr_list[:, 3], field_corr_list[:, 1], [2, 2])
+		xcorr = polyfit2d(field_corr_list[:, 2], field_corr_list[:, 3], field_corr_list[:, 0], deg)
+		ycorr = polyfit2d(field_corr_list[:, 2], field_corr_list[:, 3], field_corr_list[:, 1], deg)
 		
 		#print "xcorr"
 		#print xcorr
