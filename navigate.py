@@ -1073,7 +1073,12 @@ class Navigator:
 
 		M = pt_translation_rotate(field_corr_list[:, 2:4], field_corr_list[:, 0:2], np.ones((field_corr_list.shape[0])))
 		print M
-		field_corr_list[:, 2:4] = np.insert(field_corr_list[:, 2:4], 2, 1.0, axis=1).dot(M).A
+		M2 = cv2.estimateRigidTransform(np.array(field_corr_list[:, 2:4]), np.array(field_corr_list[:, 0:2]), False)
+		M2 = np.matrix(M2.T)
+		print "M2"
+		print M2
+		
+		field_corr_list[:, 2:4] = np.insert(field_corr_list[:, 2:4], 2, 1.0, axis=1).dot(M2).A
 		print field_corr_list
 
 		if len(field_corr_list) < 1000:
@@ -2829,7 +2834,7 @@ def run_calibrate_v4l2_g():
 
 if __name__ == "__main__":
 	os.environ["LC_NUMERIC"] = "C"
-	
+
 	mystderr = os.fdopen(os.dup(sys.stderr.fileno()), 'w', 0)
 	devnull = open(os.devnull,"w")
 	os.dup2(devnull.fileno(), sys.stdout.fileno())
