@@ -12,6 +12,14 @@ button, select {
   height: 8vmin;
 }
 
+span.ajax_up {
+  display: inline-block;
+  color: #ffff80;
+  width: 30vmin;
+  height: 8vmin;
+}
+
+
 .ajaxrun {
   background-color: #a0a0a0;
 }

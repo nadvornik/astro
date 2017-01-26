@@ -1129,11 +1129,94 @@ def fit_line(xylist, sigma = 2):
 		print "fit_line res2" , m ,c
 	return m, c
 
+class GuiderAlg(object):
+	def __init__(self, go, t_delay, pixpersec, pixpersec_neg, status, parity = 1):
+		self.go = go
+		self.pixpersec = pixpersec
+		self.pixpersec_neg = pixpersec_neg
+		self.parity = parity
+		self.status = status
+		self.status.setdefault('min_move', 0.1)
+		self.status.setdefault('aggressivness', 0.5)
+		self.status['t_delay'] = t_delay
+		self.last_move = 0
+		self.corr = 0
+
+	
+	def get_corr_delay(self, t_proc):
+		return self.go.recent_avg(self.status['t_delay'] + t_proc, self.pixpersec, -self.pixpersec_neg)
+	
+	def proc(self, err, err2, t0):
+		corr = self.get_corr(err, err2, t0)
+		self.corr = corr
+		
+		if corr > self.status['min_move']:
+			self.go.out(-1, corr / self.pixpersec_neg)
+			self.last_move = corr
+		elif corr < -self.status['min_move']:
+			self.go.out(1, -corr / self.pixpersec)
+			self.last_move = corr
+		else:
+			self.go.out(0)
+			self.corr = 0
+
+class GuiderAlgDec(GuiderAlg):
+	def __init__(self, go, t_delay, pixpersec, pixpersec_neg, status, parity = 1):
+		super(GuiderAlgDec, self).__init__(go, t_delay, pixpersec, pixpersec_neg, status, parity)
+		self.status.setdefault('rev_move', 2.0)
+		self.status.setdefault('smooth_c', 0.1)
+		self.corr_acc = 0.0
+
+	def get_corr(self, err, err2, t0):
+		corr1 = err * self.parity + self.get_corr_delay(time.time() - t0) 
+		
+		corr1 *= self.status['aggressivness']
+		
+		if np.abs(corr1) < self.status['rev_move']:
+			self.corr_acc += corr1 * self.status['smooth_c']
+		else:
+			self.corr_acc = 0
+		
+		corr = corr1 + self.corr_acc
+
+		if corr > 0 and self.last_move < 0 and corr < self.status['rev_move']:
+			corr = 0
+		elif corr < 0 and self.last_move > 0 and corr > -self.status['rev_move']:
+			corr = 0
+		
+		if corr * self.last_move < 0:
+			self.corr_acc = 0
+		
+		
+		print "dec err %f, corr1 %f, corr_acc %f, corr %f" % (err, corr1, self.corr_acc, corr)
+
+		return corr
+
+class GuiderAlgRa(GuiderAlg):
+	def __init__(self, go, t_delay, pixpersec, pixpersec_neg, status, parity = 1):
+		super(GuiderAlgRa, self).__init__(go, t_delay, pixpersec, pixpersec_neg, status, parity)
+		self.status.setdefault('smooth_c', 0.1)
+		self.smooth_var2 = 1.0
+
+	def get_corr(self, err, err2, t0):
+		corr = err * self.parity + self.get_corr_delay(time.time() - t0)
+		corr *= self.status['aggressivness']
+		
+		err2norm = (err2 ** 2 / self.smooth_var2) ** 0.5
+		corr *= 1.0 / (1.0 + err2norm)
+
+		smooth_c = self.status['smooth_c']
+		self.smooth_var2 = self.smooth_var2 * (1.0 - smooth_c) + err2**2 * smooth_c
+		
+		print "ra err %f, err2 %f, err2norm %f, err2agg %f, corr %f" % (err, err2, err2norm, 1.0 / (1.0 + err2norm), corr)
+		return corr
+
+
 class Guider:
 	def __init__(self, status, mount, dark, tid, full_res):
 		self.status = status
-		self.status.setdefault('aggressivness', 0.6)
-		self.status.setdefault('aggressivness_dec', 0.1)
+		self.status.setdefault('ra_alg', {})
+		self.status.setdefault('dec_alg', {})
 		self.mount = mount
 		
 		self.dark = dark
@@ -1202,10 +1285,7 @@ class Guider:
 		elif cmd == "capture-finished":
 			self.capture_in_progress = False
 			try:
-				if self.parity != 0:
-					self.dither = complex(0, (self.dither.imag + 5) % 23)
-				else:
-					self.dither = complex((self.dither.real + 5) % 23, 0)
+				self.dither = complex((self.dither.real + 11) % 37, 0)
 				dither_off = self.dither * self.ref_off
 				self.pt0 = np.array(self.pt0base, copy=True)
 				self.pt0[:, 0] += dither_off.real
@@ -1225,16 +1305,18 @@ class Guider:
 					self.full_res['guider_hfr'].append(np.mean(self.status['curr_hfr_list']))
 				else:
 					self.full_res['guider_hfr'].append(0.0)
-
-		elif cmd.startswith('aggressivness-dec-'):
+		
+		elif cmd.startswith('ra-') or cmd.startswith('dec-'):
 			try:
-				self.status['aggressivness_dec'] = float(cmd[len('aggressivness-dec-'):])
-			except:
-				pass
-
-		elif cmd.startswith('aggressivness-'):
-			try:
-				self.status['aggressivness'] = float(cmd[len('aggressivness-'):])
+				if cmd.startswith('ra-'):
+					g_alg = 'ra_alg'
+					cmd = cmd[len('ra-'):]
+				else:
+					g_alg = 'dec_alg'
+					cmd = cmd[len('dec-'):]
+				field, val = cmd.split('-')
+				
+				self.status[g_alg][field] = float(val)
 			except:
 				pass
 
@@ -1428,6 +1510,8 @@ class Guider:
 						self.status['mode'] = 'track'
 						self.status['pixpersec_dec'] = None
 						self.mount.set_guider_calib(np.angle(self.ref_off, deg=True), 0, self.status['pixpersec'], self.status['pixpersec_neg'], 0, 0)
+						self.alg_ra = GuiderAlgRa(self.mount.go_ra, self.status['t_delay'], self.status['pixpersec'], self.status['pixpersec_neg'], self.status['ra_alg'])
+						self.alg_dec = None
 						cmdQueue.put('interrupt')
 
 		elif self.status['mode'] == 'move_dec':
@@ -1473,6 +1557,9 @@ class Guider:
 					self.status['mode'] = 'track'
 					cmdQueue.put('interrupt')
 					self.mount.set_guider_calib(np.angle(self.ref_off, deg=True), self.parity, self.status['pixpersec'], self.status['pixpersec_neg'], self.status['pixpersec_dec'], self.status['pixpersec_dec'])
+					self.alg_ra = GuiderAlgRa(self.mount.go_ra, self.status['t_delay'], self.status['pixpersec'], self.status['pixpersec_neg'], self.status['ra_alg'])
+					self.alg_dec = GuiderAlgDec(self.mount.go_dec, self.status['t_delay'], self.status['pixpersec_dec'], self.status['pixpersec_dec'], self.status['dec_alg'], parity = self.parity)
+						
 
 				for p in pt:
 					cv2.circle(disp, (int(p[1] + 0.5), int(p[0] + 0.5)), 10, (255), 1)
@@ -1491,34 +1578,16 @@ class Guider:
 				self.off, weights = avg_pt(pt0, pt)
 				err = complex(*self.off) / self.ref_off
 				self.resp0.append((t - self.t0, err.real, err.imag))
-
 				t_proc = time.time() - t
 
-				err_corr_ra = err.real + self.mount.go_ra.recent_avg(self.status['t_delay'] + t_proc, self.status['pixpersec'], -self.status['pixpersec_neg'])
-				err_corr_ra *= self.status['aggressivness']
 
-				if self.parity != 0:
-					err_corr_dec = err.imag * self.parity + self.mount.go_dec.recent_avg(self.status['t_delay'] + t_proc, self.status['pixpersec_dec'], -self.status['pixpersec_dec'])
-					err_corr_dec *= self.status['aggressivness_dec']
-				
-					status += " err:%.1f %.1f corr:%.1f %.1f t_d:%.1f t_p:%.1f" % (err.real, err.imag, err_corr_ra, err_corr_dec, self.status['t_delay'], t_proc)
-					
-					if err_corr_dec > 0.2:
-						self.mount.go_dec.out(-1, err_corr_dec / self.status['pixpersec_dec'])
-					elif err_corr_dec < -0.2:
-						self.mount.go_dec.out(1, -err_corr_dec / self.status['pixpersec_dec'])
-					else:
-						self.mount.go_dec.out(0)
+				self.alg_ra.proc(err.real, err.imag, t)
 
+				if self.alg_dec is not None:
+					self.alg_dec.proc(err.imag, err.real, t)
+					status += " err:%.1f %.1f corr:%.1f %.1f t_d:%.1f t_p:%.1f" % (err.real, err.imag, self.alg_ra.corr, self.alg_dec.corr, self.status['t_delay'], t_proc)
 				else:
-					status += " err:%.1f %.1f corr:%.1f t_d:%.1f t_p:%.1f" % (err.real, err.imag, err_corr_ra, self.status['t_delay'], t_proc)
-				
-				if err_corr_ra > 0.2:
-					self.mount.go_ra.out(-1, err_corr_ra / self.status['pixpersec_neg'])
-				elif err_corr_ra < -0.2:
-					self.mount.go_ra.out(1, -err_corr_ra / self.status['pixpersec'])
-				else:
-					self.mount.go_ra.out(0)
+					status += " err:%.1f %.1f corr:%.1f t_d:%.1f t_p:%.1f" % (err.real, err.imag, self.alg_ra.corr, self.status['t_delay'], t_proc)
 				
 				self.ok = (err.real < 1.5 and err.real > -1.5)
 				if self.parity != 0:
