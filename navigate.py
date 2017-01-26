@@ -2233,10 +2233,10 @@ class Mount:
                         if self.go_dec is not None:
 				if dec > 0:
 					print "move_dec sec", dec / self.status['arcsec_per_sec_dec_plus']
-					self.go_dec.out(1, dec / self.status['arcsec_per_sec_dec_plus'])
+					self.go_dec.out(-1, dec / self.status['arcsec_per_sec_dec_plus'])
 				elif dec < 0:
 					print "move_dec sec", dec / self.status['arcsec_per_sec_dec_minus']
-					self.go_dec.out(-1, -dec / self.status['arcsec_per_sec_dec_minus'])
+					self.go_dec.out(1, -dec / self.status['arcsec_per_sec_dec_minus'])
 				else:
 					self.go_dec.out(0)
 
