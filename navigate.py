@@ -1838,7 +1838,7 @@ class Focuser:
 
 		self.im = im
 		
-		im = cv2.medianBlur(im, 3)
+		#im = cv2.medianBlur(im, 3)
 
 		if (self.dark.len() > 0):
 			print im.shape
