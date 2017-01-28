@@ -65,8 +65,8 @@ class Camera_test_kstars:
 		self.e_ra = 70 + np.random.normal(0, 0.002) + 0.001 * (time.time() - self.t0) + np.sin((time.time() - self.t0) / 3.0) * 0.002
 		self.e_dec = 65 + np.random.normal(0, 0.002) + 0.0005 * (time.time() - self.t0)
 		
-		ra = (self.go_ra.recent_avg() - self.go_ra.recent_avg(0.001)) / 3600.0 * 60.0  + self.e_ra
-		dec = -(self.go_dec.recent_avg() - self.go_dec.recent_avg(0.001)) / 3600.0 * 60.0  + self.e_dec
+		ra = -(self.go_ra.recent_avg() - self.go_ra.recent_avg(0.001)) / 3600.0 * 60.0  + self.e_ra
+		dec = (self.go_dec.recent_avg() - self.go_dec.recent_avg(0.001)) / 3600.0 * 60.0  + self.e_dec
 		
 		print "set ra, dec %f,%f" % (ra,dec)
 		self.iface.setRaDec(ra / 360.0 * 24.0, dec)

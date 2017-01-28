@@ -1001,13 +1001,13 @@ class Navigator:
 			except:
 				print "Error: " +  sys.exc_info().__str__()
 		if cmd.startswith('go-left'):
-				self.mount.move_main_px(-self.im.shape[1] * self.status['go_by'], 0, self.tid)
-		if cmd.startswith('go-right'):
 				self.mount.move_main_px(self.im.shape[1] * self.status['go_by'], 0, self.tid)
+		if cmd.startswith('go-right'):
+				self.mount.move_main_px(-self.im.shape[1] * self.status['go_by'], 0, self.tid)
 		if cmd.startswith('go-down'):
-				self.mount.move_main_px(0, self.im.shape[0] * self.status['go_by'], self.tid)
-		if cmd.startswith('go-up') and self.mount.go_dec is not None:
 				self.mount.move_main_px(0, -self.im.shape[0] * self.status['go_by'], self.tid)
+		if cmd.startswith('go-up') and self.mount.go_dec is not None:
+				self.mount.move_main_px(0, self.im.shape[0] * self.status['go_by'], self.tid)
 		if cmd.startswith('go-by-'):
 			try:
 				self.status['go_by'] = float(cmd[len('go-by-'):])
@@ -1028,7 +1028,7 @@ class Navigator:
 			
 			for y, x, v in self.stack.get_xy():
 				if x >= reg[0] and y >= reg[1] and x < reg[2] and y < reg[3] and (x - w / 2)**2 + (y - h / 2)**2 > 400:
-					self.mount.move_main_px(x - w / 2, y - h / 2, self.tid)
+					self.mount.move_main_px(-x + w / 2, -y + h / 2, self.tid)
 					break
 		
 	
