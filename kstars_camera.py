@@ -106,6 +106,7 @@ class Camera_test_kstars:
 			im = np.array(im, dtype=np.uint8)
 			tmpFile = io.BytesIO()
 			pil_image = Image.fromarray(im)
+			#pil_image = Image.open('preview.jpg')
 			pil_image.save(tmpFile,'JPEG')
 			file_data = tmpFile.getvalue()
 			callback(file_data)

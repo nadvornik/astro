@@ -571,13 +571,14 @@ def get_hfr_list(im, pts, hfr_size = 20, sub_bg = False):
 
 	#print "hfr_list", hfr_list
 	hfr_list = np.array(hfr_list)
-	cur_hfr = np.average(hfr_list)
-	d2 = (hfr_list - cur_hfr) ** 2
-	var = np.average(d2)
-	noise = 2
-	hfr_list = hfr_list[np.where(d2 <= var * noise**2 + 0.001)]
-	cur_hfr = np.average(hfr_list)
-	#print "hfr_list_filt", hfr_list
+	cur_hfr = np.median(hfr_list)
+	for i in range(10):
+		d2 = (hfr_list - cur_hfr) ** 2
+		var = np.average(d2)
+		noise = 2
+		hfr_list = hfr_list[np.where(d2 <= var * noise**2 + 0.001)]
+		cur_hfr = np.average(hfr_list)
+		#print "hfr_list_filt", hfr_list
 	return cur_hfr
 
 
@@ -1017,6 +1018,7 @@ class Navigator:
 		im_c = np.array(pil_image)
 		del pil_image
 		im = cv2.min(cv2.min(im_c[:, :, 0], im_c[:, :, 1]), im_c[:, :, 2])
+		im = apply_gamma8(im, 2.2)
 
 		pts = find_max(im, 12, 100)
 		w = im.shape[1]
@@ -1043,6 +1045,7 @@ class Navigator:
 			else:
 				zoom = 1
 			
+			im_c = cv2.normalize(im_c,  im_c, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8UC3)
 			im_c = apply_gamma8(im_c, 0.6)
 			plotter=Plotter(solver.wcs)
 			plot = plotter.plot(im_c, scale = zoom)
