@@ -1914,7 +1914,7 @@ class Focuser:
 		elif self.status['phase'] == 'fast_search':
 			self.set_xy_from_stack(self.stack)
 			if self.focus_yx is None or len(self.focus_yx) == 0:
-				self.status['phase'] = 'seek' #slow mode
+				self.status['phase'] = 'wait' #stop
 			else:
 				cmdQueue.put('f+3')
 				self.phase_wait = 1
@@ -1958,8 +1958,8 @@ class Focuser:
 				self.status['prev_hfr'] = np.median(self.status['v_curve'][-30:-15])
 
 				if (self.status['cur_hfr'] > self.status['start_hfr'] or 
-				    self.status['cur_hfr'] > self.status['min_hfr'] * 2 or
-				    self.status['cur_hfr'] > self.status['min_hfr'] * 1.1 and self.status['cur_hfr'] <= self.status['prev_hfr']):
+				    self.status['cur_hfr'] > max(8, self.status['min_hfr'] * 3) or
+				    self.status['cur_hfr'] > self.status['min_hfr'] * 1.2 and self.status['cur_hfr'] <= self.status['prev_hfr']):
 					self.status['phase'] = 'focus_v'
 					print "v_curve", self.status['v_curve'][::-1]
 
@@ -1970,9 +1970,7 @@ class Focuser:
 
 					self.status['v_curve2'] = []
 
-					cmdQueue.put('f+1')
-			if self.status['phase'] == 'record_v': # not changed
-				cmdQueue.put('f-1')
+			cmdQueue.put('f-1')
 		elif self.status['phase'] == 'focus_v': # go back, record first part of second v curve
 			self.hfr = self.get_hfr(im_sub)
 			if len(self.status['v_curve2']) < self.status['side_len']:
