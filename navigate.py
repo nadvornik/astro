@@ -1996,7 +1996,7 @@ class Focuser:
 			cmdQueue.put('f-1')
 		elif self.status['phase'] == 'focus_v': # go back, record first part of second v curve
 			self.hfr = self.get_hfr(im_sub)
-			if len(self.status['v_curve2']) < self.status['side_len']:
+			if len(self.status['v_curve2']) < self.status['side_len'] and self.hfr > self.status['min_hfr']:
 				self.status['v_curve2'].append(self.hfr)
 				cmdQueue.put('f+1')
 				self.phase_wait = 1
@@ -2004,7 +2004,7 @@ class Focuser:
 				self.status['hyst'], v_curve2_s = Focuser.v_shift(np.array(self.status['v_curve2']), self.status['smooth_size'], self.status['c1'], self.status['m1'])
 				self.status['v_curve2_s'] = v_curve2_s.tolist()
 
-				self.status['remaining_steps'] = round(self.status['xmin'] - self.status['side_len'] - self.status['hyst'])
+				self.status['remaining_steps'] = round(self.status['xmin'] - len(self.status['v_curve2']) - self.status['hyst'])
 				print "remaining", self.status['remaining_steps']
 				self.status['phase'] = 'focus_v2'
 				self.status['v_curve2'].append(self.hfr)
