@@ -139,10 +139,6 @@ class Solver(threading.Thread):
 		prihdr['ANTWEAKO'] = 0
 		prihdr['ANSOLVED'] = tmp_dir + '/field.solved'
 		#prihdr['ANMATCH'] = tmp_dir + '/field.match'
-		prihdr['ANRDLS'] = tmp_dir + '/field.rdls'
-		prihdr['ANWCS'] = tmp_dir + '/field.wcs'
-		if self.field_corr is not None:
-			prihdr['ANCORR'] = tmp_dir + '/field.corr'
 		prihdr['ANCANCEL'] = tmp_dir + '/field.solved'
 		
 		
@@ -168,7 +164,6 @@ class Solver(threading.Thread):
 		
 		prihdu = pyfits.PrimaryHDU(header=prihdr)
 		thdulist = pyfits.HDUList([prihdu, tbhdu])
-		thdulist.writeto(tmp_dir + '/field.axy', clobber=True)
 	
 		if self.radius is not None and self.radius > 0 and self.radius < 5:
 			conf_list = ['conf-all']
@@ -180,8 +175,16 @@ class Solver(threading.Thread):
 		solved = None
 		global engines
 		for conf in conf_list:
+			thdulist[0].header['ANRDLS'] = "%s/field_%s.rdls" % (tmp_dir, conf)
+			thdulist[0].header['ANWCS'] = "%s/field_%s.wcs" % (tmp_dir, conf)
+			if self.field_corr is not None:
+				thdulist[0].header['ANCORR'] = "%s/field_%s.corr" % (tmp_dir, conf)
+
+			axy = "%s/field_%s.axy" % (tmp_dir, conf)
+			thdulist.writeto(axy, clobber=True)
+
 			engine = engines.get(conf)
-			engine.solve(tmp_dir + '/field.axy')
+			engine.solve(axy)
 			self.engines.append(engine)
 		
 		while True:
@@ -193,8 +196,10 @@ class Solver(threading.Thread):
 				break
 			time.sleep(0.1)
 		
-		if os.path.exists(tmp_dir + '/field.wcs'):
-			solved = tmp_dir + '/field'
+		for conf in conf_list:
+			if os.path.exists("%s/field_%s.wcs" % (tmp_dir, conf)):
+				solved = "%s/field_%s" % (tmp_dir, conf)
+				break
 
 		self.cancel_file = None
 
@@ -221,10 +226,11 @@ class Solver(threading.Thread):
 			self.ind_radec.append((l['ra'], l['dec']))
 		
 		if self.field_corr is not None:
-			corr = pyfits.open(solved + '.corr')
-			for l in corr[1].data:
-				self.field_corr.append((l['field_x'], l['field_y'], l['index_x'], l['index_y']))
-		
+			for conf in conf_list:
+				if os.path.exists("%s/field_%s.wcs" % (tmp_dir, conf)):
+					corr = pyfits.open("%s/field_%s.corr" % (tmp_dir, conf))
+					for l in corr[1].data:
+						self.field_corr.append((l['field_x'], l['field_y'], l['index_x'], l['index_y']))
 		
 		shutil.rmtree(tmp_dir)
 		self.solved = True
