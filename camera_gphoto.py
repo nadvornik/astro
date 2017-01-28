@@ -262,10 +262,12 @@ class Camera_gphoto:
 			self.shape = (680, 1024)
 			self.zoom_shape = (800, 768)
 			self.fpshack = 'iso'
+			self.zoom_scale = 3.8
 		elif self.cameramodel == "Canon EOS 7D":
 			self.shape = (704, 1056)
 			self.zoom_shape = (680, 1024)
 	                self.fpshack = 'output'
+	                self.zoom_scale = 5
 
 		
 		
@@ -296,8 +298,12 @@ class Camera_gphoto:
 		self.do_fps_hack()
 	
 		self.zoom = 1
-		self.x = 800
-		self.y = 800
+		self.x = (self.shape[1] * self.zoom_scale - self.zoom_shape[1]) / 2
+		self.y = (self.shape[0] * self.zoom_scale - self.zoom_shape[0]) / 2
+		
+		
+		self.status['zoom_pos'] = [int(v) for v in [ self.x / self.zoom_scale, self.y / self.zoom_scale, (self.x + self.zoom_shape[1]) / self.zoom_scale, (self.y + self.zoom_shape[0]) / self.zoom_scale]]
+		
 		self.set_config_value('eoszoomposition', "%d,%d" % (self.x, self.y))
 		time.sleep(3)
 	
@@ -326,7 +332,7 @@ class Camera_gphoto:
 							
 				#self.x = x * zoom - self.zoom_shape[1] / 2
 				#self.y = y * zoom - self.zoom_shape[0] / 2
-				#self.set_config_value('eoszoomposition', "%d,%d" % (self.x, self.y))
+				self.set_config_value('eoszoomposition', "%d,%d" % (self.x, self.y))
 				self.set_config_value('eoszoom', '5')
 				time.sleep(.2)
 				self.do_fps_hack()
@@ -345,8 +351,19 @@ class Camera_gphoto:
 				while im.shape[0] != self.shape[0] or im.shape[1] != self.shape[1]:
 					print "shape", im.shape, self.shape
 					im, t = self.capture()
-				
+
+			if cmd == "zcenter":
+				self.x = (self.shape[1] * self.zoom_scale - self.zoom_shape[1]) / 2
+				self.y = (self.shape[0] * self.zoom_scale - self.zoom_shape[0]) / 2
 		
+				self.status['zoom_pos'] = [int(v) for v in [ self.x / self.zoom_scale, self.y / self.zoom_scale, (self.x + self.zoom_shape[1]) / self.zoom_scale, (self.y + self.zoom_shape[0]) / self.zoom_scale]]
+
+			if cmd == "zpos":
+				self.x = x * self.zoom_scale - self.zoom_shape[1] / 2
+				self.y = y * self.zoom_scale - self.zoom_shape[0] / 2
+		
+				self.status['zoom_pos'] = [int(v) for v in [ self.x / self.zoom_scale, self.y / self.zoom_scale, (self.x + self.zoom_shape[1]) / self.zoom_scale, (self.y + self.zoom_shape[0]) / self.zoom_scale]]
+
 			if cmd == 'left':
 				self.x = max(100, self.x - 100)
 				self.set_config_value('eoszoomposition', "%d,%d" % (self.x, self.y))

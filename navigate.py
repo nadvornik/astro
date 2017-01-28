@@ -886,17 +886,37 @@ class Navigator:
 		status = "#%d %s %s  solv#%d r:%.1f fps:%.1f hp:%d" % (i, self.status['dispmode'], self.mount.polar.mode, i - self.status['i_solver'], self.status['radius'], fps, n_hotpixels)
 		if (self.status['dispmode'] == 'disp-orig'):
 			disp = normalize(im)
+
+			try:
+				zp = self.status['camera']['zoom_pos']
+				cv2.rectangle(disp, (zp[0], zp[1]), (zp[2], zp[3]), (200), 1)
+			except:
+				pass
+
 			cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
 			ui.imshow(self.tid, disp)
 		elif (self.status['dispmode'] == 'disp-df-cor'):
 			disp = normalize(im_sub)
 			
+			try:
+				zp = self.status['camera']['zoom_pos']
+				cv2.rectangle(disp, (zp[0], zp[1]), (zp[2], zp[3]), (200), 1)
+			except:
+				pass
+
 			cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
 			ui.imshow(self.tid, disp)
 		elif (self.status['dispmode'] == 'disp-normal'):
 			disp = normalize(filtered)
 			for p in self.stack.get_xy():
 				cv2.circle(disp, (int(p[1] + 0.5), int(p[0] + 0.5)), 13, (255), 1)
+			
+			try:
+				zp = self.status['camera']['zoom_pos']
+				cv2.rectangle(disp, (zp[0], zp[1]), (zp[2], zp[3]), (200), 1)
+			except:
+				pass
+			
 			if self.plotter is not None:
 		
 				extra_lines = []
@@ -2314,14 +2334,6 @@ class Runner(threading.Thread):
 				elif cmd == 'z1':
 					if self.zoom_focuser is not None:
 						self.zoom_focuser.reset()
-						#try:
-						#	if mode == 'navigator':
-						#		(maxy, maxx, maxv) = self.navigator.stack.get_xy()[0]
-						#	elif mode == 'focuser':
-						#		(maxy, maxx, maxv) = self.focuser.stack.get_xy()[0]
-						#except:
-						#	maxx = 300
-						#	maxy = 300
 						self.camera.cmd(cmd)
 						mode = 'zoom_focuser'
 				elif cmd == 'z0':
@@ -2330,6 +2342,28 @@ class Runner(threading.Thread):
 						mode = 'navigator'
 					elif mode == 'focuser':
 						mode = 'navigator'
+				elif cmd == 'zcenter':
+					if self.zoom_focuser is not None:
+						self.camera.cmd(cmd)
+				elif cmd == 'zpos':
+					if self.zoom_focuser is not None:
+						pts = []
+						try:
+							
+							if mode == 'navigator':
+								pts = self.navigator.stack.get_xy()
+							elif mode == 'focuser':
+								pts = self.focuser.stack.get_xy()
+							print pts
+							if len(pts) > 0:
+								i = random.randint(0,len(pts) - 1)
+								(maxy, maxx, maxv) = pts[i]
+								self.camera.cmd(cmd, maxx, maxy)
+							else:
+								self.camera.cmd('zcenter')
+						except:
+							pass
+							
 				elif (cmd == 'af' or cmd == 'af_fast') and mode != 'zoom_focuser' and self.focuser is not None:
 					#if mode == 'navigator':
 					#	self.focuser.set_xy_from_stack(self.navigator.stack)
