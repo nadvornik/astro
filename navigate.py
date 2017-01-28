@@ -1164,6 +1164,7 @@ class GuiderAlg(object):
 		self.status['t_delay'] = t_delay
 		self.last_move = 0
 		self.corr = 0
+		self.status['restart'] = False
 
 	
 	def get_corr_delay(self, t_proc):
@@ -1202,6 +1203,11 @@ class GuiderAlgDec(GuiderAlg):
 		
 		corr = corr1 + self.corr_acc
 
+		if self.status['restart']:
+			print "dec err %f, corr1 %f, corr_acc %f, corr %f, restart" % (err, corr1, self.corr_acc, corr)
+			self.status['restart'] = False
+			return corr
+			
 		if corr > 0 and self.last_move < 0 and corr < self.status['rev_move']:
 			corr = 0
 		elif corr < 0 and self.last_move > 0 and corr > -self.status['rev_move']:
@@ -1315,6 +1321,9 @@ class Guider:
 				self.pt0[:, 1] += dither_off.imag
 			except:
 				pass
+			
+			self.status['dec_alg']['restart'] = True
+			
 			if self.full_res is not None:
 				if len(self.status['curr_ra_err_list' ]) > 0:
 					self.full_res['ra_err_list' ].append(np.mean(np.array(self.status['curr_ra_err_list' ]) ** 2) ** 0.5)

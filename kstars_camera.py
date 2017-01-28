@@ -63,7 +63,7 @@ class Camera_test_kstars:
 	def capture(self):
 		
 		self.e_ra = 70 + np.random.normal(0, 0.002) + 0.001 * (time.time() - self.t0) + np.sin((time.time() - self.t0) / 3.0) * 0.002
-		self.e_dec = 65 + np.random.normal(0, 0.002) + 0.0005 * (time.time() - self.t0)
+		self.e_dec = 65 + np.random.normal(0, 0.002) - 0.0005 * (time.time() - self.t0)
 		
 		ra = -(self.go_ra.recent_avg() - self.go_ra.recent_avg(0.001)) / 3600.0 * 60.0  + self.e_ra
 		dec = (self.go_dec.recent_avg() - self.go_dec.recent_avg(0.001)) / 3600.0 * 60.0  + self.e_dec
