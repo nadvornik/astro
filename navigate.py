@@ -2001,6 +2001,12 @@ class Focuser:
 				    self.status['cur_hfr'] > max(8, self.status['min_hfr'] * 3) or
 				    self.status['cur_hfr'] > self.status['min_hfr'] * 1.2 and self.status['cur_hfr'] <= self.status['prev_hfr']):
 					self.status['phase'] = 'focus_v'
+					for i in range(0, len(self.status['v_curve']) - 16):
+						start_hfr = np.median(self.status['v_curve'][i:i+15])
+						if start_hfr < self.status['cur_hfr']:
+							self.status['v_curve'] = self.status['v_curve'][i:]
+							break
+					
 					print "v_curve", self.status['v_curve'][::-1]
 
 					self.status['v_curve'] = self.status['v_curve'][::-1] # reverse
