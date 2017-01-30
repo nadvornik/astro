@@ -411,7 +411,20 @@ class Plotter:
 
 		return plot_image
 
+def scale_wcs(wcs, shape):
+	new_w, new_h = shape
+	w = wcs.get_width()
+	h = wcs.get_height()
+	
+	ra, dec = wcs.radec_center()
+	(crpix1, crpix2) = wcs.crpix
+	cd11, cd12, cd21, cd22 = wcs.cd
 
+	new_wcs = Tan(*[float(x) for x in [
+		ra, dec, crpix1 * new_w / w, crpix2 * new_h / h,
+		cd11 * w / new_w, cd12 * w / new_w, cd21 * h / new_h, cd22 * h / new_h, new_w, new_h,
+	]])
+	return new_wcs
 
 if __name__ == "__main__":
 	img = cv2.imread("field.tif")

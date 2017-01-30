@@ -15,7 +15,7 @@ from time import sleep
 import bisect
 import subprocess
 
-from am import Solver, Plotter
+from am import Solver, Plotter, scale_wcs
 from polar import Polar
 
 import sys
@@ -698,6 +698,7 @@ class Navigator:
 		self.status = status
 		self.dark = dark
 		self.stack = Stack()
+		self.solvedlock = threading.Lock()
 		self.solver = None
 		self.solver_off = np.array([0.0, 0.0])
 		self.status.setdefault("dispmode", 'disp-normal')
@@ -748,6 +749,7 @@ class Navigator:
 		if self.full_res is not None:
 			self.full_res['full_hfr'] = []
 		self.status.setdefault('go_by', 0.1)
+		self.im = None
 
 
 	def hotpix_find(self):
@@ -814,28 +816,26 @@ class Navigator:
 			self.solver.join()
 			if self.solver.solved:
 				save_conf = self.status['field_deg'] is None
-					
-				self.status['ra'] = self.solver.ra
-				self.status['dec'] = self.solver.dec
-				self.status['field_deg'] = self.solver.field_deg
-				self.status['radius'] = self.status['field_deg']
-				self.wcs = self.solver.wcs
+				with self.solvedlock:
+					self.status['ra'] = self.solver.ra
+					self.status['dec'] = self.solver.dec
+					self.status['field_deg'] = self.solver.field_deg
+					self.status['radius'] = self.status['field_deg']
+					self.wcs = self.solver.wcs
 			
-				if i - self.i_dark > 12:
-					self.dark.add_masked(self.solved_im, self.solver.ind_sources)
-					self.i_dark = i
+					if i - self.i_dark > 12:
+						self.dark.add_masked(self.solved_im, self.solver.ind_sources)
+						self.i_dark = i
 				
-				self.index_sources = self.solver.ind_radec
-				self.plotter = Plotter(self.wcs)
-				self.plotter_off = self.solver_off
-				self.status['i_solved'] = self.status['i_solver']
-				self.status['t_solved'] = self.status['t_solver']
-				#print "self.solver.ind_radec", self.solver.ind_radec
-				#self.solver.wcs.write_to("log_%d.wcs" % self.ii)
-				#subprocess.call(['touch', '-r', "testimg17_" + str(i) + ".tif", "log_%d.wcs" % self.ii])
-				self.mount.set_pos_tan(self.wcs, self.status['t_solver'], self.tid)
-				if self.mount.polar.mode == 'solve':
-					self.mount.polar.set_pos_tan(self.wcs, self.status['t_solver'], self.tid)
+					self.index_sources = self.solver.ind_radec
+					self.plotter = Plotter(self.wcs)
+					self.plotter_off = self.solver_off
+					self.status['i_solved'] = self.status['i_solver']
+					self.status['t_solved'] = self.status['t_solver']
+					self.mount.set_pos_tan(self.wcs, self.status['t_solver'], self.tid)
+					if self.mount.polar.mode == 'solve':
+						self.mount.polar.set_pos_tan(self.wcs, self.status['t_solver'], self.tid)
+				
 				if self.polar_tid is not None:
 					self.mount.polar.solve()
 				if save_conf:
@@ -1040,7 +1040,7 @@ class Navigator:
 		im = cv2.min(cv2.min(im_c[:, :, 0], im_c[:, :, 1]), im_c[:, :, 2])
 		im = apply_gamma8(im, 2.2)
 
-		pts = find_max(im, 12, 100)
+		pts = find_max(im, 12, 200)
 		w = im.shape[1]
 		h = im.shape[0]
 		
@@ -1054,11 +1054,19 @@ class Navigator:
 		solver.join()
 		if solver.solved:
 			print "full-res solved:", solver.ra, solver.dec
-			self.status['ra'] = solver.ra
-			self.status['dec'] = solver.dec
-			self.status['field_deg'] = solver.field_deg
-			self.status['radius'] = solver.field_deg
-			self.mount.polar.set_pos_tan(solver.wcs, t, "full-res")
+			with self.solvedlock:
+				self.status['ra'] = solver.ra
+				self.status['dec'] = solver.dec
+				self.status['field_deg'] = solver.field_deg
+				self.status['radius'] = solver.field_deg
+				self.mount.polar.set_pos_tan(solver.wcs, t, "full-res")
+				
+				if self.im is not None:
+					self.wcs = scale_wcs(solver.wcs, (self.im.shape[1], self.im.shape[0]))
+					self.plotter_off = np.array([0.0, 0.0])
+					self.plotter = Plotter(self.wcs)
+					self.mount.set_pos_tan(self.wcs, t, self.tid)
+
 
 			if (self.status['dispmode'].startswith('disp-zoom-')):
 				zoom = self.status['dispmode'][len('disp-zoom-'):]
@@ -2945,6 +2953,47 @@ def run_calibrate_v4l2_g():
 
 	cmdQueue.put('exit')
 
+def run_test_full_res():
+	from kstars_camera import Camera_test_kstars, Camera_test_kstars_g
+	global status
+	status = Status("run_test_2.conf")
+	ui.namedWindow('navigator')
+	ui.namedWindow('guider')
+	ui.namedWindow('polar')
+	ui.namedWindow('full_res')
+
+        polar = Polar(status.path(["polar"]), ['navigator', 'guider', 'full-res'])
+
+	go_ra = GuideOut("./guide_out_ra")
+	go_dec = GuideOut("./guide_out_dec")
+
+        mount = Mount(status.path(["mount"]), polar, go_ra, go_dec)
+
+	dark1 = Median(5)
+	dark2 = Median(5)
+
+	fo = FocuserOut()
+	cam1 = Camera_test_kstars(status.path(["navigator", "camera"]), go_ra, go_dec, fo)
+	nav1 = Navigator(status.path(["navigator"]), dark1, mount, 'navigator', polar_tid = 'polar', full_res = status.path(["full_res"]))
+
+	nav = Navigator(status.path(["guider", "navigator"]), dark2, mount, 'guider')
+
+	guider = Guider(status.path(["guider"]), mount, dark2, 'guider', full_res = status.path(["full_res"]))
+	#cam = Camera_test(status.path(["guider", "navigator", "camera"]))
+	cam = Camera_test_kstars_g(status.path(["guider", "navigator", "camera"]), cam1)
+
+
+	focuser = Focuser('navigator', status.path(["navigator", "focuser"]), dark = dark1)
+	zoom_focuser = Focuser('navigator', status.path(["navigator", "focuser"]))
+	
+	for i in range(3778, 3840):
+		tmpFile = io.BytesIO()
+		pil_image = Image.open('../af2/IMG_%d.JPG' % i)
+		pil_image.save(tmpFile,'JPEG')
+		file_data = tmpFile.getvalue()
+		nav1.proc_full_res(file_data)
+		time.sleep(1)
+
 if __name__ == "__main__":
 	os.environ["LC_NUMERIC"] = "C"
 
@@ -2966,6 +3015,7 @@ if __name__ == "__main__":
 	#run_test_g()
 	#run_2()
 	#run_test()
+	#run_test_full_res()
 
 
 
