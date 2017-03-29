@@ -1,6 +1,6 @@
 import cv2
 import numpy as np
-
+#from scipy.optimize import curve_fit
 
 
 
@@ -11,8 +11,9 @@ def centroid(a):
 	if key not in centroid_mat_cache:
 		x = np.arange(0, w, dtype = np.float32) - w / 2.0 + 0.5
 		y = np.arange(0, h, dtype = np.float32) - h / 2.0 + 0.5
+		mask = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (w, h))
 		centroid_mat_x, centroid_mat_y = np.meshgrid(x, y)
-		centroid_mat_cache[key] = (centroid_mat_x, centroid_mat_y)
+		centroid_mat_cache[key] = (centroid_mat_x * mask, centroid_mat_y * mask)
 	else:
 		(centroid_mat_x, centroid_mat_y) = centroid_mat_cache[key]
 		
@@ -90,6 +91,56 @@ def hfr(a, sub_bg = False):
 	r = cv2.sumElems(cv2.multiply(a,  mat, dtype=cv2.CV_32FC1))[0] / s
 	return r
 
+ell_mat_cache = {}
+def fit_ellipse(a):
+	h, w = a.shape
+	key = "%d %d" % a.shape
+	if key not in ell_mat_cache:
+		x = np.arange(0, w, dtype = np.float32) - w / 2.0 + 0.5
+		y = np.arange(0, h, dtype = np.float32) - h / 2.0 + 0.5
+		mask = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (w, h))
+		ell_mat_x, ell_mat_y = np.meshgrid(x, y)
+		ell_mat_x2 = ell_mat_x ** 2
+		ell_mat_y2 = ell_mat_y ** 2
+		ell_mat_xy = ell_mat_x * ell_mat_y
+		ell_mat_cache[key] = (ell_mat_x2 * mask, ell_mat_y2 * mask, ell_mat_xy * mask)
+	else:
+		(ell_mat_x2, ell_mat_y2, ell_mat_xy) = ell_mat_cache[key]
+		
+	s = np.sum(a)
+	if s == 0.0:
+		return 0, 0
+	vx = cv2.sumElems(cv2.multiply(a, ell_mat_x2, dtype=cv2.CV_32FC1))[0] / s
+	vy = cv2.sumElems(cv2.multiply(a, ell_mat_y2, dtype=cv2.CV_32FC1))[0] / s
+	cov = -cv2.sumElems(cv2.multiply(a, ell_mat_xy, dtype=cv2.CV_32FC1))[0] / s
+	covmat = np.array([[vx, cov], [cov, vy]])
+	w, v = np.linalg.eig(covmat)
+	w **= 0.5
+	return w, v
+
+
+def gaussian2d((y, x), my, mx, sig, mag, shift):
+	r2 = (x - mx) ** 2 + (y - my) ** 2
+	return (np.exp(-r2 / (2 * sig * sig)) * mag + shift)
+
+#def get_fwhm(a):
+#	x0 = np.arange(a.shape[1])
+#	y0 = np.arange(a.shape[0])
+#	y, x = np.meshgrid(y0, x0)
+#	yx = (y.ravel(), x.ravel())
+#	z = a.ravel()
+#	mx = a.shape[1] / 2.0
+#	my = a.shape[0] / 2.0
+#
+#	shift = np.amin(z)
+#	mag = np.amax(z) - shift
+#	#print yx
+#	try:
+#		popt, pcov = curve_fit(gaussian2d, yx, z, p0 = [my, mx, 1, mag, shift], bounds = ([my - 3, mx - 3, 0, 0, 0], [my + 3, mx + 3, np.inf, np.inf, np.inf]))
+#		print popt
+#		return popt[2] * 2.355
+#	except:
+#		return 1.0
 
 if __name__ == "__main__":
 
@@ -106,3 +157,5 @@ if __name__ == "__main__":
 	print sym_center(I)
 	print centroid(I)
 	print hfr(I)
+	#print fwhm(I)
+	

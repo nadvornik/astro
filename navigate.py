@@ -41,7 +41,7 @@ import json
 from PIL import Image;
 
 from focuser_out import FocuserOut
-from centroid import centroid, sym_center, hfr
+from centroid import centroid, sym_center, hfr, fit_ellipse
 from polyfit import *
 from quat import Quaternion
 
@@ -543,8 +543,8 @@ def pt_transform_opt(pt1m, pt2m, noise = 2, pt_func = pt_translation):
 	m = pt_func(pt1, pt2, weights)
 	
 	return m, weights
-	
-def get_hfr_list(im, pts, hfr_size = 20, sub_bg = False):
+
+def get_hfr_field(im, pts, hfr_size = 20, sub_bg = False):
 	cur_hfr = hfr_size
 	(h, w) = im.shape
 		
@@ -564,21 +564,46 @@ def get_hfr_list(im, pts, hfr_size = 20, sub_bg = False):
 			if (iy > h - hfr_size - 1):
 				continue
 
-			hfr_list.append( hfr(im[iy - hfr_size : iy + hfr_size + 1, ix - hfr_size : ix + hfr_size + 1], sub_bg) )
+			hf = hfr(im[iy - hfr_size : iy + hfr_size + 1, ix - hfr_size : ix + hfr_size + 1], sub_bg)
+			if hf < 0.6:
+				continue
+
+			hfr_list.append((y, x, hf) )
+
+	if len(hfr_list) == 0:
+		hfr_list.append((h / 2, w / 2, hfr_size) )
+	return hfr_list
+
+def filter_hfr_list(hfr_list):
+	hfr_list = np.array(hfr_list)
+	if len(hfr_list) < 3:
+		return hfr_list
+
+	for deg, kappa in enumerate([3, 2, 2]):
+		A = np.polynomial.polynomial.polyvander2d(hfr_list[:, 0], hfr_list[:, 1], (deg, deg))[:, np.where(np.flipud(np.tri(deg + 1)).ravel())[0]]
+		#print A
+	
+		for i in range(4):
+			coef = np.linalg.lstsq(A, hfr_list[:, 2])[0]
+	
+			cur_hfr = np.dot(A, coef)
+			cur_hfr[np.where(cur_hfr < 1)] = 1
+			d2 = (hfr_list[:,2] - cur_hfr) ** 2 / cur_hfr**2
+			var = np.average(d2)
+			keep = np.where(d2 <= var * kappa**2 + 0.001)
+			hfr_list = hfr_list[keep]
+			A = A[keep]
+	return hfr_list
+
+	
+def get_hfr_list(im, pts, hfr_size = 20, sub_bg = False):
+	hfr_list = get_hfr_field(im, pts, hfr_size, sub_bg)
 
 	if len(hfr_list) == 0:
 		return hfr_size
 
-	#print "hfr_list", hfr_list
-	hfr_list = np.array(hfr_list)
-	cur_hfr = np.median(hfr_list)
-	for i in range(10):
-		d2 = (hfr_list - cur_hfr) ** 2
-		var = np.average(d2)
-		noise = 2
-		hfr_list = hfr_list[np.where(d2 <= var * noise**2 + 0.001)]
-		cur_hfr = np.average(hfr_list)
-		#print "hfr_list_filt", hfr_list
+	hfr_list = filter_hfr_list(hfr_list)
+	cur_hfr = np.average(hfr_list[:,2])
 	return cur_hfr
 
 
@@ -1037,16 +1062,38 @@ class Navigator:
 		pil_image = Image.open(io.BytesIO(jpg))
 		im_c = np.array(pil_image)
 		del pil_image
-		im = cv2.min(cv2.min(im_c[:, :, 0], im_c[:, :, 1]), im_c[:, :, 2])
+		#mean, stddev = cv2.meanStdDev(im_c)
+		#im_c[:,:,0] = cv2.subtract(im_c[:,:,0], mean[0])
+		#im_c[:,:,1] = cv2.subtract(im_c[:,:,1], mean[1])
+		#im_c[:,:,2] = cv2.subtract(im_c[:,:,2], mean[2])
+		bg = cv2.erode(im_c, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (20,20)))
+		bg = cv2.blur(bg, (100,100))
+		bg = cv2.blur(bg, (100,100))
+		bg = cv2.blur(bg, (100,100))
+		im_c = cv2.subtract(im_c, bg)
+		del bg
+		
+		im = cv2.cvtColor(im_c, cv2.COLOR_RGB2GRAY);
+		
 		im = apply_gamma8(im, 2.2)
-
-		pts = find_max(im, 12, 200)
+		pts = find_max(im, 12, 300)
 		w = im.shape[1]
 		h = im.shape[0]
 		
-		full_hfr = get_hfr_list(im, pts, sub_bg = True)
+		hfr_list = get_hfr_field(im, pts, sub_bg = True)
+		hfr_list = filter_hfr_list(hfr_list)
+		
+		full_hfr = np.mean(hfr_list[:,2])
+		
 		if self.full_res is not None:
 			self.full_res['full_hfr'].append(full_hfr)
+		
+		ell_list = []
+		for p in hfr_list:
+			patch_size = int(p[2] * 4 + 2)
+			a = cv2.getRectSubPix(im, (patch_size, patch_size), (p[1] - 0.5, p[0] - 0.5), patchType=cv2.CV_32FC1)
+			ell_list.append(fit_ellipse(a))
+				
 		del im
 
 		solver = Solver(sources_list = pts, field_w = w, field_h = h, ra = self.status['ra'], dec = self.status['dec'], field_deg = self.status['field_deg'], radius = 100)
@@ -1075,12 +1122,39 @@ class Navigator:
 			
 			im_c = cv2.normalize(im_c,  im_c, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8UC3)
 			im_c = apply_gamma8(im_c, 0.6)
+			
+			for i, p in enumerate(hfr_list):
+				val, vec = ell_list[i]
+				#fwhm = get_fwhm(a)
+				#print "fwhm", fwhm, p[2]
+				cv2.circle(im_c, (int(p[1]), int(p[0])), int(p[2] * 10), (100,100,100), 2)
+				#cv2.circle(im_c, (int(p[1]), int(p[0])), int(fwhm * 10), (255,255,255), 2)
+				if val[0] > val[1]:
+					v = val[0] * 10
+					vec = vec[0]
+					v2 = val[1] * 10
+				else:
+					v = val[1] * 10
+					vec = vec[1]
+					v2 = val[0] * 10
+		
+				v += (v - v2) * 5
+		
+				p11 = (p[1], p[0]) - vec * v
+				p12 = (p[1], p[0]) - vec * v2
+				p13 = (p[1], p[0]) + vec * v
+				p14 = (p[1], p[0]) + vec * v2
+				cv2.line(im_c, (int(p11[0]), int(p11[1])), (int(p12[0]), int(p12[1])), (255,0,0), 2)
+				cv2.line(im_c, (int(p13[0]), int(p13[1])), (int(p14[0]), int(p14[1])), (255,0,0), 2)
+
+			
 			plotter=Plotter(solver.wcs)
 			plot = plotter.plot(im_c, scale = zoom)
 			ui.imshow('full_res', plot)
 
 		else:
 			print "full-res not solved"
+	
 	def get_xy_cor(self):
 		xy = self.stack.get_xy()
 		if self.field_corr is not None:
@@ -2992,13 +3066,20 @@ def run_test_full_res():
 	focuser = Focuser('navigator', status.path(["navigator", "focuser"]), dark = dark1)
 	zoom_focuser = Focuser('navigator', status.path(["navigator", "focuser"]))
 	
-	for i in range(3778, 3840):
+	profiler = LineProfiler()
+	profiler.add_function(Navigator.proc_full_res)
+	profiler.enable_by_count()
+		
+	for i in range(4007, 4046):
 		tmpFile = io.BytesIO()
-		pil_image = Image.open('../af2/IMG_%d.JPG' % i)
+		pil_image = Image.open('../af3/IMG_%d.JPG' % i)
 		pil_image.save(tmpFile,'JPEG')
 		file_data = tmpFile.getvalue()
 		nav1.proc_full_res(file_data)
 		time.sleep(1)
+	
+	profiler.print_stats()
+					
 
 if __name__ == "__main__":
 	os.environ["LC_NUMERIC"] = "C"
