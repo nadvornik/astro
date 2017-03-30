@@ -139,52 +139,64 @@ class Camera:
 
 
     def prepare(self, width, height, format = V4L2_PIX_FMT_SBGGR16):
+	self.w = width
+	self.h = height
 
 	for i in range(0, 20):
 		if self._prepare(width, height, format):
 			break
 		print "camera init failed, retry %d" % i
 		time.sleep(1)
+	if self.vd is None:
+		return False
 
-	# longest manual exposure available via uvc driver
-	self.control(V4L2_CID_EXPOSURE_AUTO, V4L2_EXPOSURE_MANUAL)
-	self.control(V4L2_CID_EXPOSURE_ABSOLUTE, 5000)
+	try:
+		# longest manual exposure available via uvc driver
+		self.control(V4L2_CID_EXPOSURE_AUTO, V4L2_EXPOSURE_MANUAL)
+		self.control(V4L2_CID_EXPOSURE_ABSOLUTE, 5000)
+		
+	except: 
+		pass
 
 #######################################################################
         time.sleep(0.2)
 	
-	if (self.fmt == V4L2_PIX_FMT_SBGGR16):
-		# the registers seems to be similar to gspca/sn9c20x.c driver
-		# but the actual addresses are different.
-		#
-		# this register changed it's value between mjpeg and yuv
-		# so I tried other values ...
-		# this one worked:
-		sonix_write_asic(self.vd, 0x1100, 0xff) # switch to raw mode
+	try:
+		if (self.fmt == V4L2_PIX_FMT_SBGGR16):
+			# the registers seems to be similar to gspca/sn9c20x.c driver
+			# but the actual addresses are different.
+			#
+			# this register changed it's value between mjpeg and yuv
+			# so I tried other values ...
+			# this one worked:
+			sonix_write_asic(self.vd, 0x1100, 0xff) # switch to raw mode
 
-        time.sleep(0.2)
+	        time.sleep(0.2)
         
-        # modify sensor registers
-        # AR0130 Register Reference
-        # http://www.onsemi.com/pub_link/Collateral/AND9214-D.PDF
-#        sonix_write_sensor(self.vd, 0x3070, 3) #test pattern
+	        # modify sensor registers
+	        # AR0130 Register Reference
+	        # http://www.onsemi.com/pub_link/Collateral/AND9214-D.PDF
+	#        sonix_write_sensor(self.vd, 0x3070, 3) #test pattern
+	
+	        sonix_write_sensor(self.vd, 0x305e, 0xffff) # digital gain
+	        sonix_write_sensor(self.vd, 0x30b0, 0x1030) # analog gain
 
-        sonix_write_sensor(self.vd, 0x305e, 0xffff) # digital gain
-        sonix_write_sensor(self.vd, 0x30b0, 0x1030) # analog gain
-
-        #sonix_write_sensor(self.vd, 0x30ea, 0x8c00) #disable black level compensation
-        #sonix_write_sensor(self.vd, 0x3044, 0x0000) #disable row noise compensation
-        sonix_write_sensor(self.vd, 0x3012, int(0x2400 * self.status['exp-sec'])) #exposure time coarse
+	        #sonix_write_sensor(self.vd, 0x30ea, 0x8c00) #disable black level compensation
+	        #sonix_write_sensor(self.vd, 0x3044, 0x0000) #disable row noise compensation
+	        sonix_write_sensor(self.vd, 0x3012, int(0x2400 * self.status['exp-sec'])) #exposure time coarse
+	except:
+		pass
         
         # skip incorrectly set  frames at the beginning
         self.capture()
         self.capture()
 	self.capture()
+	return True
 	
 #######################################################################
 
 
-    def capture(self):
+    def _capture(self):
         ready_to_read, ready_to_write, in_error = ([], [], [])
         while len(ready_to_read) == 0:
             try:
@@ -219,10 +231,25 @@ class Camera:
         fcntl.ioctl(self.vd, VIDIOC_S_CTRL, control)
         time.sleep(0.01)
 
+
+    def capture(self):
+    	for i in range(0, 20):
+    		try:
+    			return self._capture()
+    		except:
+    			self.shutdown()
+    			self.prepare(self.w, self.h)
+
+
     def cmd(self, cmd):
-	if cmd.startswith('exp-sec-'):
-		self.status['exp-sec'] = float(cmd[len('exp-sec-'):])
-	        sonix_write_sensor(self.vd, 0x3012, int(0x2400 * self.status['exp-sec'])) #exposure time coarse
+    	try:
+		if cmd.startswith('exp-sec-'):
+			exp_sec = float(cmd[len('exp-sec-'):])
+			sonix_write_sensor(self.vd, 0x3012, int(0x2400 * exp_sec)) #exposure time coarse
+			self.status['exp-sec'] = exp_sec
+	except:
+		self.shutdown()
+		self.prepare(self.w, self.h)
 
     def shutdown(self):
 	if self.vd is not None:
