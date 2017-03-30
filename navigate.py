@@ -1154,6 +1154,8 @@ class Navigator:
 
 		else:
 			print "full-res not solved"
+		cmdQueue.put('capture-full-res-done')
+		
 	
 	def get_xy_cor(self):
 		xy = self.stack.get_xy()
@@ -1365,7 +1367,11 @@ class Guider:
 		self.pt0 = []
 		self.pt0base = []
 		self.ok = False
-		self.capture_in_progress = False
+		self.capture_in_progress = 0
+		self.capture_proc_in_progress = 0
+		self.capture_init = False
+		
+		
 		self.i0 = 0
 		self.dither = complex(0, 0)
 
@@ -1392,33 +1398,47 @@ class Guider:
 			
 
 		elif cmd == "capture-started":
-			self.capture_in_progress = True
+			self.capture_in_progress += 1
+			self.capture_proc_in_progress += 1
+			self.capture_init = False
+
 		elif cmd == "capture-finished":
-			self.capture_in_progress = False
-			try:
-				self.dither = complex((self.dither.real + 11) % 37, 0)
-				dither_off = self.dither * self.ref_off
-				self.pt0 = np.array(self.pt0base, copy=True)
-				self.pt0[:, 0] += dither_off.real
-				self.pt0[:, 1] += dither_off.imag
-			except:
-				pass
+			self.capture_in_progress -= 1
+			if self.capture_in_progress < 0:
+				self.capture_in_progress = 0
+				print "capture_in_progress negative"
+		
+			if self.capture_in_progress == 0:
+				try:
+					self.dither = complex((self.dither.real + 11) % 37, 0)
+					dither_off = self.dither * self.ref_off
+					self.pt0 = np.array(self.pt0base, copy=True)
+					self.pt0[:, 0] += dither_off.real
+					self.pt0[:, 1] += dither_off.imag
+				except:
+					pass
+				
+				self.status['dec_alg']['restart'] = True
+				
+				if self.full_res is not None:
+					if len(self.status['curr_ra_err_list' ]) > 0:
+						self.full_res['ra_err_list' ].append(np.mean(np.array(self.status['curr_ra_err_list' ]) ** 2) ** 0.5)
+					else:
+						self.full_res['ra_err_list' ].append(0.0)
+					if len(self.status['curr_dec_err_list']) > 0:
+						self.full_res['dec_err_list'].append(np.mean(np.array(self.status['curr_dec_err_list']) ** 2) ** 0.5)
+					else:
+						self.full_res['dec_err_list'].append(0.0)
+					if len(self.status['curr_hfr_list']) > 0:
+						self.full_res['guider_hfr'].append(np.mean(self.status['curr_hfr_list']))
+					else:
+						self.full_res['guider_hfr'].append(0.0)
 			
-			self.status['dec_alg']['restart'] = True
-			
-			if self.full_res is not None:
-				if len(self.status['curr_ra_err_list' ]) > 0:
-					self.full_res['ra_err_list' ].append(np.mean(np.array(self.status['curr_ra_err_list' ]) ** 2) ** 0.5)
-				else:
-					self.full_res['ra_err_list' ].append(0.0)
-				if len(self.status['curr_dec_err_list']) > 0:
-					self.full_res['dec_err_list'].append(np.mean(np.array(self.status['curr_dec_err_list']) ** 2) ** 0.5)
-				else:
-					self.full_res['dec_err_list'].append(0.0)
-				if len(self.status['curr_hfr_list']) > 0:
-					self.full_res['guider_hfr'].append(np.mean(self.status['curr_hfr_list']))
-				else:
-					self.full_res['guider_hfr'].append(0.0)
+		elif cmd == "capture-full-res-done":
+			self.capture_proc_in_progress -= 1
+			if self.capture_proc_in_progress < 0:
+				self.capture_proc_in_progress = 0
+				print "capture_proc_in_progress negative"
 		
 		elif cmd.startswith('ra-') or cmd.startswith('dec-'):
 			try:
@@ -1707,17 +1727,19 @@ class Guider:
 				if self.parity != 0:
 					self.ok = (self.ok and err.imag < 1.5 and err.imag > -1.5)
 					
-				if not self.capture_in_progress and (self.status['seq'] == 'seq-guided' and self.ok or self.status['seq'] == 'seq-unguided'):
+				if not self.capture_init and self.capture_proc_in_progress == 0 and (self.status['seq'] == 'seq-guided' and self.ok or self.status['seq'] == 'seq-unguided'):
 					cmdQueue.put('capture')
-					self.capture_in_progress = True
+					self.capture_init = True
 					self.status['curr_ra_err_list'] = []
 					self.status['curr_dec_err_list'] = []
 					self.status['curr_hfr_list'] = []
 				
-				if self.capture_in_progress or True:
+				if self.capture_in_progress > 0:
 					self.status['curr_ra_err_list'].append(err.real)
 					self.status['curr_dec_err_list'].append(err.imag)
 					self.status['curr_hfr_list'].append(get_hfr_list(im_sub, pt))
+				
+				print "capture", self.capture_init, self.capture_in_progress, self.capture_proc_in_progress
 				
 				if self.ok:
 					self.status['mode'] = 'close'
@@ -2374,6 +2396,7 @@ class Runner(threading.Thread):
 		self.guider = guider
 		self.zoom_focuser = zoom_focuser
 		self.focuser = focuser
+		self.capture_in_progress = False
 		
 	def run(self):
 		profiler = LineProfiler()
@@ -2480,13 +2503,17 @@ class Runner(threading.Thread):
 						self.camera.cmd('z0')
 						mode = 'navigator'
 
-					cmdQueue.put('capture-started')
 					try:
-						self.camera.capture_bulb(test=(cmd == 'test-capture'), callback = self.capture_cb)
+						self.camera.capture_bulb(test=(cmd == 'test-capture'), callback_start = self.capture_start_cb, callback_end = self.capture_end_cb)
 					except AttributeError:
 						pass
 					except:
 						print "Unexpected error: " + sys.exc_info().__str__()
+					
+					if self.capture_in_progress:
+						cmdQueue.put('capture-finished')
+						cmdQueue.put('capture-full-res-done')
+						self.capture_in_progress = False
 
 					break
 				else:
@@ -2520,10 +2547,18 @@ class Runner(threading.Thread):
 		cmdQueue.put('exit')
 		self.camera.shutdown()
 	
-	def capture_cb(self, jpg):
+	def capture_start_cb(self):
+		cmdQueue.put('capture-started')
+		self.capture_in_progress = True
+	
+	def capture_end_cb(self, jpg):
+		self.capture_in_progress = False
 		cmdQueue.put('capture-finished')
-		ui.imshow_jpg("full_res", jpg)
-		threading.Thread(target=self.navigator.proc_full_res, args = [jpg] ).start()
+		if jpg is not None:
+			ui.imshow_jpg("full_res", jpg)
+			threading.Thread(target=self.navigator.proc_full_res, args = [jpg] ).start()
+		else:
+			cmdQueue.put('capture-full-res-done')
 
 def main_loop():
 	global status

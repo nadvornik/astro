@@ -89,7 +89,10 @@ class Camera_test_kstars:
 		return im, time.time()
 
 
-	def capture_bulb(self, test = False, callback = None):
+	def capture_bulb(self, test = False, callback_start = None, callback_end = None):
+
+		if callback_start is not None:
+			callback_start()
 		if test:
 			sec = self.status['test-exp-sec']
 		else:
@@ -102,14 +105,14 @@ class Camera_test_kstars:
 		self.status['exp_in_progress'] = False
 		h, w, c = self.im.shape
 		im = np.rot90(self.im[:, 0:w/2])
-		if callback is not None:
+		if callback_end is not None:
 			im = np.array(im, dtype=np.uint8)
 			tmpFile = io.BytesIO()
 			pil_image = Image.fromarray(im)
 			#pil_image = Image.open('preview2.jpg')
 			pil_image.save(tmpFile,'JPEG')
 			file_data = tmpFile.getvalue()
-			callback(file_data)
+			callback_end(file_data)
 
 
 	def shutdown(self):

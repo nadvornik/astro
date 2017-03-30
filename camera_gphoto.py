@@ -132,7 +132,7 @@ class Camera_gphoto:
 			self.fpshackiso = 5
 			
 
-	def capture_bulb(self, test = False, callback = None):
+	def capture_bulb(self, test = False, callback_start = None, callback_end = None):
 		if test:
 			sec = self.status['test-exp-sec']
 
@@ -157,6 +157,9 @@ class Camera_gphoto:
 
 		self.set_config_value('aperture', self.status['f-number'])
 		self.status['f-number'] = self.get_config_value('aperture')
+
+		if callback_start is not None:
+			callback_start()
 
 		if sec <= 30:
 			bulbmode = None
@@ -207,14 +210,15 @@ class Camera_gphoto:
 	
 		target = os.path.join('/tmp', file_path.name)
 		
+		file_data = None
 		n = 20
 		while True:
 			n -= 1
 			try:
 				camera_file = gp.check_result(gp.gp_camera_file_get(self.camera, file_path.folder, file_path.name, gp.GP_FILE_TYPE_NORMAL, self.context))
 				file_data = gp.check_result(gp.gp_file_get_data_and_size(camera_file))
-				if callback is not None:
-					callback(file_data)
+				if callback_end is not None:
+					callback_end(file_data)
 				break
 			except gp.GPhoto2Error as ex:
 				if ex.code == gp.GP_ERROR_CAMERA_BUSY:
@@ -224,6 +228,10 @@ class Camera_gphoto:
 						continue
 				raise
 
+		if callback_end is not None:
+			callback_end(file_data)
+
+		
 		#stop review on display
 		self.set_config_value_checked('eosremoterelease', 'Press Half')
 		self.set_config_value_checked('eosremoterelease', 'Release Half')
