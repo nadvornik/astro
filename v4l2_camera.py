@@ -55,11 +55,13 @@ class Camera:
         self.status['lensname'] = 'default'
         self.status.setdefault('exp-sec', 1.5)
         self.vd = None
+        self.mm = []
 
     def _prepare(self, width, height, format = V4L2_PIX_FMT_SBGGR16):
 
 
         self.vd = os.open(self.dev_name, os.O_RDWR | os.O_NONBLOCK, 0)
+        print "v4l open fd", self.vd
 	self.fmt = format
 
 
@@ -104,6 +106,7 @@ class Camera:
             #buffer.length = buf.length
             mm = mmap.mmap(self.vd, buf.length, mmap.MAP_SHARED, 
                 mmap.PROT_READ | mmap.PROT_WRITE, offset=buf.m.offset)
+            self.mm.append(mm)
             buffer = np.ndarray((buf.length,), dtype=np.uint8, buffer=mm)
             self.buffers.append(buffer)
         for ind in range(req.count):
@@ -142,10 +145,16 @@ class Camera:
 	self.w = width
 	self.h = height
 
-	for i in range(0, 20):
-		if self._prepare(width, height, format):
-			break
+	i = 0
+	while True:
+		try:
+			if self._prepare(width, height, format):
+				break
+		except:
+			pass
+		i += 1
 		print "camera init failed, retry %d" % i
+		self.shutdown()
 		time.sleep(1)
 	if self.vd is None:
 		return False
@@ -252,16 +261,24 @@ class Camera:
 		self.prepare(self.w, self.h)
 
     def shutdown(self):
+	#for mm in self.mm:
+	#	mm.close()
+	self.mm = []
 	if self.vd is not None:
+		print "v4l close fd", self.vd
 		os.close(self.vd)
+		self.vd = None
+		time.sleep(1)
 
 if __name__ == "__main__":
-	cam = Camera("/dev/video0")
-	cam.prepare(1280, 960)
+	cam = Camera({"device":"/dev/video1", 'exp-sec':0.1})
+	cam.prepare(1280, 960,V4L2_PIX_FMT_YUYV)
 
-	for i in range(0,20):
-		img = cam.capture()
-		cv2.imshow('capture', cv2.normalize(img, alpha = 0, beta = 65535, norm_type=cv2.NORM_MINMAX))
+	for i in range(0,20000):
+		img,t = cam.capture()
+		print img
+		cv2.imshow('capture', img)
+		cv2.imwrite('capture%d.jpg'%i, img)
 		ch = 0xFF & cv2.waitKey(1)
 		if ch == 27:
 			break
