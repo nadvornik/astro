@@ -565,7 +565,7 @@ def get_hfr_field(im, pts, hfr_size = 20, sub_bg = False):
 				continue
 
 			hf = hfr(im[iy - hfr_size : iy + hfr_size + 1, ix - hfr_size : ix + hfr_size + 1], sub_bg)
-			if hf < 0.6:
+			if hf < 0.9:
 				continue
 
 			hfr_list.append((y, x, hf) )
@@ -1062,25 +1062,34 @@ class Navigator:
 		pil_image = Image.open(io.BytesIO(jpg))
 		im_c = np.array(pil_image)
 		del pil_image
+		
+		print "full_res decoded"
 		#mean, stddev = cv2.meanStdDev(im_c)
 		#im_c[:,:,0] = cv2.subtract(im_c[:,:,0], mean[0])
 		#im_c[:,:,1] = cv2.subtract(im_c[:,:,1], mean[1])
 		#im_c[:,:,2] = cv2.subtract(im_c[:,:,2], mean[2])
-		bg = cv2.erode(im_c, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (20,20)))
-		bg = cv2.blur(bg, (100,100))
-		bg = cv2.blur(bg, (100,100))
-		bg = cv2.blur(bg, (100,100))
+		scale= 10
+		bg = cv2.resize(im_c, ((im_c.shape[1] + scale - 1) / scale, (im_c.shape[0] + scale - 1) / scale), interpolation=cv2.INTER_AREA)
+		bg = cv2.erode(bg, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3,3)))
+		print "full_res erode"
+		bg = cv2.blur(bg, (20,20))
+		bg = cv2.blur(bg, (20,20))
+		bg = cv2.blur(bg, (20,20))
+		bg = cv2.resize(bg, (im_c.shape[1], im_c.shape[0]), interpolation=cv2.INTER_AREA)
 		im_c = cv2.subtract(im_c, bg)
 		del bg
-		
+
 		im = cv2.cvtColor(im_c, cv2.COLOR_RGB2GRAY);
 		
 		im = apply_gamma8(im, 2.2)
-		pts = find_max(im, 12, 300)
+		print "full_res bg"
+		pts = find_max(im, 12, 200)
 		w = im.shape[1]
 		h = im.shape[0]
+		print "full_res max"
 		
 		hfr_list = get_hfr_field(im, pts, sub_bg = True)
+		print "full_res get hfr"
 		hfr_list = filter_hfr_list(hfr_list)
 		
 		full_hfr = np.mean(hfr_list[:,2])
@@ -1088,6 +1097,8 @@ class Navigator:
 		if self.full_res is not None:
 			self.full_res['full_hfr'].append(full_hfr)
 		
+		print "full_res filter hfr"
+
 		ell_list = []
 		for p in hfr_list:
 			patch_size = int(p[2] * 4 + 2)
@@ -1096,8 +1107,44 @@ class Navigator:
 				
 		del im
 
+		print "full_res ell"
+
 		solver = Solver(sources_list = pts, field_w = w, field_h = h, ra = self.status['ra'], dec = self.status['dec'], field_deg = self.status['field_deg'], radius = 100)
 		solver.start()
+		
+		im_c = cv2.normalize(im_c,  im_c, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8UC3)
+		im_c = apply_gamma8(im_c, 0.6)
+
+		print "full_res norm"
+
+		for i, p in enumerate(hfr_list):
+			val, vec = ell_list[i]
+			#fwhm = get_fwhm(a)
+			#print "fwhm", fwhm, p[2]
+			cv2.circle(im_c, (int(p[1]), int(p[0])), int(p[2] * 10), (100,100,100), 2)
+			#cv2.circle(im_c, (int(p[1]), int(p[0])), int(fwhm * 10), (255,255,255), 2)
+			if val[0] > val[1]:
+				v = val[0] * 10
+				vec = vec[0]
+				v2 = val[1] * 10
+			else:
+				v = val[1] * 10
+				vec = vec[1]
+				v2 = val[0] * 10
+		
+			v += (v - v2) * 5
+		
+			p11 = (p[1], p[0]) - vec * v
+			p12 = (p[1], p[0]) - vec * v2
+			p13 = (p[1], p[0]) + vec * v
+			p14 = (p[1], p[0]) + vec * v2
+			cv2.line(im_c, (int(p11[0]), int(p11[1])), (int(p12[0]), int(p12[1])), (255,0,0), 2)
+			cv2.line(im_c, (int(p13[0]), int(p13[1])), (int(p14[0]), int(p14[1])), (255,0,0), 2)
+
+		print "full_res plot"
+
+		ui.imshow('full_res', im_c)
+		
 		solver.join()
 		if solver.solved:
 			print "full-res solved:", solver.ra, solver.dec
@@ -1120,32 +1167,6 @@ class Navigator:
 			else:
 				zoom = 1
 			
-			im_c = cv2.normalize(im_c,  im_c, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8UC3)
-			im_c = apply_gamma8(im_c, 0.6)
-			
-			for i, p in enumerate(hfr_list):
-				val, vec = ell_list[i]
-				#fwhm = get_fwhm(a)
-				#print "fwhm", fwhm, p[2]
-				cv2.circle(im_c, (int(p[1]), int(p[0])), int(p[2] * 10), (100,100,100), 2)
-				#cv2.circle(im_c, (int(p[1]), int(p[0])), int(fwhm * 10), (255,255,255), 2)
-				if val[0] > val[1]:
-					v = val[0] * 10
-					vec = vec[0]
-					v2 = val[1] * 10
-				else:
-					v = val[1] * 10
-					vec = vec[1]
-					v2 = val[0] * 10
-		
-				v += (v - v2) * 5
-		
-				p11 = (p[1], p[0]) - vec * v
-				p12 = (p[1], p[0]) - vec * v2
-				p13 = (p[1], p[0]) + vec * v
-				p14 = (p[1], p[0]) + vec * v2
-				cv2.line(im_c, (int(p11[0]), int(p11[1])), (int(p12[0]), int(p12[1])), (255,0,0), 2)
-				cv2.line(im_c, (int(p13[0]), int(p13[1])), (int(p14[0]), int(p14[1])), (255,0,0), 2)
 
 			
 			plotter=Plotter(solver.wcs)
@@ -2511,6 +2532,9 @@ class Runner(threading.Thread):
 						print "Unexpected error: " + sys.exc_info().__str__()
 					
 					if self.capture_in_progress:
+						print "runner: capture_in_progress not finished"
+						print "capture_finished_fix"
+
 						cmdQueue.put('capture-finished')
 						cmdQueue.put('capture-full-res-done')
 						self.capture_in_progress = False
@@ -2553,10 +2577,12 @@ class Runner(threading.Thread):
 	
 	def capture_end_cb(self, jpg):
 		self.capture_in_progress = False
+		print "capture_finished_cb"
 		cmdQueue.put('capture-finished')
 		if jpg is not None:
 			ui.imshow_jpg("full_res", jpg)
-			threading.Thread(target=self.navigator.proc_full_res, args = [jpg] ).start()
+			self.navigator.proc_full_res(jpg)
+			#threading.Thread(target=self.navigator.proc_full_res, args = [jpg] ).start()
 		else:
 			cmdQueue.put('capture-full-res-done')
 
