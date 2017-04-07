@@ -217,8 +217,6 @@ class Camera_gphoto:
 			try:
 				camera_file = gp.check_result(gp.gp_camera_file_get(self.camera, file_path.folder, file_path.name, gp.GP_FILE_TYPE_NORMAL, self.context))
 				file_data = gp.check_result(gp.gp_file_get_data_and_size(camera_file))
-				if callback_end is not None:
-					callback_end(file_data)
 				break
 			except gp.GPhoto2Error as ex:
 				if ex.code == gp.GP_ERROR_CAMERA_BUSY:
