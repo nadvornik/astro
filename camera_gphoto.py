@@ -165,7 +165,14 @@ class Camera_gphoto:
 			bulbmode = None
 			self.set_config_value_checked('autoexposuremode', 'Manual')
 			self.set_config_value_checked('shutterspeed', sec)
-			gp.check_result(gp.gp_camera_trigger_capture(self.camera, self.context))
+			for t in range(0, 20):
+				try:
+					gp.check_result(gp.gp_camera_trigger_capture(self.camera, self.context))
+				except gp.GPhoto2Error as ex:
+					print ex.code
+					time.sleep(0.1)
+					continue
+
 			
 		else:
 			self.set_config_value_checked('autoexposuremode', 'Manual')
@@ -203,28 +210,30 @@ class Camera_gphoto:
 				filename, file_extension = os.path.splitext(file_path.name)
 				if file_extension == ".jpg" or file_extension == ".JPG":
 					break
+			if t > sec + 60:
+				file_path = None
+				break
 		
 		self.status['exp_in_progress'] = False
 		self.status['cur_time'] = 0
 		self.status['interrupt'] = False
-	
-		target = os.path.join('/tmp', file_path.name)
-		
+			
 		file_data = None
-		n = 20
-		while True:
-			n -= 1
-			try:
-				camera_file = gp.check_result(gp.gp_camera_file_get(self.camera, file_path.folder, file_path.name, gp.GP_FILE_TYPE_NORMAL, self.context))
-				file_data = gp.check_result(gp.gp_file_get_data_and_size(camera_file))
-				break
-			except gp.GPhoto2Error as ex:
-				if ex.code == gp.GP_ERROR_CAMERA_BUSY:
-					time.sleep(1)
-
-					if (n > 0):
-						continue
-				raise
+		if file_path is not None:
+			target = os.path.join('/tmp', file_path.name)
+			n = 20
+			while True:
+				n -= 1
+				try:
+					camera_file = gp.check_result(gp.gp_camera_file_get(self.camera, file_path.folder, file_path.name, gp.GP_FILE_TYPE_NORMAL, self.context))
+					file_data = gp.check_result(gp.gp_file_get_data_and_size(camera_file))
+					break
+				except gp.GPhoto2Error as ex:
+					if ex.code == gp.GP_ERROR_CAMERA_BUSY:
+						time.sleep(1)
+	
+						if (n > 0):
+							continue
 
 		if callback_end is not None:
 			callback_end(file_data)

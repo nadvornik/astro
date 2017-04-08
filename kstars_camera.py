@@ -80,11 +80,12 @@ class Camera_test_kstars:
 		im = np.rot90(self.im[:, 0:w/2])
 		
 		print "focuser %d" % self.focuser.pos
-		bl = np.abs(self.focuser.pos / 150.0)**2 + 0.3
+		bl = np.abs(self.focuser.pos / 150.0)**2 + 1
 		ibl = int(bl + 1)
 		#im = cv2.blur(im, (ibl, ibl))
 		#im = cv2.blur(im, (ibl, ibl))
 		im = cv2.GaussianBlur(im, (51, 51), bl)
+		im = cv2.add(im, np.random.normal(3, 3, im.shape), dtype = cv2.CV_16UC3)
 		
 		return im, time.time()
 
@@ -105,6 +106,14 @@ class Camera_test_kstars:
 		self.status['exp_in_progress'] = False
 		h, w, c = self.im.shape
 		im = np.rot90(self.im[:, 0:w/2])
+
+		bl = np.abs(self.focuser.pos / 150.0)**2 + 1
+		ibl = int(bl + 1)
+		#im = cv2.blur(im, (ibl, ibl))
+		#im = cv2.blur(im, (ibl, ibl))
+		im = cv2.GaussianBlur(im, (51, 51), bl)
+		im = cv2.add(im, np.random.normal(3, 3, im.shape), dtype = cv2.CV_16UC3)
+
 		if callback_end is not None:
 			im = np.array(im, dtype=np.uint8)
 			tmpFile = io.BytesIO()
@@ -135,7 +144,15 @@ class Camera_test_kstars_g:
 		self.cam0.capture()
 		im = self.cam0.im
 		h, w, c = im.shape
-		return cv2.flip(im[h/4:h/4*3, w/2:], 1), time.time()
+		im = cv2.flip(im[h/4:h/4*3, w/2:], 1)
+
+		bl = np.abs((self.cam0.focuser.pos + 200) / 150.0)**2 + 1
+		ibl = int(bl + 1)
+		#im = cv2.blur(im, (ibl, ibl))
+		#im = cv2.blur(im, (ibl, ibl))
+		im = cv2.GaussianBlur(im, (51, 51), bl)
+		im = cv2.add(im, np.random.normal(3, 3, im.shape), dtype = cv2.CV_16UC3)
+		return im, time.time()
 
 	def shutdown(self):
 		pass

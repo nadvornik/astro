@@ -1096,6 +1096,7 @@ class Navigator:
 		
 		if self.full_res is not None:
 			self.full_res['full_hfr'].append(full_hfr)
+			self.full_res['full_ts'] = time.time()
 		
 		print "full_res filter hfr"
 
@@ -1175,8 +1176,8 @@ class Navigator:
 
 		else:
 			print "full-res not solved"
-		cmdQueue.put('capture-full-res-done')
 		
+		cmdQueue.put('capture-full-res-done')
 	
 	def get_xy_cor(self):
 		xy = self.stack.get_xy()
@@ -1362,6 +1363,12 @@ class Guider:
 			self.full_res['ra_err_list'] = []
 			self.full_res['dec_err_list'] = []
 			self.full_res['guider_hfr'] = []
+			self.full_res['guider_ts'] = None
+			self.full_res['full_ts'] = None
+			
+			self.full_res.setdefault('guider_hfr_cov', 0)
+			self.full_res.setdefault('last_step', 0)
+			
 
 		self.reset()
 		self.t0 = 0
@@ -1454,12 +1461,15 @@ class Guider:
 						self.full_res['guider_hfr'].append(np.mean(self.status['curr_hfr_list']))
 					else:
 						self.full_res['guider_hfr'].append(0.0)
+					self.full_res['guider_ts'] = time.time()
 			
 		elif cmd == "capture-full-res-done":
 			self.capture_proc_in_progress -= 1
 			if self.capture_proc_in_progress < 0:
 				self.capture_proc_in_progress = 0
 				print "capture_proc_in_progress negative"
+			if self.capture_proc_in_progress == 0 and self.full_res is not None:
+				self.focus_loop()
 		
 		elif cmd.startswith('ra-') or cmd.startswith('dec-'):
 			try:
@@ -1477,6 +1487,56 @@ class Guider:
 
 		elif cmd.startswith('seq-'):
 			self.status['seq'] = cmd
+
+	def focus_loop(self):
+		if self.full_res['guider_ts'] is None or self.full_res['full_ts'] is None or abs(self.full_res['guider_ts'] - self.full_res['full_ts']) > 60:
+			self.full_res['guider_ts'] = None
+			self.full_res['full_ts'] = None
+			return
+		
+		guider_hfr_diff = 0.0
+		if len(self.full_res['guider_hfr']) > 1:
+			guider_hfr_diff = self.full_res['guider_hfr'][-1] - self.full_res['guider_hfr'][-2]
+			cov = guider_hfr_diff * self.full_res['last_step']
+			self.full_res['guider_hfr_cov'] = self.full_res['guider_hfr_cov'] * 0.8 + cov
+		
+		full_hfr_diff = 0.0
+		if len(self.full_res['full_hfr']) > 1:
+			full_hfr_diff = self.full_res['full_hfr'][-1] - self.full_res['full_hfr'][-2]
+
+		g_diff = 0.0
+		if len(self.full_res['dec_err_list']) > 1 and len(self.full_res['ra_err_list']) > 1:
+			g1 = (self.full_res['dec_err_list'][-2] ** 2 + self.full_res['ra_err_list'][-2] ** 2) ** 0.5
+			g2 = (self.full_res['dec_err_list'][-1] ** 2 + self.full_res['ra_err_list'][-1] ** 2) ** 0.5
+			g_diff = g2 - g1
+		
+		
+		print "focus_loop full: %f  guider: %f,  g: %f, cov %f" % (full_hfr_diff, guider_hfr_diff, g_diff, self.full_res['guider_hfr_cov'])
+		
+		if full_hfr_diff > 0:
+			if g_diff > 0 and g_diff > guider_hfr_diff:
+				print "focus_loop no change"
+				self.full_res['last_step'] *=0.1
+			
+			elif guider_hfr_diff * self.full_res['guider_hfr_cov'] > 0:
+				print "focus_loop cov -1"
+				cmdQueue.put('f-1')
+				self.full_res['last_step'] = -1.0
+			else:
+				print "focus_loop cov +1"
+				cmdQueue.put('f+1')
+				self.full_res['last_step'] = 1.0
+		else:
+			if self.full_res['last_step'] < 0:
+				print "focus_loop keep -1"
+				cmdQueue.put('f-1')
+				self.full_res['last_step'] = -1.0
+			else:
+				print "focus_loop keep +1"
+				cmdQueue.put('f+1')
+				self.full_res['last_step'] = 1.0
+		
+
 
 	def proc_frame(self, im, i):
 		t = time.time()
