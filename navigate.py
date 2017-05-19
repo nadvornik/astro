@@ -1358,7 +1358,8 @@ class Guider:
 		self.tid = tid
 		self.full_res = full_res
 		self.status['seq'] = 'seq-stop'
-
+		
+		
 		if self.full_res is not None:
 			self.full_res['ra_err_list'] = []
 			self.full_res['dec_err_list'] = []
@@ -1368,6 +1369,8 @@ class Guider:
 			
 			self.full_res.setdefault('guider_hfr_cov', 0)
 			self.full_res.setdefault('last_step', 0)
+			self.full_res.setdefault('diff_thr', 0.5)
+			self.full_res['diff_acc'] = 0
 			
 
 		self.reset()
@@ -1469,7 +1472,8 @@ class Guider:
 				self.capture_proc_in_progress = 0
 				print "capture_proc_in_progress negative"
 			if self.capture_proc_in_progress == 0 and self.full_res is not None:
-				self.focus_loop()
+				if self.full_res['diff_thr'] >= 0:
+					self.focus_loop()
 		
 		elif cmd.startswith('ra-') or cmd.startswith('dec-'):
 			try:
@@ -1484,6 +1488,14 @@ class Guider:
 				self.status[g_alg][field] = float(val)
 			except:
 				pass
+
+		elif cmd.startswith('diff-thr-'):
+			try:
+				if self.full_res is not None:
+					self.full_res['diff_thr'] = float(cmd[len('diff-thr-'):])
+			except:
+				pass
+
 
 		elif cmd.startswith('seq-'):
 			self.status['seq'] = cmd
@@ -1513,19 +1525,19 @@ class Guider:
 		
 		print "focus_loop full: %f  guider: %f,  g: %f, cov %f" % (full_hfr_diff, guider_hfr_diff, g_diff, self.full_res['guider_hfr_cov'])
 		
-		if full_hfr_diff > 0:
-			if g_diff > 0 and g_diff > guider_hfr_diff:
-				print "focus_loop no change"
-				self.full_res['last_step'] *=0.1
-			
-			elif guider_hfr_diff * self.full_res['guider_hfr_cov'] > 0:
-				print "focus_loop cov -1"
-				cmdQueue.put('f-1')
-				self.full_res['last_step'] = -1.0
-			else:
-				print "focus_loop cov +1"
+		self.full_res['diff_acc'] = max(self.full_res['diff_acc'] + full_hfr_diff, 0.0)
+		
+		
+		if self.full_res['diff_acc'] > self.full_res['diff_thr']:
+		        self.full_res['diff_acc'] = 0
+			if self.full_res['last_step'] < 0:
+				print "focus_loop rev 1"
 				cmdQueue.put('f+1')
 				self.full_res['last_step'] = 1.0
+			else:
+				print "focus_loop rev -1"
+				cmdQueue.put('f-1')
+				self.full_res['last_step'] = -1.0
 		else:
 			if self.full_res['last_step'] < 0:
 				print "focus_loop keep -1"
@@ -3191,9 +3203,9 @@ def run_test_full_res():
 	profiler.add_function(Navigator.proc_full_res)
 	profiler.enable_by_count()
 		
-	for i in range(4007, 4046):
+	for i in range(4242, 4800):
 		tmpFile = io.BytesIO()
-		pil_image = Image.open('../af3/IMG_%d.JPG' % i)
+		pil_image = Image.open('../af5/IMG_%d.JPG' % i)
 		pil_image.save(tmpFile,'JPEG')
 		file_data = tmpFile.getvalue()
 		nav1.proc_full_res(file_data)
