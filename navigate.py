@@ -281,6 +281,35 @@ def centroid_list(im, pt0, off):
 		match.append([i, i2])
 	return match_take(pt0, pt, match)
 
+def centroid_mean(im, pt0, off):
+	(h, w) = im.shape
+
+	mean = []
+
+	centroid_size = 10
+	
+	for i, (y, x, v) in enumerate(pt0):
+		x = int(x + off[1] + 0.5)
+		y = int(y + off[0] + 0.5)
+		
+		if (x < centroid_size):
+			continue
+		if (y < centroid_size):
+			continue
+		if (x > w - centroid_size - 1):
+			continue
+		if (y > h - centroid_size - 1):
+			continue
+		cm = np.array(im[y - centroid_size : y + centroid_size + 1, x - centroid_size : x + centroid_size + 1], dtype = np.float32)
+		
+		mean.append(cm)
+	
+	mean = np.mean(mean, axis = 0)
+		
+	xs, ys = sym_center(mean)
+	return (ys, xs)
+
+
 
 
 def match_take(pt1, pt2, match, ord1 = None, ord2 = None):
@@ -320,7 +349,7 @@ def pairwise_dist(x):
 	q = np.diag(b)[:, None]
 	return np.sqrt(q + q.T - 2 * b)
 
-def match_triangle(pt1, pt2, maxdif = 5.0, maxdrift = 10, off = (0.0, 0.0)):
+def match_triangle(pt1, pt2, maxdif = 5.0, maxdrift = 20, off = (0.0, 0.0)):
 	if len(pt1) == 0 or len(pt2) == 0:
 		return match_take(pt1, pt2, [])
 	
@@ -1803,6 +1832,10 @@ class Guider:
 
 			if len(match) > 0:
 				self.off, weights = avg_pt(pt0, pt)
+				print "centroid off1", self.off
+				self.off += centroid_mean(im_sub, pt0, self.off)
+				print "centroid off2", self.off
+				
 				err = complex(*self.off) / self.ref_off
 				self.resp0.append((t - self.t0, err.real, err.imag))
 				t_proc = time.time() - t
