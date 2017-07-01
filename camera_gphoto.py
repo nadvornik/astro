@@ -141,7 +141,8 @@ class Camera_gphoto:
 				self.status['test-iso'] = int(self.get_config_value('iso'))
 			except:
 				pass
-			self.set_config_choice('capturetarget', 0) #mem
+			#self.set_config_choice('capturetarget', 0) #mem
+			self.set_config_choice('capturetarget', 1) #card
 			self.set_config_choice('imageformat', 1) #Large Normal JPEG
 		else:
 			sec = self.status['exp-sec']
@@ -165,8 +166,9 @@ class Camera_gphoto:
 			bulbmode = None
 			self.set_config_value_checked('autoexposuremode', 'Manual')
 			self.set_config_value_checked('shutterspeed', sec)
-			for t in range(0, 20):
+			for t in range(0, 1):
 				try:
+					print "trgger capture"
 					gp.check_result(gp.gp_camera_trigger_capture(self.camera, self.context))
 				except gp.GPhoto2Error as ex:
 					print ex.code
@@ -204,6 +206,8 @@ class Camera_gphoto:
 					self.set_config_value_checked('eosremoterelease', 'Release Full')
 				self.status['exp_in_progress'] = False
 
+			if not self.status['exp_in_progress']:
+				print "waiting for image"
 			
 			if e == gp.GP_EVENT_FILE_ADDED:
 				print >> sys.stderr, "filepath:", file_path.folder, file_path.name
@@ -212,6 +216,7 @@ class Camera_gphoto:
 					break
 			if t > sec + 60:
 				file_path = None
+				print "image timeout"
 				break
 		
 		self.status['exp_in_progress'] = False
