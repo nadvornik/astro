@@ -17,6 +17,7 @@ from v4l2 import *
 import select
 import cv2
 import time
+import sys
 
 from uvc_xu_control import *
 
@@ -57,12 +58,13 @@ class Camera:
         self.vd = None
         self.mm = []
 
-    def _prepare(self, width, height, format = V4L2_PIX_FMT_SBGGR16):
+    def _prepare(self, width, height, format = V4L2_PIX_FMT_SBGGR16, decode=True):
 
 
         self.vd = os.open(self.dev_name, os.O_RDWR | os.O_NONBLOCK, 0)
         print "v4l open fd", self.vd
 	self.fmt = format
+	self.decode = decode
 
 
 	
@@ -79,10 +81,10 @@ class Camera:
         #fcntl.ioctl(self.vd, VIDIOC_S_FMT, fmt)
         #time.sleep(0.01)
 
-	if (self.fmt == V4L2_PIX_FMT_SBGGR16):
+	if (self.fmt != V4L2_PIX_FMT_JPEG):
 		fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_YUYV
 	else:
-        	fmt.fmt.pix.pixelformat = format
+        	fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_JPEG
         fcntl.ioctl(self.vd, VIDIOC_S_FMT, fmt)
         time.sleep(0.01)
 	self.control(V4L2_CID_EXPOSURE_AUTO, V4L2_EXPOSURE_APERTURE_PRIORITY)
@@ -120,7 +122,7 @@ class Camera:
 
 
 	t0 = time.time()
-	max_t = 5
+	max_t = 30
 
         fcntl.ioctl(self.vd, VIDIOC_STREAMON, type)
 
@@ -129,6 +131,7 @@ class Camera:
             try:
                 ready_to_read, ready_to_write, in_error = select.select([self.vd], [], [], max_t)
             except (OSError, select.error) as why:
+                print "Unexpected error: " + sys.exc_info().__str__()
                 continue
 
 	if time.time() - t0 >= max_t:
@@ -141,17 +144,17 @@ class Camera:
 	return True
 
 
-    def prepare(self, width, height, format = V4L2_PIX_FMT_SBGGR16):
+    def prepare(self, width, height, format = V4L2_PIX_FMT_SBGGR16, decode = True):
 	self.w = width
 	self.h = height
 
 	i = 0
 	while True:
 		try:
-			if self._prepare(width, height, format):
+			if self._prepare(width, height, format, decode):
 				break
 		except:
-			pass
+			print "Unexpected error: " + sys.exc_info().__str__()
 		i += 1
 		print "camera init failed, retry %d" % i
 		self.shutdown()
@@ -162,10 +165,10 @@ class Camera:
 	try:
 		# longest manual exposure available via uvc driver
 		self.control(V4L2_CID_EXPOSURE_AUTO, V4L2_EXPOSURE_MANUAL)
-		self.control(V4L2_CID_EXPOSURE_ABSOLUTE, 5000)
+		self.control(V4L2_CID_EXPOSURE_ABSOLUTE, 500)
 		
 	except: 
-		pass
+		print "Unexpected error: " + sys.exc_info().__str__()
 
 #######################################################################
         time.sleep(0.2)
@@ -192,10 +195,11 @@ class Camera:
 
 	        #sonix_write_sensor(self.vd, 0x30ea, 0x8c00) #disable black level compensation
 	        #sonix_write_sensor(self.vd, 0x3044, 0x0000) #disable row noise compensation
-	        sonix_write_sensor(self.vd, 0x3012, int(0x2400 * self.status['exp-sec'])) #exposure time coarse
+	        #sonix_write_sensor(self.vd, 0x3012, int(0x2400 * self.status['exp-sec'])) #exposure time coarse
 	except:
-		pass
+		print "Unexpected error: " + sys.exc_info().__str__()
         
+        self.cmd("exp-sec-%f" % self.status['exp-sec'])
         # skip incorrectly set  frames at the beginning
         self.capture()
         self.capture()
@@ -222,15 +226,20 @@ class Camera:
 		img = img.reshape((-1, self.width, 2))
 		img16 = np.array(img[:,:, 0], dtype=np.uint16)
 		img = img16 * 256 + img[:,:, 1] * 64
-		img = cv2.cvtColor(img, cv2.COLOR_BAYER_GR2RGB)
+		if self.decode:
+			img = cv2.cvtColor(img, cv2.COLOR_BAYER_GR2RGB)
 	elif (self.fmt == V4L2_PIX_FMT_YUYV):
 		img = img.reshape((-1, self.width, 2))
-		img = cv2.cvtColor(img, cv2.COLOR_YUV2BGR_YUYV)
+		if self.decode:
+			img = cv2.cvtColor(img, cv2.COLOR_YUV2BGR_YUYV)
 	elif (self.fmt == V4L2_PIX_FMT_MJPEG):
-		img = cv2.imdecode(img, cv2.CV_LOAD_IMAGE_COLOR)
+		if self.decode:
+			img = cv2.imdecode(img, cv2.CV_LOAD_IMAGE_COLOR)
+		else:
+			img = np.array(img, copy=True)
 	else:
 		#unsupported format
-		pass
+		print "Unexpected error: " + sys.exc_info().__str__()
 	
         fcntl.ioctl(self.vd, VIDIOC_QBUF, buf)
         return img, None
@@ -246,23 +255,36 @@ class Camera:
     		try:
     			return self._capture()
     		except:
+    		        print "Unexpected error: " + sys.exc_info().__str__()
     			self.shutdown()
-    			self.prepare(self.w, self.h)
+    			self.prepare(self.w, self.h, self.fmt, self.decode)
 
 
     def cmd(self, cmd):
     	try:
 		if cmd.startswith('exp-sec-'):
 			exp_sec = float(cmd[len('exp-sec-'):])
-			sonix_write_sensor(self.vd, 0x3012, int(0x2400 * exp_sec)) #exposure time coarse
+			exp_uvc = min(int(exp_sec * 10000), 5000)
+			print "exp_sec {}, exp_uvc {}".format(exp_sec, exp_uvc)
+			self.control(V4L2_CID_EXPOSURE_ABSOLUTE, exp_uvc)
+			if exp_sec > 0.5:
+				sonix_write_sensor(self.vd, 0x3012, int(0x2400 * exp_sec)) #exposure time coarse
 			self.status['exp-sec'] = exp_sec
 	except:
+		print "Unexpected error: " + sys.exc_info().__str__()
 		self.shutdown()
-		self.prepare(self.w, self.h)
+		self.prepare(self.w, self.h, self.fmt, self.decode)
 
     def shutdown(self):
-	#for mm in self.mm:
-	#	mm.close()
+    	if self.vd is not None:
+		type = v4l2_buf_type(V4L2_BUF_TYPE_VIDEO_CAPTURE)
+		try:
+			fcntl.ioctl(self.vd, VIDIOC_STREAMOFF, type)
+		except:
+			print "Unexpected error: " + sys.exc_info().__str__()
+		
+	for mm in self.mm:
+		mm.close()
 	self.mm = []
 	if self.vd is not None:
 		print "v4l close fd", self.vd
@@ -271,20 +293,40 @@ class Camera:
 		time.sleep(1)
 
 if __name__ == "__main__":
-	cam = Camera({"device":"/dev/video1", 'exp-sec':0.1})
-	cam.prepare(1280, 960,V4L2_PIX_FMT_YUYV)
+	exp = 0.5
+	cam = Camera({"device":"/dev/video1", 'exp-sec': exp})
+	cam.prepare(1280, 960,V4L2_PIX_FMT_SBGGR16, False)
 
-	for i in range(0,20000):
+	capt = False
+        i = 0
+	while True:
 		img,t = cam.capture()
-		print img
-		cv2.imshow('capture', img)
-		cv2.imwrite('capture%d.jpg'%i, img)
+		cv2.imshow('capture', cv2.cvtColor(img, cv2.COLOR_BAYER_GR2RGB))
+		if capt:
+			while os.path.isfile('capture%04d.tif' % i):
+				i += 1
+			cv2.imwrite('capture%04d.tif' % i, img)
+			print "saved {}".format(i)
+			i += 1
+	
 		ch = 0xFF & cv2.waitKey(1)
 		if ch == 27:
 			break
+		elif ch == ord('a'):
+			exp *= 1.1
+			cam.cmd("exp-sec-%f" % exp)
+		elif ch == ord('z'):
+			exp /= 1.1
+			cam.cmd("exp-sec-%f" % exp)
+		elif ch == ord(' '):
+			capt = True
+		elif ch == ord('s'):
+			capt = False
+			
+			
 
 
-
+	cam.shutdown()
 	cv2.destroyAllWindows()
 
 	
