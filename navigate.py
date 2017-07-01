@@ -1697,7 +1697,7 @@ class Guider:
 				
 					print "pixpersec", self.status['pixpersec'], "pixperframe", self.pixperframe, "t_delay1", self.status['t_delay1']
 				
-					self.pt0 = np.array(self.pt0)[np.where(np.bincount(self.used_cnt) > self.cnt / 3)]
+					self.pt0 = np.array(self.pt0)[np.where(np.bincount(self.used_cnt) > 5)]
 					self.pt0base = self.pt0
 				
 					self.cnt = 0
