@@ -1556,6 +1556,8 @@ class Guider:
 		
 		self.full_res['diff_acc'] = max(self.full_res['diff_acc'] + full_hfr_diff, 0.0)
 		
+		if self.full_res['diff_thr'] == 0:
+			return
 		
 		if self.full_res['diff_acc'] > self.full_res['diff_thr']:
 		        self.full_res['diff_acc'] = 0
