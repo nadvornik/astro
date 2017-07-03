@@ -1377,7 +1377,7 @@ class GuiderAlgRa(GuiderAlg):
 
 
 class Guider:
-	def __init__(self, status, mount, dark, tid, full_res):
+	def __init__(self, status, mount, dark, tid, full_res = None):
 		self.status = status
 		self.status.setdefault('ra_alg', {})
 		self.status.setdefault('dec_alg', {})
@@ -2514,7 +2514,7 @@ class Mount:
 
 
 class Runner(threading.Thread):
-	def __init__(self, tid, camera, navigator = None, guider = None, zoom_focuser = None, focuser = None):
+	def __init__(self, tid, camera, navigator = None, guider = None, zoom_focuser = None, focuser = None, video_tid = None):
                 threading.Thread.__init__(self)
                 self.tid = tid
 		self.camera = camera
@@ -2523,6 +2523,8 @@ class Runner(threading.Thread):
 		self.zoom_focuser = zoom_focuser
 		self.focuser = focuser
 		self.capture_in_progress = False
+		self.video_tid = video_tid
+		
 		
 	def run(self):
 		profiler = LineProfiler()
@@ -2660,6 +2662,15 @@ class Runner(threading.Thread):
 	
 			im, t = self.camera.capture()
 			print i,t
+			if self.video_tid is not None:
+				print im.shape, im.dtype
+				
+				show = im
+				max_v = np.iinfo(im.dtype).max
+				if max_v > 255:
+					show = np.array(show / ((max_v + 1) / 256), dtype = np.uint8)
+				print show.shape, show.dtype
+				ui.imshow(self.video_tid, show)
 			
 			#cv2.imwrite("testimg23_" + str(i) + ".tif", im)
 			if mode == 'navigator':
@@ -3199,6 +3210,52 @@ def run_calibrate_v4l2_g():
 
 	cmdQueue.put('exit')
 
+def run_2_v4l2():
+	global status
+	status = Status("run_2_v4l2.conf")
+	cam = Camera(status.path(["guider", "navigator", "camera"]))
+	cam.prepare(1280, 960)
+	
+	fo = FocuserOut()
+	cam1 = Camera(status.path(["navigator", "camera"]), fo)
+	cam1.prepare(1280, 960)
+
+        polar = Polar(status.path(["polar"]), ['navigator', 'guider', 'full-res'])
+
+	go_ra = GuideOut("./guide_out_ra")
+	go_dec = GuideOut("./guide_out_dec")
+
+        mount = Mount(status.path(["mount"]), polar, go_ra, go_dec)
+
+	dark1 = Median(5)
+	dark2 = Median(5)
+	
+	nav1 = Navigator(status.path(["navigator"]), dark1, mount, 'navigator', polar_tid = 'polar')
+	focuser = Focuser('navigator', status.path(["navigator", "focuser"]), dark = dark1)
+
+	nav = Navigator(status.path(["guider", "navigator"]), dark2, mount, 'guider')
+
+	guider = Guider(status.path(["guider"]), mount, dark2, 'guider')
+
+	ui.namedWindow('navigator')
+	ui.namedWindow('guider')
+	ui.namedWindow('polar')
+	ui.namedWindow('full_res')
+
+	
+	go_ra.out(1, 10) # move aside for 10s to collect darkframes
+
+	runner = Runner('navigator', cam1, navigator = nav1, focuser=focuser, video_tid = 'full_res')
+	runner.start()
+	
+	runner2 = Runner('guider', cam, navigator = nav, guider = guider)
+	runner2.start()
+	
+	main_loop()
+	
+	runner.join()
+	runner2.join()
+
 def run_test_full_res():
 	from kstars_camera import Camera_test_kstars, Camera_test_kstars_g
 	global status
@@ -3260,8 +3317,8 @@ if __name__ == "__main__":
 	
 
 	#run_gphoto()
-	run_test_2_kstars()
-	#run_v4l2()
+	#run_test_2_kstars()
+	run_2_v4l2()
 	#run_test_2_gphoto()
 	#run_v4l2_g()
 	#run_2()

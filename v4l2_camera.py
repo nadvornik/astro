@@ -48,21 +48,28 @@ def sonix_read_asic(fd, addr):
 
 
 class Camera:
-    def __init__(self, status):
+    def __init__(self, status, focuser = None):
         self.status = status
         self.buffers = []
         self.i = 0
         self.dev_name = self.status.setdefault("device", "/dev/video0")
         self.status['lensname'] = 'default'
-        self.status.setdefault('exp-sec', 1.5)
+        self.status.setdefault('exp-sec', 0.5)
         self.vd = None
         self.mm = []
+        self.focuser = focuser
+	self.status.setdefault('width', 640)
+	self.status.setdefault('height', 480)
+	self.status.setdefault('format', V4L2_PIX_FMT_SBGGR16)
+	self.status['capture_idx'] = 0
+	self.status['capture'] = False
+	self.status.setdefault('capture_path', None)
 
-    def _prepare(self, width, height, format = V4L2_PIX_FMT_SBGGR16, decode=True):
+    def _prepare(self, width = None, height = None, format = None, decode=True):
 
 
         self.vd = os.open(self.dev_name, os.O_RDWR | os.O_NONBLOCK, 0)
-        print "v4l open fd", self.vd
+        print "v4l open {} fd {}".format(self.dev_name, self.vd)
 	self.fmt = format
 	self.decode = decode
 
@@ -144,7 +151,22 @@ class Camera:
 	return True
 
 
-    def prepare(self, width, height, format = V4L2_PIX_FMT_SBGGR16, decode = True):
+    def prepare(self, width = None, height = None, format = None, decode = True):
+	if width == None:
+		width = self.status['width']
+	if height == None:
+		width = self.status['height']
+
+	if height == None:
+		width = self.status['height']
+
+	if format == None:
+		format = self.status['format']
+	
+	self.status['width'] = width
+	self.status['height'] = height
+	self.status['format'] = format
+
 	self.w = width
 	self.h = height
 
@@ -226,6 +248,17 @@ class Camera:
 		img = img.reshape((-1, self.width, 2))
 		img16 = np.array(img[:,:, 0], dtype=np.uint16)
 		img = img16 * 256 + img[:,:, 1] * 64
+		
+		if self.status['capture'] and self.status['capture_path'] is not None:
+			i = self.status['capture_idx']
+			while os.path.isfile(self.status['capture_path'] + 'capture%04d.tif' % i):
+				i += 1
+			cv2.imwrite(self.status['capture_path'] + 'capture%04d.tif' % i, img)
+			print "saved {}".format(i)
+			i += 1
+			self.status['capture_idx'] = i
+
+		
 		if self.decode:
 			img = cv2.cvtColor(img, cv2.COLOR_BAYER_GR2RGB)
 	elif (self.fmt == V4L2_PIX_FMT_YUYV):
@@ -261,6 +294,24 @@ class Camera:
 
 
     def cmd(self, cmd):
+	try:
+		if cmd in ["f-3", "f-2", "f-1", "f+3", "f+2", "f+1"]:
+			if self.focuser is not None:
+				self.focuser.cmd(cmd)
+        except:
+        	pass
+
+	try:
+		if cmd == 'capture_start' and self.status['capture_path'] is not None:
+			self.status['capture'] = True
+		elif cmd == 'capture_stop':
+			self.status['capture'] = False
+		
+        except:
+        	pass
+
+
+
     	try:
 		if cmd.startswith('exp-sec-'):
 			exp_sec = float(cmd[len('exp-sec-'):])
