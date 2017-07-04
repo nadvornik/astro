@@ -2526,6 +2526,7 @@ class Runner(threading.Thread):
 		self.focuser = focuser
 		self.capture_in_progress = False
 		self.video_tid = video_tid
+		self.video_capture = False
 		
 		
 	def run(self):
@@ -2649,6 +2650,12 @@ class Runner(threading.Thread):
 						self.capture_in_progress = False
 
 					break
+				elif cmd == 'capture_start':
+					self.camera.cmd(cmd)
+					self.video_capture = True
+				elif cmd == 'capture_stop':
+					self.camera.cmd(cmd)
+					self.video_capture = False
 				else:
 					self.camera.cmd(cmd)
 					
@@ -2673,16 +2680,19 @@ class Runner(threading.Thread):
 					show = np.array(show / ((max_v + 1) / 256), dtype = np.uint8)
 				print show.shape, show.dtype
 				ui.imshow(self.video_tid, show)
-			
-			#cv2.imwrite("testimg23_" + str(i) + ".tif", im)
-			if mode == 'navigator':
-				self.navigator.proc_frame(im, i, t)
-			if mode == 'guider':
-				self.guider.proc_frame(im, i)
-			if mode == 'focuser':
-				self.focuser.proc_frame(im, i)
-			if mode == 'zoom_focuser':
-				self.zoom_focuser.proc_frame(im, i)
+			elif self.video_capture:
+				time.sleep(5)
+				
+			if not self.video_capture:
+				#cv2.imwrite("testimg23_" + str(i) + ".tif", im)
+				if mode == 'navigator':
+					self.navigator.proc_frame(im, i, t)
+				if mode == 'guider':
+					self.guider.proc_frame(im, i)
+				if mode == 'focuser':
+					self.focuser.proc_frame(im, i)
+				if mode == 'zoom_focuser':
+					self.zoom_focuser.proc_frame(im, i)
 			i += 1
 			#if i == 300:
 			#	cmdQueue.put('exit')
