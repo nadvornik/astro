@@ -54,6 +54,16 @@
                         </tr>
                         <tr>
                             <td><button class='ajax' value='navigator!go-left'>left</button></td>
+                            <td><button class='ajax' value='navigator!go-stop'>stop</button></td>
+                            <td><button class='ajax' value='navigator!go-right'>right</button></td>
+                        </tr>
+                        <tr>
+                            <td><button class='ajax' value='navigator!center-ll'>*</button></td>
+                            <td><button class='ajax' value='navigator!go-down'>down</button></td>
+                            <td><button class='ajax' value='navigator!center-lr'>*</button></td>
+                        </tr>
+                        <tr>
+                            <td><span class='ajax_up' data-jsonp='navigator.ra'/></td><td><span class='ajax_up' data-jsonp='navigator.dec'/></td>
                             <td>
                                 <select class='ajax ajax_up' data-jsonp='navigator.go_by' data-prefix='navigator!go-by-'>
                                 <option value='navigator!go-by-0.1'>0.1</option>
@@ -67,15 +77,6 @@
                                 <option value='navigator!go-by-0.9'>0.9</option>
                                 </select>
                             </td>
-                            <td><button class='ajax' value='navigator!go-right'>right</button></td>
-                        </tr>
-                        <tr>
-                            <td><button class='ajax' value='navigator!center-ll'>*</button></td>
-                            <td><button class='ajax' value='navigator!go-down'>down</button></td>
-                            <td><button class='ajax' value='navigator!center-lr'>*</button></td>
-                        </tr>
-                        <tr>
-                            <td><span class='ajax_up' data-jsonp='navigator.ra'/></td><td><span class='ajax_up' data-jsonp='navigator.dec'/></td>
                         </tr>
                     </table>
                 </div>
@@ -408,15 +409,15 @@
                             <td><button class='ajax' value='polar-align'>polar-align</button>
                         </tr>
                         <tr>
-                            <td/><td><button class='ajax' value='guider!go-up-5'>up</button></td>
+                            <td/><td><button class='ajax' value='guider!guider-up'>up</button></td>
                         </tr>
                         <tr>
-                            <td><button class='ajax' value='guider!go-left-5'>left</button></td>
+                            <td><button class='ajax' value='guider!guider-left'>left</button></td>
                             <td/>
-                            <td><button class='ajax' value='guider!go-right-5'>right</button></td>
+                            <td><button class='ajax' value='guider!guider-right'>right</button></td>
                         </tr>
                         <tr>
-                            <td/><td><button class='ajax' value='guider!go-down-5'>down</button></td>
+                            <td/><td><button class='ajax' value='guider!guider-down'>down</button></td>
                         </tr>
                     </table>
                 </div>

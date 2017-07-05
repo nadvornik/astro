@@ -1062,6 +1062,10 @@ class Navigator:
 				self.mount.move_main_px(0, -self.im.shape[0] * self.status['go_by'], self.tid)
 		if cmd.startswith('go-up') and self.mount.go_dec is not None:
 				self.mount.move_main_px(0, self.im.shape[0] * self.status['go_by'], self.tid)
+		
+		if cmd.startswith('go-stop'):
+			self.mount.stop()
+		
 		if cmd.startswith('go-by-'):
 			try:
 				self.status['go_by'] = float(cmd[len('go-by-'):])
@@ -1434,6 +1438,7 @@ class Guider:
 		
 		self.i0 = 0
 		self.dither = complex(0, 0)
+		self.pos_corr = [0, 0]
 
 	def dark_add_masked(self, im):
 		h, w = im.shape
@@ -1450,6 +1455,16 @@ class Guider:
 				continue
 			pts.append((x,y))
 		return self.dark.add_masked(im, pts)
+
+	def update_pt0(self):
+		try:
+			dither_off = self.dither * self.ref_off
+			self.pt0 = np.array(self.pt0base, copy=True)
+			self.pt0[:, 0] += dither_off.real + self.pos_corr[0]
+			self.pt0[:, 1] += dither_off.imag + self.pos_corr[1]
+		except:
+			pass
+		
 
 	def cmd(self, cmd):
 		if cmd == "stop":
@@ -1471,10 +1486,7 @@ class Guider:
 			if self.capture_in_progress == 0:
 				try:
 					self.dither = complex((self.dither.real + 11) % 37, 0)
-					dither_off = self.dither * self.ref_off
-					self.pt0 = np.array(self.pt0base, copy=True)
-					self.pt0[:, 0] += dither_off.real
-					self.pt0[:, 1] += dither_off.imag
+					self.update_pt0()
 				except:
 					pass
 				
@@ -1494,6 +1506,19 @@ class Guider:
 					else:
 						self.full_res['guider_hfr'].append(0.0)
 					self.full_res['guider_ts'] = time.time()
+			
+		elif cmd == 'guider-up':
+			self.pos_corr[0] -= 5
+			self.update_pt0()
+		elif cmd == 'guider-down':
+			self.pos_corr[0] += 5
+			self.update_pt0()
+		elif cmd == 'guider-left':
+			self.pos_corr[1] -= 5
+			self.update_pt0()
+		elif cmd == 'guider-right':
+			self.pos_corr[1] += 5
+			self.update_pt0()
 			
 		elif cmd == "capture-full-res-done":
 			self.capture_proc_in_progress -= 1
@@ -2508,6 +2533,12 @@ class Mount:
 				else:
 					self.go_dec.out(0)
 
+	def stop(self):
+		if self.go_dec is not None:
+			self.go_dec.out(0)
+		if self.go_ra is not None:
+			self.go_ra.out(0)
+
 	def move_to(self, ra, dec):
 		pass
 
@@ -3329,8 +3360,8 @@ if __name__ == "__main__":
 	
 
 	#run_gphoto()
-	#run_test_2_kstars()
-	run_2_v4l2()
+	run_test_2_kstars()
+	#run_2_v4l2()
 	#run_test_2_gphoto()
 	#run_v4l2_g()
 	#run_2()
