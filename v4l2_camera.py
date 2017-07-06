@@ -68,8 +68,9 @@ class Camera:
     def _prepare(self, width = None, height = None, format = None, decode=True):
 
 
+        print "v4l open {}".format(self.dev_name)
         self.vd = os.open(self.dev_name, os.O_RDWR | os.O_NONBLOCK, 0)
-        print "v4l open {} fd {}".format(self.dev_name, self.vd)
+        print "v4l open fd {}".format(self.vd)
 	self.fmt = format
 	self.decode = decode
 
