@@ -126,9 +126,9 @@ function isElementInViewport(el) {
             $(this).text(v);
           }
           else {
-            $(this).data('no_cb', 1)
+            $(this).removeData('allow_cb')
             $(this).val(v);
-            $(this).removeData('no_cb')
+            $(this).data('allow_cb', 1)
           }
         });
       }
@@ -277,7 +277,6 @@ function isElementInViewport(el) {
     
     $("button.ajax").click(function(){
         var btn = $(this);
-        if (btn.data('no_cb')) return;
         var cmd_a = $(this).attr('value').split("!");
         var cmd;
         
@@ -305,7 +304,7 @@ function isElementInViewport(el) {
     });
     $("select.ajax").change(function(){
         var sel = $(this);
-        if (sel.data('no_cb')) return;
+        if (!sel.data('allow_cb')) return;
 
         var cmd_a = this.value.split("!");
         //alert(JSON.stringify(cmd_a));
