@@ -3360,11 +3360,11 @@ if __name__ == "__main__":
 	
 
 	#run_gphoto()
-	run_test_2_kstars()
+	#run_test_2_kstars()
 	#run_2_v4l2()
 	#run_test_2_gphoto()
-	#run_v4l2_g()
-	#run_2()
+	#run_v4l2()
+	run_2()
 	#run_test_g()
 	#run_2()
 	#run_test()
