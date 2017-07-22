@@ -153,7 +153,7 @@ class Median:
 		self.list = []
 
 class MaxDetector(threading.Thread):
-	def __init__(self, img, d, n, y1, y2):
+	def __init__(self, img, d, n, y1, y2, no_over = False):
 		threading.Thread.__init__(self)
 		self.d = d
 		self.n = n
@@ -167,6 +167,7 @@ class MaxDetector(threading.Thread):
 		self.y2e0 = y2 - self.y1e
 		
 		self.img = img
+		self.no_over = no_over
 	
 	def run(self):
 		(h, w) = self.img.shape
@@ -182,6 +183,11 @@ class MaxDetector(threading.Thread):
 		
 		locmax = np.where(img >= dil)
 		valmax = img[locmax]
+
+		if self.no_over:
+			maxv = np.amax(valmax) * 0.8
+			valmax[valmax > maxv] = 0.0
+
 		ordmax = np.argsort(valmax)[::-1]
 		ordmax = ordmax[:self.n]
 
@@ -191,7 +197,7 @@ class MaxDetector(threading.Thread):
 	
 		for (y, x, v) in zip(locmax[0][ordmax], locmax[1][ordmax], valmax[ordmax]):
 			if (v <= 0.0):
-				continue
+				break
 			if (x < centroid_size):
 				continue
 			if (y + self.y1 < centroid_size):
@@ -207,7 +213,7 @@ class MaxDetector(threading.Thread):
 
 	
 
-def find_max(img, d, n = 40):
+def find_max(img, d, n = 40, no_over = False):
 	(h, w) = img.shape
 	par = 4
 	step = (h + par - 1) / par
@@ -215,7 +221,7 @@ def find_max(img, d, n = 40):
 	joined = []
 	for y in range(0, h, step):
 		try:
-			md = MaxDetector(img, d, n / par + 1, y, min(y + step, h))
+			md = MaxDetector(img, d, n / par + 1, y, min(y + step, h), no_over)
 			#md.run()
 			md.start()
 			mds.append(md)
@@ -1116,7 +1122,7 @@ class Navigator:
 		
 		im = apply_gamma8(im, 2.2)
 		print "full_res bg"
-		pts = find_max(im, 12, 200)
+		pts = find_max(im, 12, 200, no_over = True)
 		w = im.shape[1]
 		h = im.shape[0]
 		print "full_res max"
@@ -3341,9 +3347,9 @@ def run_test_full_res():
 	profiler.add_function(Navigator.proc_full_res)
 	profiler.enable_by_count()
 		
-	for i in range(4242, 4800):
+	for i in range(5400, 5628):
 		tmpFile = io.BytesIO()
-		pil_image = Image.open('../af5/IMG_%d.JPG' % i)
+		pil_image = Image.open('../af8/IMG_%d.JPG' % i)
 		pil_image.save(tmpFile,'JPEG')
 		file_data = tmpFile.getvalue()
 		nav1.proc_full_res(file_data)
