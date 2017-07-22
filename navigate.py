@@ -1954,6 +1954,7 @@ class Focuser:
 		self.hfr = Focuser.hfr_size
 		self.focus_yx = None
 		self.prev_t = 0
+		self.cmdtab = ['f+3', 'f+2', 'f+1', '', 'f-1', 'f-2', 'f-3']
 
 	hfr_size = 30
 
@@ -2114,6 +2115,9 @@ class Focuser:
 		mean, self.stddev = cv2.meanStdDev(im)
 		self.max_flux, self.min_hfr, self.focus_yx = self.get_max_flux(im, stack.get_xy(), 0)
 
+	def step(self, s):
+		cmdQueue.put(self.cmdtab[s + 3])
+
 	def proc_frame(self, im, i):
 		t = time.time()
 
@@ -2159,11 +2163,11 @@ class Focuser:
 			if self.hfr < Focuser.hfr_size / 3:
 				self.status['phase'] = 'prep_record_v'
 				self.phase_wait = 3
-				cmdQueue.put('f+3')
+				self.step(3)
 			else:
 				self.focus_yx = None
 				for i in range (0, 12):
-					cmdQueue.put('f-3')
+					self.step(-3)
 				self.status['phase'] = 'dark'
 				self.phase_wait = 5
 				self.max_flux = 0
@@ -2177,7 +2181,7 @@ class Focuser:
 				mean, self.stddev = cv2.meanStdDev(self.stack_im)
 				print "mean, stddev: ", mean, self.stddev
 				for i in range (0, 9):
-					cmdQueue.put('f+3')
+					self.step(3)
 				self.phase_wait = 5
 				self.search_steps = 0
 				self.status['phase'] = 'search'
@@ -2185,14 +2189,14 @@ class Focuser:
 			flux, hfr, yx = self.get_max_flux(self.stack_im, self.stack.get_xy(), self.stddev)
 			if flux < self.max_flux * 0.7 or hfr > self.min_hfr * 2 or self.search_steps > 120:
 				self.status['phase'] = 'prep_record_v'
-				cmdQueue.put('f-1')
+				self.step(-1)
 			else:
 				if flux > self.max_flux:
 					self.focus_yx = yx
 					self.max_flux = flux
 					self.min_hfr = hfr
 				else:
-					cmdQueue.put('f+2')
+					self.step(2)
 				self.search_steps += 1
 				self.hfr = self.get_hfr(im_sub)
 			#self.phase_wait = 2
@@ -2205,7 +2209,7 @@ class Focuser:
 			if self.focus_yx is None or len(self.focus_yx) == 0:
 				self.status['phase'] = 'wait' #stop
 			else:
-				cmdQueue.put('f+3')
+				self.step(3)
 				self.phase_wait = 1
 				self.status['phase'] = 'prep_record_v'
 		elif self.status['phase'] == 'prep_record_v': # record v curve
@@ -2226,7 +2230,7 @@ class Focuser:
 				self.status['remaining_steps'] = None
 
 				self.status['phase'] = 'record_v'
-			cmdQueue.put('f-1')
+			self.step(-1)
 		elif self.status['phase'] == 'record_v': # record v curve
 			self.hfr = self.get_hfr(im_sub)
 			self.status['v_curve'].append(self.hfr)
@@ -2264,13 +2268,14 @@ class Focuser:
 					self.status['v_curve_s'] = v_curve_s.tolist()
 
 					self.status['v_curve2'] = []
+					self.step(-2)
 
-			cmdQueue.put('f-1')
+			self.step(-1)
 		elif self.status['phase'] == 'focus_v': # go back, record first part of second v curve
 			self.hfr = self.get_hfr(im_sub)
 			if len(self.status['v_curve2']) < self.status['side_len'] and self.hfr > self.status['min_hfr']:
 				self.status['v_curve2'].append(self.hfr)
-				cmdQueue.put('f+1')
+				self.step(1)
 				self.phase_wait = 1
 			else:
 				self.status['hyst'], v_curve2_s = Focuser.v_shift(np.array(self.status['v_curve2']), self.status['smooth_size'], self.status['c1'], self.status['m1'])
@@ -2285,7 +2290,7 @@ class Focuser:
 			self.status['v_curve2'].append(self.hfr)
 			if self.status['remaining_steps'] > 0:
 				self.status['remaining_steps'] -= 1
-				cmdQueue.put('f+1')
+				self.step(1)
 			else:
 				t = time.time()
 				np.save("v_curve1_%d.npy" % t, np.array(self.status['v_curve']))
