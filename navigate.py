@@ -926,6 +926,7 @@ class GuiderAlgDec(GuiderAlg):
 		if self.status['restart']:
 			print "dec err %f, corr1 %f, corr_acc %f, corr %f, restart" % (err, corr1, self.corr_acc, corr)
 			self.status['restart'] = False
+			self.corr_acc = 0
 			return corr
 			
 		if corr > 0 and self.last_move < 0 and corr < self.status['rev_move']:
@@ -946,18 +947,22 @@ class GuiderAlgRa(GuiderAlg):
 		super(GuiderAlgRa, self).__init__(go, t_delay, pixpersec, pixpersec_neg, status, parity)
 		self.status.setdefault('smooth_c', 0.1)
 		self.smooth_var2 = 1.0
+		self.corr_acc = 0.0
 
 	def get_corr(self, err, err2, t0):
 		corr = err * self.parity + self.get_corr_delay(time.time() - t0)
 		corr *= self.status['aggressivness']
-		
+	
+		self.corr_acc += corr * self.status['smooth_c']
+	
 		err2norm = (err2 ** 2 / self.smooth_var2) ** 0.5
 		corr *= 1.0 / (1.0 + err2norm)
+		corr += self.corr_acc
 
 		smooth_c = self.status['smooth_c']
 		self.smooth_var2 = self.smooth_var2 * (1.0 - smooth_c) + err2**2 * smooth_c
 		
-		print "ra err %f, err2 %f, err2norm %f, err2agg %f, corr %f" % (err, err2, err2norm, 1.0 / (1.0 + err2norm), corr)
+		print "ra err %f, err2 %f, err2norm %f, err2agg %f, corr_acc %f, corr %f" % (err, err2, err2norm, 1.0 / (1.0 + err2norm), self.corr_acc, corr)
 		return corr
 
 
@@ -1071,7 +1076,7 @@ class Guider:
 				except:
 					pass
 				
-				self.status['dec_alg']['restart'] = True
+				#self.status['dec_alg']['restart'] = True
 				
 				if self.full_res is not None:
 					if len(self.status['curr_ra_err_list' ]) > 0:
