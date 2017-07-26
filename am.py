@@ -42,7 +42,7 @@ class Engine(threading.Thread):
 				#log.close()
 				if self.terminating:
 					return
-				args = ['astrometry-engine', '--config', self.conf, '-f', '-', '-v' ]
+				args = ['astrometry-engine', '--config', os.path.join(os.path.dirname(os.path.abspath(__file__)), self.conf), '-f', '-', '-v' ]
 				self.cmd = subprocess.Popen(args, close_fds=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, bufsize=1 )
 				if not restart:
 					atexit.register(self.terminate)

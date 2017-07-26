@@ -70,7 +70,7 @@ def find_max(img, d, n = 40, no_over = False):
 	step = (h + par - 1) / par
 	mds = []
 	joined = []
-	for y in range(0, h, step):
+	for y in xrange(0, h, step):
 		try:
 			md = MaxDetector(img, d, n / par + 1, y, min(y + step, h), no_over)
 			#md.run()
@@ -206,23 +206,24 @@ def pairwise_dist(x):
 	q = np.diag(b)[:, None]
 	return np.sqrt(q + q.T - 2 * b)
 
-def match_triangle(pt1, pt2, maxdif = 5.0, maxdrift = 20, off = (0.0, 0.0)):
+def match_triangle(pt1, pt2, maxdif = 5.0, maxdrift = 20, off = (0.0, 0.0), n_max = 12, n_stop = 4):
 	if len(pt1) == 0 or len(pt2) == 0:
 		return match_take(pt1, pt2, [])
 	
 	ord1 = np.argsort(pt1[:, 2])[::-1]
 	ord2 = np.argsort(pt2[:, 2])[::-1]
 	
-	pt1s = pt1[ord1][:12]
-	pt2s = pt2[ord2][:12]
+	pt1s = pt1[ord1][:min(n_max, len(ord1))]
+	pt2s = pt2[ord2][:min(n_max, len(ord2))]
 	
 	dist1 = pairwise_dist(pt1s[:, 0:2])
 	dist2 = pairwise_dist(pt2s[:, 0:2])
 	
 	bestmatch = []
 
-	for a1 in range(0, len(pt1) - 2):
-		for b1 in range(a1 + 1, len(pt1s) - 1):
+	for a1 in xrange(0, len(pt1) - 2):
+		for b1 in xrange(a1 + 1, len(pt1s) - 1):
+			#print a1, b1, len(bestmatch)
 			ab1 = dist1[a1, b1]
 			((a2, b2), dif) = find_nearest(dist2, ab1)
 			if dif > maxdif:
@@ -234,7 +235,7 @@ def match_triangle(pt1, pt2, maxdif = 5.0, maxdrift = 20, off = (0.0, 0.0)):
 				elif check_drift(pt1s, pt2s, [[a1, b2], [b1, a2]], maxdif, maxdrift, off):
 					bestmatch = [[a1, b2], [b1, a2]]
 			
-			for c1 in range(b1 + 1, len(pt1s)):
+			for c1 in xrange(b1 + 1, len(pt1s)):
 				ac1 = dist1[a1, c1]
 				bc1 = dist1[b1, c1]
 				
@@ -260,7 +261,7 @@ def match_triangle(pt1, pt2, maxdif = 5.0, maxdrift = 20, off = (0.0, 0.0)):
 			if len(match) == 3 and len(bestmatch) < 3 and check_drift(pt1s, pt2s, match, maxdif, maxdrift, off):
 				bestmatch = match
 			
-			for d1 in range(c1 + 1, len(pt1s)):
+			for d1 in xrange(c1 + 1, len(pt1s)):
 				ad1 = dist1[a1, d1]
 				bd1 = dist1[b1, d1]
 				cd1 = dist1[c1, d1]
@@ -271,13 +272,18 @@ def match_triangle(pt1, pt2, maxdif = 5.0, maxdrift = 20, off = (0.0, 0.0)):
 				if d2_1 == d2_2 and d2_2 == d2_3 and dif1 < maxdif and dif2 < maxdif and dif3 < maxdif:
 					match.append([d1, d2_1])
 			
-			if len(match) > 3:
-				# 2 triangles are enough
+			if len(match) >= n_stop:
+				# 2 triangles are enough with default n_stop = 4
 				return match_take(pt1s, pt2s, match, ord1, ord2)
+			if len(match) > len(bestmatch):
+				bestmatch = match
+	
+	if len(bestmatch) >= 4:
+		return match_take(pt1s, pt2s, bestmatch, ord1, ord2)
 	
 	if len(bestmatch) == 0 and len(pt1s) > 0 and len(pt2s) > 0:
-		for i in range(0, min(3, len(pt1s))):
-			for j in range(0, min(3, len(pt2s))):
+		for i in xrange(0, min(3, len(pt1s))):
+			for j in xrange(0, min(3, len(pt2s))):
 				if check_drift(pt1s, pt2s, [[i, j]], maxdif, maxdrift, off):
 					bestmatch.append([i, j])
 	return match_take(pt1s, pt2s, bestmatch, ord1, ord2)
