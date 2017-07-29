@@ -917,7 +917,9 @@ class GuiderAlgDec(GuiderAlg):
 		corr1 *= self.status['aggressivness']
 		
 		if np.abs(corr1) < self.status['rev_move']:
-			self.corr_acc += corr1 * self.status['smooth_c']
+			corr_acc = self.corr_acc * (1.0 - smooth_c) + corr1 * smooth_c
+			if np.abs(corr_acc) < 3:
+				self.corr_acc = corr_acc
 		else:
 			self.corr_acc = 0
 		
@@ -955,7 +957,7 @@ class GuiderAlgRa(GuiderAlg):
 	
 		smooth_c = self.status['smooth_c']
 		corr_acc = self.corr_acc * (1.0 - smooth_c) + corr * smooth_c
-		if np.abs(corr_acc) < 5:
+		if np.abs(corr_acc) < 3:
 			self.corr_acc = corr_acc
 	
 		err2norm = (err2 ** 2 / self.smooth_var2) ** 0.5
@@ -1861,7 +1863,10 @@ class Focuser:
 					self.status['v_curve_s'] = v_curve_s.tolist()
 
 					self.status['v_curve2'] = []
-					self.step(-2)
+					if  self.status['side_len'] < 2:
+						self.status['phase'] = 'wait'
+					else:
+						self.step(-2)
 
 			self.step(-1)
 		elif self.status['phase'] == 'focus_v': # go back, record first part of second v curve
