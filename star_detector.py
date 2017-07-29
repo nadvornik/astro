@@ -2,6 +2,7 @@ import numpy as np
 import cv2
 import threading
 from centroid import centroid, sym_center
+import sys
 
 class MaxDetector(threading.Thread):
 	def __init__(self, img, d, n, y1, y2, no_over = False):

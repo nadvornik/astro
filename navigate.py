@@ -916,8 +916,10 @@ class GuiderAlgDec(GuiderAlg):
 		
 		corr1 *= self.status['aggressivness']
 		
+		smooth_c = self.status['smooth_c']
+
 		if np.abs(corr1) < self.status['rev_move']:
-			corr_acc = self.corr_acc * (1.0 - smooth_c) + corr1 * smooth_c
+			corr_acc = self.corr_acc + corr1 * smooth_c
 			if np.abs(corr_acc) < 3:
 				self.corr_acc = corr_acc
 		else:
@@ -956,7 +958,7 @@ class GuiderAlgRa(GuiderAlg):
 		corr *= self.status['aggressivness']
 	
 		smooth_c = self.status['smooth_c']
-		corr_acc = self.corr_acc * (1.0 - smooth_c) + corr * smooth_c
+		corr_acc = self.corr_acc + corr * smooth_c
 		if np.abs(corr_acc) < 3:
 			self.corr_acc = corr_acc
 	
@@ -1726,7 +1728,7 @@ class Focuser:
 
 		self.im = im
 		
-		#im = cv2.medianBlur(im, 3)
+		im = cv2.medianBlur(im, 3)
 
 		if (self.dark.len() > 0):
 			print im.shape
