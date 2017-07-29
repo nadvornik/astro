@@ -953,13 +953,15 @@ class GuiderAlgRa(GuiderAlg):
 		corr = err * self.parity + self.get_corr_delay(time.time() - t0)
 		corr *= self.status['aggressivness']
 	
-		self.corr_acc += corr * self.status['smooth_c']
+		smooth_c = self.status['smooth_c']
+		corr_acc = self.corr_acc * (1.0 - smooth_c) + corr * smooth_c
+		if np.abs(corr_acc) < 5:
+			self.corr_acc = corr_acc
 	
 		err2norm = (err2 ** 2 / self.smooth_var2) ** 0.5
 		corr *= 1.0 / (1.0 + err2norm)
 		corr += self.corr_acc
 
-		smooth_c = self.status['smooth_c']
 		self.smooth_var2 = self.smooth_var2 * (1.0 - smooth_c) + err2**2 * smooth_c
 		
 		print "ra err %f, err2 %f, err2norm %f, err2agg %f, corr_acc %f, corr %f" % (err, err2, err2norm, 1.0 / (1.0 + err2norm), self.corr_acc, corr)
@@ -1427,7 +1429,10 @@ class Guider:
 					cmdQueue.put('interrupt')
 					self.mount.set_guider_calib(np.angle(self.ref_off, deg=True), self.parity, self.status['pixpersec'], self.status['pixpersec_neg'], self.status['pixpersec_dec'], self.status['pixpersec_dec'])
 					self.alg_ra = GuiderAlgRa(self.mount.go_ra, self.status['t_delay'], self.status['pixpersec'], self.status['pixpersec_neg'], self.status['ra_alg'])
-					self.alg_dec = GuiderAlgDec(self.mount.go_dec, self.status['t_delay'], self.status['pixpersec_dec'], self.status['pixpersec_dec'], self.status['dec_alg'], parity = self.parity)
+					if self.status['pixpersec_dec'] is not None:
+						self.alg_dec = GuiderAlgDec(self.mount.go_dec, self.status['t_delay'], self.status['pixpersec_dec'], self.status['pixpersec_dec'], self.status['dec_alg'], parity = self.parity)
+					else:
+						self.alg_dec = None
 						
 
 				for p in pt:
@@ -1649,6 +1654,8 @@ class Focuser:
 		sum_w = 0.0
 		for p in self.focus_yx:
 			(y, x, v) = p
+			x = int(x + 0.5)
+			y = int(y + 0.5)
 			if (x < Focuser.hfr_size):
 				continue
 			if (y < Focuser.hfr_size):
@@ -2388,7 +2395,7 @@ class Camera_test:
 		#pil_image = Image.open("converted/IMG_%04d.jpg" % (146+self.i))
 		#pil_image.thumbnail((1000,1000), Image.ANTIALIAS)
 		#im = np.array(pil_image)
-		im = cv2.imread("test/testimg16_" + str(self.i % 100 * 3 + int(self.i / 100) * 10) + ".tif")
+		im = cv2.imread("test/testimg23_" + str(self.i % 100 * 3 + int(self.i / 100) * 10) + ".tif")
 		#im = cv2.imread("testimg23_" + str(self.i) + ".tif")
 		#im = apply_gamma(im, 2.2)
 		if self.x != 0 or self.y != 0:
@@ -2415,7 +2422,7 @@ class Camera_test_shift:
 	
 	def capture(self):
 		i =  self.cam0.i + self.shift
-		im = cv2.imread("test/testimg16_" + str(i) + ".tif")
+		im = cv2.imread("test/testimg23_" + str(i) + ".tif")
 		return im, None
 
 	def shutdown(self):
@@ -2443,8 +2450,8 @@ class Camera_test_g:
 		corr = self.go_ra.recent_avg() * 5
 		i = int((corr - self.go_ra.recent_avg(1))  + self.err)
 		print self.err, corr * 3, i
-		im = cv2.imread("test/testimg16_" + str(i + 100) + ".tif")
-		print im, "test/testimg16_" + str(i + 100) + ".tif"
+		im = cv2.imread("test/testimg23_" + str(i + 100) + ".tif")
+		print "test/testimg23_" + str(i + 100) + ".tif"
 		corr_dec = self.go_dec.recent_avg()
 		im = im[50 + int(corr_dec * 3):-50 + int(corr_dec * 3)]
 		#im = cv2.flip(im, 1)

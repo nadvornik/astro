@@ -425,7 +425,12 @@ def pt_transform_opt(pt1m, pt2m, noise = 2, pt_func = pt_translation):
 	if pt_func == pt_translation_rotate and len(pt1m) < 4:
 		pt_func = pt_translation
 	
-	m = pt_func(pt1, pt2, weights)
+	try:
+		m = pt_func(pt1, pt2, weights)
+	except:
+		print "Unexpected error: " + sys.exc_info().__str__()
+		pt_func = pt_translation
+		m = pt_func(pt1, pt2, weights)
 	
 	pt1t = np.insert(pt1, 2, 1.0, axis=1).dot(m).A
 	
