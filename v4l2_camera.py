@@ -20,6 +20,10 @@ import time
 import sys
 
 from uvc_xu_control import *
+import logging
+
+log = logging.getLogger()
+
 
 # this file contains hacks for ELP-USB130W01MT camera with AR0130 sensor
 
@@ -68,9 +72,9 @@ class Camera:
     def _prepare(self, width = None, height = None, format = None, decode=True):
 
 
-        print "v4l open {}".format(self.dev_name)
+        log.info("v4l open {}".format(self.dev_name))
         self.vd = os.open(self.dev_name, os.O_RDWR | os.O_NONBLOCK, 0)
-        print "v4l open fd {}".format(self.vd)
+        log.info("v4l open fd {}".format(self.vd))
 	self.fmt = format
 	self.decode = decode
 
@@ -139,7 +143,7 @@ class Camera:
             try:
                 ready_to_read, ready_to_write, in_error = select.select([self.vd], [], [], max_t)
             except (OSError, select.error) as why:
-                print "Unexpected error: " + sys.exc_info().__str__()
+                log.exception('Unexpected error')
                 continue
 
 	if time.time() - t0 >= max_t:
@@ -177,9 +181,9 @@ class Camera:
 			if self._prepare(width, height, format, decode):
 				break
 		except:
-			print "Unexpected error: " + sys.exc_info().__str__()
-		i += 1
-		print "camera init failed, retry %d" % i
+			log.exception('Unexpected error')
+			i += 1
+		log.info("camera init failed, retry %d" % i)
 		self.shutdown()
 		time.sleep(1)
 	if self.vd is None:
@@ -191,9 +195,8 @@ class Camera:
 		self.control(V4L2_CID_EXPOSURE_ABSOLUTE, 500)
 		
 	except: 
-		print "Unexpected error: " + sys.exc_info().__str__()
+		log.exception('Unexpected error')
 
-#######################################################################
         time.sleep(0.2)
 	
 	try:
@@ -220,8 +223,8 @@ class Camera:
 	        #sonix_write_sensor(self.vd, 0x3044, 0x0000) #disable row noise compensation
 	        #sonix_write_sensor(self.vd, 0x3012, int(0x2400 * self.status['exp-sec'])) #exposure time coarse
 	except:
-		print "Unexpected error: " + sys.exc_info().__str__()
-        
+		log.exception('Unexpected error')        
+
         self.cmd("exp-sec-%f" % self.status['exp-sec'])
         # skip incorrectly set  frames at the beginning
         self.capture()
@@ -255,7 +258,7 @@ class Camera:
 			while os.path.isfile(self.status['capture_path'] + 'capture%04d.tif' % i):
 				i += 1
 			cv2.imwrite(self.status['capture_path'] + 'capture%04d.tif' % i, img)
-			print "saved {}".format(i)
+			log.info("saved {}".format(i))
 			i += 1
 			self.status['capture_idx'] = i
 
@@ -273,10 +276,10 @@ class Camera:
 			img = np.array(img, copy=True)
 	else:
 		#unsupported format
-		print "Unexpected error: " + sys.exc_info().__str__()
-	
+		log.exception('Unexpected error')	
+
         fcntl.ioctl(self.vd, VIDIOC_QBUF, buf)
-        return img, None
+        return img, time.time()
 
     def control(self, id, value):
         control = v4l2_control(id, value)
@@ -289,7 +292,7 @@ class Camera:
     		try:
     			return self._capture()
     		except:
-    		        print "Unexpected error: " + sys.exc_info().__str__()
+		        log.exception('Unexpected error')
     			self.shutdown()
     			self.prepare(self.w, self.h, self.fmt, self.decode)
 
@@ -317,13 +320,13 @@ class Camera:
 		if cmd.startswith('exp-sec-'):
 			exp_sec = float(cmd[len('exp-sec-'):])
 			exp_uvc = min(int(exp_sec * 10000), 5000)
-			print "exp_sec {}, exp_uvc {}".format(exp_sec, exp_uvc)
+			log.info("exp_sec {}, exp_uvc {}".format(exp_sec, exp_uvc))
 			self.control(V4L2_CID_EXPOSURE_ABSOLUTE, exp_uvc)
 			if exp_sec > 0.5:
 				sonix_write_sensor(self.vd, 0x3012, int(0x2400 * exp_sec)) #exposure time coarse
 			self.status['exp-sec'] = exp_sec
 	except:
-		print "Unexpected error: " + sys.exc_info().__str__()
+		log.exception('Unexpected error')
 		self.shutdown()
 		self.prepare(self.w, self.h, self.fmt, self.decode)
 
@@ -333,13 +336,12 @@ class Camera:
 		try:
 			fcntl.ioctl(self.vd, VIDIOC_STREAMOFF, type)
 		except:
-			print "Unexpected error: " + sys.exc_info().__str__()
-		
+			log.exception('Unexpected error')		
 	for mm in self.mm:
 		mm.close()
 	self.mm = []
 	if self.vd is not None:
-		print "v4l close fd", self.vd
+		log.info("v4l close fd %s", self.vd)
 		os.close(self.vd)
 		self.vd = None
 		time.sleep(1)
@@ -358,7 +360,7 @@ if __name__ == "__main__":
 			while os.path.isfile('capture%04d.tif' % i):
 				i += 1
 			cv2.imwrite('capture%04d.tif' % i, img)
-			print "saved {}".format(i)
+			log.info("saved {}".format(i))
 			i += 1
 	
 		ch = 0xFF & cv2.waitKey(1)

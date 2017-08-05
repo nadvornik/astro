@@ -46,6 +46,12 @@ from polyfit import *
 from quat import Quaternion
 from star_detector import *
 
+import logging
+from functools import reduce
+logging.basicConfig(format="%(filename)s:%(lineno)d: %(message)s", level=logging.INFO)
+
+log = logging.getLogger()
+
 class Status:
 	def __init__(self, conf_file):
 		try:
@@ -191,7 +197,7 @@ def filter_hfr_list(hfr_list):
 
 	for deg, kappa in enumerate([3, 2, 2]):
 		A = np.polynomial.polynomial.polyvander2d(hfr_list[:, 0], hfr_list[:, 1], (deg, deg))[:, np.where(np.flipud(np.tri(deg + 1)).ravel())[0]]
-		#print A
+		#log.info A
 	
 		for i in range(4):
 			coef = np.linalg.lstsq(A, hfr_list[:, 2])[0]
@@ -238,11 +244,11 @@ class Stack:
 
 		pt1 = self.prev_pt_verified
 		pt1m, pt2m, match = match_triangle(pt1, pt2, 5, 15)
-		#print "match1",match
+		#log.info "match1",match
 		if len(match) == 0:
 			pt1 = self.get_xy()
 			pt1m, pt2m, match = match_triangle(pt1, pt2, 5, 15)
-			#print "match2",match
+			#log.info "match2",match
 		
 		
 		if len(match) == 0:
@@ -257,8 +263,8 @@ class Stack:
 	
 			pt1m, pt2m, match = match_closest(pt1, pt2, 5, M = M)
 			#off, weights = avg_pt(pt1m, pt2m)
-			#print "off2", off 
-			#print match
+			#log.info "off2", off 
+			#log.info match
 			self.prev_pt_verified = pt2m
 			self.prev_pt = pt2
 
@@ -399,7 +405,7 @@ class Navigator:
 		self.hotpix_cnt[np.where(im > stddev * 10)] += 1
 		
 	def hotpix_update(self):
-		self.hotpixels = zip(*np.where(self.hotpix_cnt > 2))
+		self.hotpixels = list(zip(*np.where(self.hotpix_cnt > 2)))
 		
 	
 	def proc_frame(self,im, i, t = None):
@@ -476,7 +482,7 @@ class Navigator:
 				if save_conf:
 					cmdQueue.put('save')
 					
-				print "field corr len", len(self.field_corr_list)
+				log.info("field corr len %d", len(self.field_corr_list))
 				if len(self.field_corr_list) > self.status['field_corr_limit']:
 					self.update_field_cor()
 					self.status['field_corr_limit'] *= 2
@@ -496,7 +502,7 @@ class Navigator:
 
 		if self.solver is None and i > 20 and self.status['dispmode'] != 'disp-orig' and self.status['dispmode'] != 'disp-df-cor':
 			xy = self.stack.get_xy()
-			#print "len", len(xy)
+			#log.info "len", len(xy)
 			if len(xy) > 8:
 				self.status['i_solver'] = i
 				self.status['t_solver'] = t
@@ -634,7 +640,7 @@ class Navigator:
 				(lat, lon) = [float(n) for n in str_gps.split(',')]
 				self.mount.polar.set_gps((lat, lon))
 			except:
-				print "Error: " +  sys.exc_info().__str__()
+				log.exception('Unexpected error')
 		if cmd.startswith('go-left'):
 				self.mount.move_main_px(self.im.shape[1] * self.status['go_by'], 0, self.tid)
 		if cmd.startswith('go-right'):
@@ -677,7 +683,7 @@ class Navigator:
 		im_c = np.array(pil_image)
 		del pil_image
 		
-		print "full_res decoded"
+		log.info("full_res decoded")
 		#mean, stddev = cv2.meanStdDev(im_c)
 		#im_c[:,:,0] = cv2.subtract(im_c[:,:,0], mean[0])
 		#im_c[:,:,1] = cv2.subtract(im_c[:,:,1], mean[1])
@@ -685,7 +691,7 @@ class Navigator:
 		scale= 10
 		bg = cv2.resize(im_c, ((im_c.shape[1] + scale - 1) / scale, (im_c.shape[0] + scale - 1) / scale), interpolation=cv2.INTER_AREA)
 		bg = cv2.erode(bg, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3,3)))
-		print "full_res erode"
+		log.info("full_res erode")
 		bg = cv2.blur(bg, (20,20))
 		bg = cv2.blur(bg, (20,20))
 		bg = cv2.blur(bg, (20,20))
@@ -696,14 +702,14 @@ class Navigator:
 		im = cv2.cvtColor(im_c, cv2.COLOR_RGB2GRAY);
 		
 		im = apply_gamma8(im, 2.2)
-		print "full_res bg"
+		log.info("full_res bg")
 		pts = find_max(im, 12, 200, no_over = True)
 		w = im.shape[1]
 		h = im.shape[0]
-		print "full_res max"
+		log.info("full_res max")
 		
 		hfr_list = get_hfr_field(im, pts, sub_bg = True)
-		print "full_res get hfr"
+		log.info("full_res get hfr")
 		hfr_list = filter_hfr_list(hfr_list)
 		
 		full_hfr = np.mean(hfr_list[:,2])
@@ -712,7 +718,7 @@ class Navigator:
 			self.full_res['full_hfr'].append(full_hfr)
 			self.full_res['full_ts'] = time.time()
 		
-		print "full_res filter hfr"
+		log.info("full_res filter hfr")
 
 		ell_list = []
 		for p in hfr_list:
@@ -722,7 +728,7 @@ class Navigator:
 				
 		del im
 
-		print "full_res ell"
+		log.info("full_res ell")
 
 		solver = Solver(sources_list = pts, field_w = w, field_h = h, ra = self.status['ra'], dec = self.status['dec'], field_deg = self.status['field_deg'], radius = 100)
 		solver.start()
@@ -730,12 +736,13 @@ class Navigator:
 		im_c = cv2.normalize(im_c,  im_c, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8UC3)
 		im_c = apply_gamma8(im_c, 0.6)
 
-		print "full_res norm"
+		log.info("full_res norm")
 
 		for i, p in enumerate(hfr_list):
 			val, vec = ell_list[i]
+			log.info("%s %s", val, vec)
 			#fwhm = get_fwhm(a)
-			#print "fwhm", fwhm, p[2]
+			#log.info "fwhm", fwhm, p[2]
 			cv2.circle(im_c, (int(p[1]), int(p[0])), int(p[2] * 10), (100,100,100), 2)
 			#cv2.circle(im_c, (int(p[1]), int(p[0])), int(fwhm * 10), (255,255,255), 2)
 			if val[0] > val[1]:
@@ -756,13 +763,13 @@ class Navigator:
 			cv2.line(im_c, (int(p11[0]), int(p11[1])), (int(p12[0]), int(p12[1])), (255,0,0), 2)
 			cv2.line(im_c, (int(p13[0]), int(p13[1])), (int(p14[0]), int(p14[1])), (255,0,0), 2)
 
-		print "full_res plot"
+		log.info("full_res plot")
 
 		ui.imshow('full_res', im_c)
 		
 		solver.join()
 		if solver.solved:
-			print "full-res solved:", solver.ra, solver.dec
+			log.info("full-res solved: %f %f", solver.ra, solver.dec)
 			with self.solvedlock:
 				self.status['ra'] = solver.ra
 				self.status['dec'] = solver.dec
@@ -789,7 +796,7 @@ class Navigator:
 			ui.imshow('full_res', plot)
 
 		else:
-			print "full-res not solved"
+			log.info("full-res not solved")
 		
 		cmdQueue.put('capture-full-res-done')
 	
@@ -811,18 +818,18 @@ class Navigator:
 			
 			field_corr_list[:, 0] = xnew
 			field_corr_list[:, 1] = ynew
-		print field_corr_list
+		log.info(field_corr_list)
 
 
 		M = pt_translation_rotate(field_corr_list[:, 2:4], field_corr_list[:, 0:2], np.ones((field_corr_list.shape[0])))
-		print M
+		log.info("%s", M)
 		M2 = cv2.estimateRigidTransform(np.array(field_corr_list[:, 2:4]), np.array(field_corr_list[:, 0:2]), False)
 		M2 = np.matrix(M2.T)
-		print "M2"
-		print M2
+		log.info("M2")
+		log.info("%s", M2)
 		
 		field_corr_list[:, 2:4] = np.insert(field_corr_list[:, 2:4], 2, 1.0, axis=1).dot(M2).A
-		print field_corr_list
+		log.info(field_corr_list)
 
 		if len(field_corr_list) < 1000:
 			deg = 1
@@ -832,10 +839,10 @@ class Navigator:
 		xcorr = polyfit2d(field_corr_list[:, 2], field_corr_list[:, 3], field_corr_list[:, 0], deg)
 		ycorr = polyfit2d(field_corr_list[:, 2], field_corr_list[:, 3], field_corr_list[:, 1], deg)
 		
-		#print "xcorr"
-		#print xcorr
-		#print "ycorr"
-		#print ycorr
+		#log.info "xcorr"
+		#log.info xcorr
+		#log.info "ycorr"
+		#log.info ycorr
 		h, w = self.im.shape
 		xr = np.arange(0, w, dtype=np.float32)
 		yr = np.arange(0, h, dtype=np.float32)
@@ -844,10 +851,10 @@ class Navigator:
 		m[:,:,0] = np.polynomial.polynomial.polygrid2d(xr, yr, xcorr).T
 		m[:,:,1] = np.polynomial.polynomial.polygrid2d(xr, yr, ycorr).T
 		
-		print "field_corr"
-		print self.field_corr
-		print "new"
-		print m
+		log.info("field_corr")
+		log.info("%s", self.field_corr)
+		log.info("new")
+		log.info(m)
 		fn = self.status['field_corr']
 		if fn is not None:
 			if fn.endswith('.npy'):
@@ -862,14 +869,14 @@ class Navigator:
 def fit_line(xylist, sigma = 2):
 	a = np.array(xylist)
 	m, c = np.polyfit(a[:, 0], a[:, 1], 1)
-	print "fit_line res1" , m ,c
+	log.info("fit_line res1 %f %f" , m ,c)
 	
 	for i in range(1, 5):
 		d2 = (a[:, 0] * m + c - a[:, 1]) ** 2
 		var = np.mean(d2)
 		a = a[np.where(d2 < var * sigma ** 2)]
 		m, c = np.polyfit(a[:, 0], a[:, 1], 1)
-		print "fit_line res2" , m ,c
+		log.info("fit_line res2 %f %f" , m ,c)
 	return m, c
 
 class GuiderAlg(object):
@@ -928,7 +935,7 @@ class GuiderAlgDec(GuiderAlg):
 		corr = corr1 + self.corr_acc
 
 		if self.status['restart']:
-			print "dec err %f, corr1 %f, corr_acc %f, corr %f, restart" % (err, corr1, self.corr_acc, corr)
+			log.info("dec err %f, corr1 %f, corr_acc %f, corr %f, restart", err, corr1, self.corr_acc, corr)
 			self.status['restart'] = False
 			self.corr_acc = 0
 			return corr
@@ -942,7 +949,7 @@ class GuiderAlgDec(GuiderAlg):
 			self.corr_acc = 0
 		
 		
-		print "dec err %f, corr1 %f, corr_acc %f, corr %f" % (err, corr1, self.corr_acc, corr)
+		log.info("dec err %f, corr1 %f, corr_acc %f, corr %f", err, corr1, self.corr_acc, corr)
 
 		return corr
 
@@ -968,7 +975,7 @@ class GuiderAlgRa(GuiderAlg):
 
 		self.smooth_var2 = self.smooth_var2 * (1.0 - smooth_c) + err2**2 * smooth_c
 		
-		print "ra err %f, err2 %f, err2norm %f, err2agg %f, corr_acc %f, corr %f" % (err, err2, err2norm, 1.0 / (1.0 + err2norm), self.corr_acc, corr)
+		log.info("ra err %f, err2 %f, err2norm %f, err2agg %f, corr_acc %f, corr %f", err, err2, err2norm, 1.0 / (1.0 + err2norm), self.corr_acc, corr)
 		return corr
 
 
@@ -1073,7 +1080,7 @@ class Guider:
 			self.capture_in_progress -= 1
 			if self.capture_in_progress < 0:
 				self.capture_in_progress = 0
-				print "capture_in_progress negative"
+				log.info("capture_in_progress negative")
 		
 			if self.capture_in_progress == 0:
 				try:
@@ -1116,7 +1123,7 @@ class Guider:
 			self.capture_proc_in_progress -= 1
 			if self.capture_proc_in_progress < 0:
 				self.capture_proc_in_progress = 0
-				print "capture_proc_in_progress negative"
+				log.info("capture_proc_in_progress negative")
 			if self.capture_proc_in_progress == 0 and self.full_res is not None:
 				if self.full_res['diff_thr'] >= 0:
 					self.focus_loop()
@@ -1169,7 +1176,7 @@ class Guider:
 			g_diff = g2 - g1
 		
 		
-		print "focus_loop full: %f  guider: %f,  g: %f, cov %f" % (full_hfr_diff, guider_hfr_diff, g_diff, self.full_res['guider_hfr_cov'])
+		log.info("focus_loop full: %f  guider: %f,  g: %f, cov %f", full_hfr_diff, guider_hfr_diff, g_diff, self.full_res['guider_hfr_cov'])
 		
 		self.full_res['diff_acc'] = max(self.full_res['diff_acc'] + full_hfr_diff, 0.0)
 		
@@ -1179,20 +1186,20 @@ class Guider:
 		if self.full_res['diff_acc'] > self.full_res['diff_thr']:
 		        self.full_res['diff_acc'] = 0
 			if self.full_res['last_step'] < 0:
-				print "focus_loop rev 1"
+				log.info("focus_loop rev 1")
 				cmdQueue.put('f+1')
 				self.full_res['last_step'] = 1.0
 			else:
-				print "focus_loop rev -1"
+				log.info("focus_loop rev -1")
 				cmdQueue.put('f-1')
 				self.full_res['last_step'] = -1.0
 		else:
 			if self.full_res['last_step'] < 0:
-				print "focus_loop keep -1"
+				log.info("focus_loop keep -1")
 				cmdQueue.put('f-1')
 				self.full_res['last_step'] = -1.0
 			else:
-				print "focus_loop keep +1"
+				log.info("focus_loop keep +1")
 				cmdQueue.put('f+1')
 				self.full_res['last_step'] = 1.0
 		
@@ -1264,14 +1271,14 @@ class Guider:
 			pt1m, pt2m, match = match_triangle(self.pt0, pt, 5, 50, off)
 			if len(match) > 0:
 				off, weights = avg_pt(pt1m, pt2m)
-				#print "triangle", off, match
+				#log.info "triangle", off, match
 			
 				pt0, pt, match = match_closest(self.pt0, pt, 5, off)
 			
 			if len(match) > 0:
 			
 				off, weights = avg_pt(pt0, pt, noise = 3)
-				#print "weights", weights 
+				#log.info "weights", weights 
 				dist = np.linalg.norm(off)
 
 				if (dist > 20):
@@ -1286,7 +1293,7 @@ class Guider:
 					self.off = off
 					self.off_t = t
 			
-				#print off, dist
+				#log.info off, dist
 				pt_ok = match[np.where(weights > 0), 0][0]
 				self.used_cnt.extend(pt_ok)
 
@@ -1314,7 +1321,7 @@ class Guider:
 					self.dist = m * dt + c
 					self.ref_off = complex(*self.off) / dist
 				
-					print "pixpersec", self.status['pixpersec'], "pixperframe", self.pixperframe, "t_delay1", self.status['t_delay1']
+					log.info("pixpersec %f pixperframe %f t_delay1 %f", self.status['pixpersec'], self.pixperframe, self.status['t_delay1'])
 				
 					self.pt0 = np.array(self.pt0)[np.where(np.bincount(self.used_cnt) > 5)]
 					self.pt0base = self.pt0
@@ -1334,7 +1341,7 @@ class Guider:
 			pt1m, pt2m, match = match_triangle(self.pt0, pt, 5, 50, self.off)
 			if len(match) > 0:
 				off, weights = avg_pt(pt1m, pt2m)
-				#print "triangle", off, match
+				#log.info "triangle", off, match
 			
 				pt0, pt, match = match_closest(self.pt0, pt, 5, off)
 				
@@ -1367,7 +1374,7 @@ class Guider:
 
 					self.pixperframe_neg = self.status['pixpersec_neg'] * dt / self.cnt
 				
-					print "pixpersec_neg", self.status['pixpersec_neg'], "pixperframe_neg", self.pixperframe_neg, "t_delay2", self.status['t_delay2']
+					log.info("pixpersec_neg %f pixperframe_neg %f t_delay2 %f", self.status['pixpersec_neg'], self.pixperframe_neg, self.status['t_delay2'])
 					self.status['t_delay'] = (self.status['t_delay1'] + self.status['t_delay2']) / 2
 					
 					#testing
@@ -1393,7 +1400,7 @@ class Guider:
 			pt1m, pt2m, match = match_triangle(self.pt0, pt, 5, 50, self.off)
 			if len(match) > 0:
 				off, weights = avg_pt(pt1m, pt2m)
-				#print "triangle", off, match
+				#log.info "triangle", off, match
 			
 				pt0, pt, match = match_closest(self.pt0, pt, 5, off)
 				
@@ -1405,8 +1412,8 @@ class Guider:
 			
 				status += " err:%.1f %.1f t_delay:%.1f" % (err.real, err.imag, self.status['t_delay'])
 				
-				print status
-				print abs(err.imag - self.err0_dec), 2 * self.status['pixpersec']
+				log.info(status)
+				log.info("%f %f", abs(err.imag - self.err0_dec), 2 * self.status['pixpersec'])
 			
 				if t > self.t2 + self.status['t_delay'] * 2 + 10 or abs(err.imag - self.err0_dec) > 50:
 					aresp = np.array(self.resp0)
@@ -1414,20 +1421,20 @@ class Guider:
 					m, c = fit_line(aresp1)
 
 					if abs(err.imag - self.err0_dec) < min(2 * self.status['pixpersec'], 10):
-						print "no dec axis"
+						log.info("no dec axis")
 						self.parity = 0
 						self.status['pixpersec_dec'] = None
 						
 					elif m > 0:
-						print "dec_pos"
+						log.info("dec_pos")
 						self.parity = 1
 						self.status['pixpersec_dec'] = m
 					else:
-						print "dec_neg"
+						log.info("dec_neg")
 						self.parity = -1
 						self.status['pixpersec_dec'] = -m
 
-						print "move_dec test2", self.status['pixpersec_dec'], m
+						log.info("move_dec test2 %f %f", self.status['pixpersec_dec'], m)
 
 					self.status['mode'] = 'track'
 					cmdQueue.put('interrupt')
@@ -1448,15 +1455,15 @@ class Guider:
 				pt1m, pt2m, match = match_triangle(self.pt0, pt, 5, 30, self.off)
 				if len(match) > 0:
 					off, weights = avg_pt(pt1m, pt2m)
-					#print "triangle", off, match
+					#log.info "triangle", off, match
 			
 					pt0, pt, match = match_closest(self.pt0, pt, 5, off)
 
 			if len(match) > 0:
 				self.off, weights = avg_pt(pt0, pt)
-				print "centroid off1", self.off
+				log.info("centroid off1 %s", self.off)
 				self.off += centroid_mean(im_sub, pt0, self.off)
-				print "centroid off2", self.off
+				log.info("centroid off2 %s", self.off)
 				
 				err = complex(*self.off) / self.ref_off
 				self.resp0.append((t - self.t0, err.real, err.imag))
@@ -1487,7 +1494,7 @@ class Guider:
 					self.status['curr_dec_err_list'].append(err.imag)
 					self.status['curr_hfr_list'].append(get_hfr_list(im_sub, pt))
 				
-				print "capture", self.capture_init, self.capture_in_progress, self.capture_proc_in_progress
+				log.info("capture %d %d %d", self.capture_init, self.capture_in_progress, self.capture_proc_in_progress)
 				
 				if self.ok:
 					self.status['mode'] = 'close'
@@ -1500,7 +1507,7 @@ class Guider:
 					np.save("resp0_%d.npy" % self.t0, np.array(self.resp0))
 					self.mount.go_ra.save("go_ra_%d.npy" % self.t0)
 					self.mount.go_dec.save("go_dec_%d.npy" % self.t0)
-					print "SAVED" 
+					log.info("SAVED") 
 				
 		if len(self.pt0) > 0:
 			for p in self.pt0:
@@ -1513,7 +1520,7 @@ class Guider:
 def smooth(x,window_len=11,window='hanning'):
 
     if x.ndim != 1:
-        raise ValueError, "smooth only accepts 1 dimension arrays."
+        raise ValueError("smooth only accepts 1 dimension arrays.")
 
 
     if window_len<3:
@@ -1521,11 +1528,11 @@ def smooth(x,window_len=11,window='hanning'):
 
 
     if not window in ['flat', 'hanning', 'hamming', 'bartlett', 'blackman']:
-        raise ValueError, "Window is on of 'flat', 'hanning', 'hamming', 'bartlett', 'blackman'"
+        raise ValueError("Window is on of 'flat', 'hanning', 'hamming', 'bartlett', 'blackman'")
 
 
     s=np.append(np.append([x[0] for i in range(0, window_len)], x),[x[-1] for i in range(0, window_len)])
-    #print(len(s))
+    #log.info(len(s))
     if window == 'flat': #moving average
         w=np.ones(window_len,'d')
     else:
@@ -1564,7 +1571,7 @@ class Focuser:
 		v_curve_s = smooth(v_curve_s, smooth_size, 'flat')
 		
 		derived = np.gradient(v_curve_s)
-		#print derived.tolist()
+		#log.info derived.tolist()
 				
 		i1 = np.argmin(derived)
 		i2 = np.argmax(derived)
@@ -1579,7 +1586,7 @@ class Focuser:
 		#m2, c2 = np.polyfit(range(v_len - side_len, v_len), self.status['v_curve'][v_len - side_len: v_len], 1)
 		xmin =  (c2 - c1) / (m1 - m2)
 		side_len = xmin * 0.8
-		print "v_len", v_len, "side_len", side_len, "m1", m1, "c1", c1, "m2", m2, "c2", c2, "xmin", xmin
+		log.info("v_len %f side_len %f m1 %f c1 %f m2 %f c2 %f xmin %f", v_len, side_len, m1, c1, m2, c2, xmin)
 		
 		return xmin, side_len, smooth_size, c1, m1, c2, m2, v_curve_s
 	
@@ -1590,9 +1597,9 @@ class Focuser:
 		derived = np.gradient(v_curve2_s)
 		i1 = np.argmin(derived)
 		y = v_curve2_s[i1]
-		print "i1", i1
+		log.info("i1 %f", i1)
 		hyst = (y - c1) / m1 - i1
-		print "hyst", hyst
+		log.info("hyst %f", hyst)
 		return hyst, v_curve2_s
 	
 
@@ -1615,7 +1622,7 @@ class Focuser:
 		(h, w) = im.shape
 		for p in xy:
 			if p[2] < stddev * 3:
-				#print "under 3stddev:", p[2], stddev * 3
+				#log.info "under 3stddev:", p[2], stddev * 3
 				continue
 			x = int(p[1] + 0.5)
 			y = int(p[0] + 0.5)
@@ -1636,7 +1643,7 @@ class Focuser:
 			else:
 				if hfr(im[y - Focuser.hfr_size : y + Focuser.hfr_size + 1, x - Focuser.hfr_size : x + Focuser.hfr_size + 1]) < cur_hfr + 1:
 					ret.append(p)
-		print "hfr", hfr, ret
+		log.info("hfr %f %s", cur_hfr, ret)
 				
 		if len(ret) > 0:
 			return ret[0][2], cur_hfr, np.array(ret)
@@ -1695,7 +1702,7 @@ class Focuser:
 		filtered[:, 0:2] = np.insert(original[:, 0:2], 2, 1.0, axis=1).dot(M).A
 
 		self.focus_yx = filtered
-		print "hfr_list", hfr_list, weights
+		log.info("hfr_list %s %s", hfr_list, weights)
 		
 		cur_hfr = np.average(hfr_list, weights = weights)
 		d2 = (np.array(hfr_list) - cur_hfr) ** 2
@@ -1703,7 +1710,7 @@ class Focuser:
 		noise = 2
 		weights[np.where(d2 > var * noise**2)] = 1.0
 		cur_hfr = np.average(hfr_list, weights = weights)
-		print "hfr_list_filt", hfr_list, weights
+		log.info("hfr_list_filt %s %s", hfr_list, weights)
 		return cur_hfr
 
 
@@ -1731,8 +1738,8 @@ class Focuser:
 		im = cv2.medianBlur(im, 3)
 
 		if (self.dark.len() > 0):
-			print im.shape
-			print self.dark.get().shape
+			log.info(im.shape)
+			log.info(self.dark.get().shape)
 			im_sub = cv2.subtract(im, self.dark.get())
 		else:
 			im_sub = im
@@ -1756,7 +1763,7 @@ class Focuser:
 			self.status['phase'] = 'wait'
 		elif self.status['phase'] == 'seek': # move near, out of focus
 			self.hfr = self.get_hfr(im_sub)
-			print "in-focus hfr ", self.hfr
+			log.info("in-focus hfr ", self.hfr)
 			if self.hfr < Focuser.hfr_size / 3:
 				self.status['phase'] = 'prep_record_v'
 				self.phase_wait = 3
@@ -1776,7 +1783,7 @@ class Focuser:
 				self.dark.add(self.im)
 			else:
 				mean, self.stddev = cv2.meanStdDev(self.stack_im)
-				print "mean, stddev: ", mean, self.stddev
+				log.info("mean, stddev: %f %f", mean, self.stddev)
 				for i in range (0, 9):
 					self.step(3)
 				self.phase_wait = 5
@@ -1797,7 +1804,7 @@ class Focuser:
 				self.search_steps += 1
 				self.hfr = self.get_hfr(im_sub)
 			#self.phase_wait = 2
-			print "max", flux, self.max_flux
+			log.info("max %f %f", flux, self.max_flux)
 		elif self.status['phase'] == 'fast_search_start':
 			self.phase_wait = 3
 			self.status['phase'] = 'fast_search'
@@ -1839,7 +1846,7 @@ class Focuser:
 
 			if len(self.status['v_curve']) > 15:
 				self.status['cur_hfr'] = np.median(self.status['v_curve'][-15:])
-				print 'cur_hfr', self.status['cur_hfr'], self.status['min_hfr'], self.status['start_hfr']
+				log.info('cur_hfr %f %f %f', self.status['cur_hfr'], self.status['min_hfr'], self.status['start_hfr'])
 
 				if self.status['cur_hfr'] < self.status['min_hfr']:
 					self.status['min_hfr'] = self.status['cur_hfr']
@@ -1857,7 +1864,7 @@ class Focuser:
 							self.status['v_curve'] = self.status['v_curve'][i:]
 							break
 					
-					print "v_curve", self.status['v_curve'][::-1]
+					log.info("v_curve %s", self.status['v_curve'][::-1])
 
 					self.status['v_curve'] = self.status['v_curve'][::-1] # reverse
 
@@ -1882,7 +1889,7 @@ class Focuser:
 				self.status['v_curve2_s'] = v_curve2_s.tolist()
 
 				self.status['remaining_steps'] = round(self.status['xmin'] - len(self.status['v_curve2']) - self.status['hyst'])
-				print "remaining", self.status['remaining_steps']
+				log.info("remaining %d", self.status['remaining_steps'])
 				self.status['phase'] = 'focus_v2'
 				self.status['v_curve2'].append(self.hfr)
 		elif self.status['phase'] == 'focus_v2': # estimate maximum, go there
@@ -1897,7 +1904,7 @@ class Focuser:
 				np.save("v_curve2_%d.npy" % t, np.array(self.status['v_curve2']))
 				self.status['phase'] = 'wait'
 				
-			print "hfr", self.hfr
+			log.info("hfr %f", self.hfr)
 
 		else:
 			if self.focus_yx is not None:
@@ -2003,7 +2010,7 @@ class Mount:
 
 	def set_pos_tan(self, tan, t, camera):
 		#ra, dec, orient = self.tan_to_euler(tan, off)
-		#print ra, dec, orient
+		#log.info ra, dec, orient
 		#self.set_pos(ra, dec, orient, t, camera)
 
 		if camera == 'navigator':
@@ -2073,9 +2080,9 @@ class Mount:
 	
 	def set_guider_calib(self, roll, parity, pixpersec_ra_plus, pixpersec_ra_minus, pixpersec_dec_plus, pixpersec_dec_minus):
 		if parity != 0:
-			print 'parity', parity, self.status['guider_parity']
+			log.info('parity %f %f', parity, self.status['guider_parity'])
 			self.status['guider_parity'] = parity
-		print 'roll', 90 + roll * self.status['guider_parity'], self.status['guider_roll']
+		log.info('roll %f %f', 90 + roll * self.status['guider_parity'], self.status['guider_roll'])
 		self.status['guider_roll'] = 90 + roll * self.status['guider_parity']
 		if self.status['guider_pixscale'] is not None:
 			if self.guider_tan is not None and time.time() - self.guider_t < 60:
@@ -2107,7 +2114,7 @@ class Mount:
 		if camera == 'navigator':
 			if self.main_tan is None:
 				return
-                        print "move pix", dx, dy
+                        log.info("move pix %f %f", dx, dy)
 
 			mra, mdec, mroll, mpixscale, mparity = self.tan_to_euler(self.main_tan)
 			
@@ -2117,23 +2124,23 @@ class Mount:
                         
                         dec *= mparity
                         
-                        print "move arcsec", ra, dec
+                        log.info("move arcsec %f %f", ra, dec)
                         if self.go_ra is not None:
 				if ra > 0:
-					print "move_ra sec", ra / self.status['arcsec_per_sec_ra_plus']
+					log.info("move_ra sec %f", ra / self.status['arcsec_per_sec_ra_plus'])
 					self.go_ra.out(1, ra / self.status['arcsec_per_sec_ra_plus'])
 				elif ra < 0:
-					print "move_ra sec", ra / self.status['arcsec_per_sec_ra_minus']
+					log.info("move_ra sec %f", ra / self.status['arcsec_per_sec_ra_minus'])
 					self.go_ra.out(-1, -ra / self.status['arcsec_per_sec_ra_minus'])
 				else:
 					self.go_ra.out(0)
 
                         if self.go_dec is not None:
 				if dec > 0:
-					print "move_dec sec", dec / self.status['arcsec_per_sec_dec_plus']
+					log.info("move_dec sec %f", dec / self.status['arcsec_per_sec_dec_plus'])
 					self.go_dec.out(-1, dec / self.status['arcsec_per_sec_dec_plus'])
 				elif dec < 0:
-					print "move_dec sec", dec / self.status['arcsec_per_sec_dec_minus']
+					log.info("move_dec sec %f", dec / self.status['arcsec_per_sec_dec_minus'])
 					self.go_dec.out(1, -dec / self.status['arcsec_per_sec_dec_minus'])
 				else:
 					self.go_dec.out(0)
@@ -2241,7 +2248,7 @@ class Runner(threading.Thread):
 								pts = self.navigator.stack.get_xy()
 							elif mode == 'focuser':
 								pts = self.focuser.stack.get_xy()
-							print pts
+							log.info("%s", pts)
 							if len(pts) > 0:
 								i = random.randint(0,len(pts) - 1)
 								(maxy, maxx, maxv) = pts[i]
@@ -2275,11 +2282,10 @@ class Runner(threading.Thread):
 					except AttributeError:
 						pass
 					except:
-						print "Unexpected error: " + sys.exc_info().__str__()
-					
+						log.exception('Unexpected error')					
 					if self.capture_in_progress:
-						print "runner: capture_in_progress not finished"
-						print "capture_finished_fix"
+						log.info("runner: capture_in_progress not finished")
+						log.info("capture_finished_fix")
 
 						cmdQueue.put('capture-finished')
 						cmdQueue.put('capture-full-res-done')
@@ -2306,15 +2312,15 @@ class Runner(threading.Thread):
 						self.zoom_focuser.cmd(cmd)
 	
 			im, t = self.camera.capture()
-			print i,t
+			log.info("%d %f", i, t)
 			if self.video_tid is not None:
-				print im.shape, im.dtype
+				log.info("%s %s", im.shape, im.dtype)
 				
 				show = im
 				max_v = np.iinfo(im.dtype).max
 				if max_v > 255:
 					show = np.array(show / ((max_v + 1) / 256), dtype = np.uint8)
-				print show.shape, show.dtype
+				log.info("%s %s", show.shape, show.dtype)
 				ui.imshow(self.video_tid, show)
 			elif self.video_capture:
 				time.sleep(5)
@@ -2341,7 +2347,7 @@ class Runner(threading.Thread):
 	
 	def capture_end_cb(self, jpg):
 		self.capture_in_progress = False
-		print "capture_finished_cb"
+		log.info("capture_finished_cb")
 		cmdQueue.put('capture-finished')
 		if jpg is not None:
 			ui.imshow_jpg("full_res", jpg)
@@ -2398,7 +2404,7 @@ class Camera_test:
 
 	def capture(self):
 		#time.sleep(2)
-		print self.i
+		log.info("%d", self.i)
 		#pil_image = Image.open("converted/IMG_%04d.jpg" % (146+self.i))
 		#pil_image.thumbnail((1000,1000), Image.ANTIALIAS)
 		#im = np.array(pil_image)
@@ -2446,7 +2452,7 @@ class Camera_test_g:
 		self.status['exp-sec'] = 0.5
 	
 	def cmd(self, cmd):
-		print "camera:", cmd
+		log.info("camera: %s", cmd)
 		if cmd.startswith('exp-sec-'):
 			self.status['exp-sec'] = float(cmd[len('exp-sec-'):])
 
@@ -2456,9 +2462,9 @@ class Camera_test_g:
 		self.err += random.random() * 2 - 1.5
 		corr = self.go_ra.recent_avg() * 5
 		i = int((corr - self.go_ra.recent_avg(1))  + self.err)
-		print self.err, corr * 3, i
+		log.info("%f %f", self.err, corr * 3, i)
 		im = cv2.imread("test/testimg23_" + str(i + 100) + ".tif")
-		print "test/testimg23_" + str(i + 100) + ".tif"
+		log.info("test/testimg23_" + str(i + 100) + ".tif")
 		corr_dec = self.go_dec.recent_avg()
 		im = im[50 + int(corr_dec * 3):-50 + int(corr_dec * 3)]
 		#im = cv2.flip(im, 1)
@@ -2827,7 +2833,7 @@ def run_calibrate_v4l2_g():
 			im = cv2.subtract(im, dark.get())
 			ui.imshow('guider', normalize(im))
 			val = int(np.amax(im))
-			print exp, test, out, val
+			log.info("%f %f, %f, %f", exp, test, out, val)
 
 			if test == 10:
 				val0 = val
@@ -2836,24 +2842,24 @@ def run_calibrate_v4l2_g():
 				val1 = val
 				go_dec.out(0)
 				t0 = time.time()
-				print exp, "range", val0, val1
+				log.info("%f %d %d", exp, val0, val1)
 				valm = (val1 + val0) / 2
 				out = 0
 
 			elif test > 20 and out == 0 and val < valm:
-				print "change", exp, t - t0
+				log.info("change %f %f", exp, t - t0)
 				vals.append((exp, t - t0))
 				go_dec.out(1)
 				t0 = time.time()
 				out = 1
 			elif test > 20 and out == 1 and val > valm:
-				print "change", exp, t - t0
+				log.info("change %f %f", exp, t - t0)
 				vals.append((exp, t - t0))
 				go_dec.out(0)
 				t0 = time.time()
 				out = 0
 
-	print "line", fit_line(vals)
+	log.info("line", fit_line(vals))
 
 
 	cmdQueue.put('exit')
@@ -2955,21 +2961,21 @@ def run_test_full_res():
 if __name__ == "__main__":
 	os.environ["LC_NUMERIC"] = "C"
 
-	mystderr = os.fdopen(os.dup(sys.stderr.fileno()), 'w', 0)
-	devnull = open(os.devnull,"w")
-	os.dup2(devnull.fileno(), sys.stdout.fileno())
-	os.dup2(devnull.fileno(), sys.stderr.fileno())
+	#mystderr = os.fdopen(os.dup(sys.stderr.fileno()), 'w', 0)
+	#devnull = open(os.devnull,"w")
+	#os.dup2(devnull.fileno(), sys.stdout.fileno())
+	#os.dup2(devnull.fileno(), sys.stderr.fileno())
 	
-	sys.stdout = mystderr
-	sys.stderr = mystderr
+	#sys.stdout = mystderr
+	#sys.stderr = mystderr
 	
 
-	#run_gphoto()
+	run_gphoto()
 	#run_test_2_kstars()
 	#run_2_v4l2()
 	#run_test_2_gphoto()
 	#run_v4l2()
-	run_2()
+	#run_2()
 	#run_test_g()
 	#run_2()
 	#run_test()

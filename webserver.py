@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
-from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
-from SocketServer import ThreadingMixIn
+from http.server import HTTPServer, BaseHTTPRequestHandler
+from socketserver import ThreadingMixIn
 import cgi
 import threading
 from PIL import Image
@@ -13,6 +13,9 @@ from cmd import cmdQueue
 import subprocess
 from stacktraces import stacktraces
 import exceptions
+import logging
+
+log = logging.getLogger()
 
 class MjpegBuf:
 	def __init__(self):
@@ -40,7 +43,7 @@ class MjpegBuf:
 		with self.condition:
 			while self.buf is None or seq == self.seq + 1:
 				if time.time() > t0 + 120:
-					print "req timeout"
+					log.info("req timeout")
 					raise exceptions.EOFError()
 				self.condition.wait(120)
 			if not self.encoded:
@@ -194,8 +197,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 	"""Handle requests in a separate thread."""
 
 	def handle_error(self, request, client_address):
-		print "Error: " +  sys.exc_info().__str__()
-
+		log.exception('Unexpected error')
 
 class ServerThread(threading.Thread):
 	def __init__(self):

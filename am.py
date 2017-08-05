@@ -15,8 +15,12 @@ import math
 import tempfile
 import shutil
 import time
-import Queue
+import queue
 import atexit
+
+import logging
+
+log = logging.getLogger()
 
 class Engine(threading.Thread):
 	def __init__(self, conf, queue):
@@ -37,7 +41,7 @@ class Engine(threading.Thread):
 			if self.cmd is None or self.cmd.poll() is not None:
 				restart = self.cmd is not None
 				if restart:
-					print "%s engine exited with %d\n" % (self.conf, self.cmd.poll()),
+					log.info("%s engine exited with %d" % (self.conf, self.cmd.poll()))
 				#log.write("<<<\n")
 				#log.close()
 				if self.terminating:
@@ -53,7 +57,7 @@ class Engine(threading.Thread):
 			line = self.cmd.stdout.readline()
 			#log.write(line)
 			if "seconds on this field" in line:
-				print line
+				log.info("%s", line)
 				#log.write(">>>\n")
 				self.ready = True
 				self.queue.put(self) # back to free engines queue
@@ -67,7 +71,7 @@ class Engine(threading.Thread):
 				self.cmd.stdin.write(axy + "\n")
 				break
 			except:
-				print "Error: " +  sys.exc_info().__str__()
+				log.exception('Unexpected error')
 				time.sleep(0.1)
 		
 	
@@ -89,7 +93,7 @@ class EnginePool:
 	def __init__(self):
 		self.engines = {}
 		for (conf, n) in [('conf-all', 2), ('conf-41', 1), ('conf-42-1', 1), ('conf-42-2', 1) ]:
-			self.engines[conf] = Queue.Queue()
+			self.engines[conf] = queue.Queue()
 			for i in range(0, n):
 				engine = Engine(conf + ".cfg", self.engines[conf])
 				self.engines[conf].put(engine)

@@ -10,6 +10,10 @@ import numpy as np
 from PIL import Image
 import io
 
+import logging
+
+log = logging.getLogger()
+
 def apply_gamma(img, gamma):
 	lut = np.fromiter( ( (x / 255.0)**gamma * 65535.0 for x in xrange(256)), dtype=np.uint16 )
 	return np.take(lut, img)
@@ -52,7 +56,7 @@ class Camera_test_kstars:
 		self.capture()
 	
 	def cmd(self, cmd):
-		print "camera:", cmd
+		log.info("camera: %s", cmd)
 		if cmd.startswith('exp-sec-'):
 			self.status['exp-sec'] = float(cmd[len('exp-sec-'):])
 
@@ -68,7 +72,7 @@ class Camera_test_kstars:
 		ra = -(self.go_ra.recent_avg() - self.go_ra.recent_avg(0.001)) / 3600.0 * 60.0  + self.e_ra
 		dec = (self.go_dec.recent_avg() - self.go_dec.recent_avg(0.001)) / 3600.0 * 60.0  + self.e_dec
 		
-		print "set ra, dec %f,%f" % (ra,dec)
+		log.info("set ra, dec %f,%f" % (ra,dec))
 		self.iface.setRaDec(ra / 360.0 * 24.0, dec)
 		time.sleep(0.5)
 		
@@ -79,7 +83,7 @@ class Camera_test_kstars:
 		h, w, c = self.im.shape
 		im = np.rot90(self.im[:, 0:w/2])
 		
-		print "focuser %d" % self.focuser.pos
+		log.info("focuser %d" % self.focuser.pos)
 		bl = np.abs(self.focuser.pos / 150.0)**2 + 1
 		ibl = int(bl + 1)
 		#im = cv2.blur(im, (ibl, ibl))
@@ -134,7 +138,7 @@ class Camera_test_kstars_g:
 		self.cam0 = cam0
 	
 	def cmd(self, cmd):
-		print "camera:", cmd
+		log.info("camera: %s", cmd)
 		if cmd.startswith('exp-sec-'):
 			self.status['exp-sec'] = float(cmd[len('exp-sec-'):])
 
@@ -166,5 +170,4 @@ if __name__ == "__main__":
         
         cam = Camera_test_kstars({}, go_ra, go_dec)
         im, t = cam.capture()
-        print np.where(im > 0)
         

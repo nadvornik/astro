@@ -13,6 +13,9 @@ from gui import ui
 from cmd import cmdQueue
 from stacktraces import stacktraces
 
+
+log = logging.getLogger()
+
 def apply_gamma(img, gamma):
 	lut = np.fromiter( ( (x / 255.0)**gamma * 65535.0 for x in xrange(256)), dtype=np.uint16 )
 	return np.take(lut, img)
@@ -40,7 +43,7 @@ class Camera_gphoto:
 		if OK >= gp.GP_OK:
 			# set value
 			value = gp.check_result(gp.gp_widget_get_value(widget))
-			print "get %s => %s" % (name, value)
+			log.info("get %s => %s", name, value)
 			return value
 
 	def set_config_choice(self, name, num):
@@ -51,13 +54,13 @@ class Camera_gphoto:
 				if OK >= gp.GP_OK:
 					# set value
 					value = gp.check_result(gp.gp_widget_get_choice(widget, num))
-					print "set %s => %s" % (name, value)
+					log.info("set %s => %s", name, value)
 					gp.check_result(gp.gp_widget_set_value(widget, value))
 				# set config
 				gp.check_result(gp.gp_camera_set_config(self.camera, config, self.context))
 				break
 			except gp.GPhoto2Error as ex:
-				print ex.code
+				log.info("gphoto error %d", ex.code)
 				time.sleep(0.1)
 				continue
 
@@ -67,14 +70,14 @@ class Camera_gphoto:
 				config = gp.check_result(gp.gp_camera_get_config(self.camera, self.context))
 				OK, widget = gp.gp_widget_get_child_by_name(config, name)
 				if OK >= gp.GP_OK:
-					print "set %s => %s" % (name, value)
+					log.info("set %s => %s", name, value)
 					# set value
 					gp.check_result(gp.gp_widget_set_value(widget, value))
 				# set config
 				gp.check_result(gp.gp_camera_set_config(self.camera, config, self.context))
 				break
 			except gp.GPhoto2Error as ex:
-				print ex.code
+				log.info("gphoto error %d", ex.code)
 				time.sleep(0.1)
 				continue
 
@@ -89,7 +92,7 @@ class Camera_gphoto:
 				if OK >= gp.GP_OK:
 					num = None
 					choice_count = gp.check_result(gp.gp_widget_count_choices(widget))
-					print "count", choice_count
+					log.info("count %d", choice_count)
 					for i in range(choice_count):
 						vi = gp.check_result(gp.gp_widget_get_choice(widget, i))
 						if vi.lower() == value.lower():
@@ -105,17 +108,17 @@ class Camera_gphoto:
 							pass
 					
 					if num is not None:
-						print "set %s => %s (choice %d)" % (name, value, num)
+						log.info("set %s => %s (choice %d)" % (name, value, num))
 						# set value
 						gp.check_result(gp.gp_widget_set_value(widget, value))
 						ret = True
 					else:
-						print "cant't set %s => %s" % (name, value)
+						log.info("cant't set %s => %s" % (name, value))
 				# set config
 				gp.check_result(gp.gp_camera_set_config(self.camera, config, self.context))
 				break
 			except gp.GPhoto2Error as ex:
-				print ex.code
+				log.info("gphoto error %d", ex.code)
 				time.sleep(0.1)
 				ret = False
 				continue
@@ -168,10 +171,10 @@ class Camera_gphoto:
 			self.set_config_value_checked('shutterspeed', sec)
 			for t in range(0, 1):
 				try:
-					print "trgger capture"
+					log.info("trgger capture")
 					gp.check_result(gp.gp_camera_trigger_capture(self.camera, self.context))
 				except gp.GPhoto2Error as ex:
-					print ex.code
+					log.info(ex.code)
 					time.sleep(0.1)
 					continue
 
@@ -194,7 +197,7 @@ class Camera_gphoto:
 				time.sleep(3)
 			e, file_path =  gp.check_result(gp.gp_camera_wait_for_event(self.camera, 1000,self.context))
 			t = time.time() - self.t_start
-			print "camera event ", t, e, file_path
+			log.info("camera event %f %s %s", t, e, file_path)
 			
 			if self.status['exp_in_progress']:
 				self.status['cur_time'] = int(t)
@@ -207,16 +210,16 @@ class Camera_gphoto:
 				self.status['exp_in_progress'] = False
 
 			if not self.status['exp_in_progress']:
-				print "waiting for image"
+				log.info("waiting for image")
 			
 			if e == gp.GP_EVENT_FILE_ADDED:
-				print >> sys.stderr, "filepath:", file_path.folder, file_path.name
+				log.info("filepath: %s %s", file_path.folder, file_path.name)
 				filename, file_extension = os.path.splitext(file_path.name)
 				if file_extension == ".jpg" or file_extension == ".JPG":
 					break
 			if t > sec + 60:
 				file_path = None
-				print "image timeout"
+				log.info("image timeout")
 				break
 		
 		self.status['exp_in_progress'] = False
@@ -257,8 +260,6 @@ class Camera_gphoto:
 		subprocess.call(['killall', 'gvfsd-gphoto2'])
 		subprocess.call(['killall', 'gvfs-gphoto2-volume-monitor'])
 	
-		logging.basicConfig(
-			format='%(levelname)s: %(name)s: %(message)s', level=logging.ERROR)
 		gp.check_result(gp.use_python_logging())
 		self.context = gp.gp_context_new()
 		while True:
@@ -267,7 +268,7 @@ class Camera_gphoto:
 				gp.check_result(gp.gp_camera_init(self.camera, self.context))
 				break
 			except gp.GPhoto2Error as ex:
-				print "gphoto2 camera is not ready"
+				log.info("gphoto2 camera is not ready")
 				time.sleep(2)
 				continue
 		
@@ -277,7 +278,7 @@ class Camera_gphoto:
 		self.set_config_value_checked('eosremoterelease', 'Release Full')
 		
 		self.cameramodel = self.get_config_value('cameramodel')
-		print self.cameramodel
+		log.info(self.cameramodel)
 		if self.cameramodel == "Canon EOS 40D":
 			self.shape = (680, 1024)
 			self.zoom_shape = (800, 768)
@@ -297,7 +298,7 @@ class Camera_gphoto:
 		try:
 			cur_time = int(cur_time)
 			if cur_time - time.time() > 1500:
-				print "adjusting time ", time.time(), cur_time
+				log.info("adjusting time ", time.time(), cur_time)
 				subprocess.call(['date', '--set', '@' + str(cur_time) ])
 		except:
 			pass
@@ -358,7 +359,7 @@ class Camera_gphoto:
 				self.do_fps_hack()
 				im, t = self.capture()
 				while im.shape[0] != self.zoom_shape[0] or im.shape[1] != self.zoom_shape[1]:
-					print "zoom shape", im.shape, self.zoom_shape
+					log.info("zoom shape", im.shape, self.zoom_shape)
 					im, t = self.capture()
 				
         
@@ -369,7 +370,7 @@ class Camera_gphoto:
 				self.do_fps_hack()
 				im, t = self.capture()
 				while im.shape[0] != self.shape[0] or im.shape[1] != self.shape[1]:
-					print "shape", im.shape, self.shape
+					log.info("shape", im.shape, self.shape)
 					im, t = self.capture()
 
 			if cmd == "zcenter":
@@ -421,8 +422,7 @@ class Camera_gphoto:
         
 			
 		except gp.GPhoto2Error as ex:
-			print "Unexpected error: " + sys.exc_info().__str__()
-			stacktraces()
+			log.exception('Unexpected error')
 			time.sleep(1)
 			if ex.code == -7 or ex.code == -1:
 				gp.gp_camera_exit(self.camera, self.context)
@@ -452,14 +452,12 @@ class Camera_gphoto:
 					self.set_config_value_checked('iso', 100)
 					self.fpshackiso -= 1
 
-				return im, None
+				return im, time.time()
 	
 			except KeyboardInterrupt:
 				break
 			except gp.GPhoto2Error as ex:
-				print "Unexpected error: " + sys.exc_info().__str__()
-				print "code:", ex.code
-				stacktraces()
+				log.exception('Unexpected error')
 				time.sleep(1)
 				if ex.code == -7 or ex.code == -1:
 					gp.gp_camera_exit(self.camera, self.context)

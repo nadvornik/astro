@@ -1,6 +1,10 @@
 #!/usr/bin/python
 
 import Queue
+import logging
+
+log = logging.getLogger()
+
 
 class CmdQueue:
 	def __init__(self):
@@ -8,13 +12,13 @@ class CmdQueue:
 	
 	def register(self, tid):
 		self.dict[tid] = Queue.Queue()
-		print "register", tid
+		log.info("register %s", tid)
 	
 	def get(self, tid, timeout = None):
 		q = self.dict[tid]
 		try:
 			cmd = q.get(block=True, timeout= timeout)
-			print tid, ':', cmd
+			log.info("%s:%s", tid, cmd)
 			return cmd
 		except Queue.Empty:
 			return None

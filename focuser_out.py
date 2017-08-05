@@ -2,6 +2,9 @@ import time
 import sys
 import subprocess
 import atexit
+import logging
+
+log = logging.getLogger()
 
 
 class FocuserOut:
@@ -14,8 +17,8 @@ class FocuserOut:
 			atexit.register(self.rt_cmd.terminate)
 			self.testmode = False
 		except:
-			print "Error: " +  sys.exc_info().__str__()
-			print "Focuser test mode"
+			log.exception('Cant start external focuser')
+			log.info("Focuser test mode")
 
 	
 	def move(self, m):
@@ -26,9 +29,8 @@ class FocuserOut:
 				line = self.rt_cmd.stdout.readline()
 				self.pos = int(line)
 			except:
-				print "Error: " +  sys.exc_info().__str__()
-			
-		print "focuser %d" % self.pos
+				log.exception('Unexpected error')			
+		log.info("focuser %d", self.pos)
 
 			
 			

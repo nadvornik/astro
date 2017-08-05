@@ -8,6 +8,10 @@ import cv2
 import time
 import os
 
+import logging
+
+log = logging.getLogger()
+
 from am import Plotter
 
 
@@ -167,8 +171,8 @@ class Polar:
 		q1 = self.pos[i]
 		q2 = self.pos[j]
 		
-		print q1.a
-		print q2.a
+		log.info(q1.a)
+		log.info(q2.a)
 		
 		c = q2 / q1
 
@@ -180,7 +184,7 @@ class Polar:
 		if ra < 0.0 :
 			ra += 360
 		
-		print ra, dec
+		log.info(ra, dec)
 		self.ra = ra
 		self.dec = dec
 		return True, ra, dec
@@ -214,7 +218,7 @@ class Polar:
 		for ci in range(1, len(self.pos)):
 			q_trans = self.camera_position(ci, noise)
 			if q_trans is not None:
-				print "q_trans", q_trans.to_euler()
+				log.info("q_trans", q_trans.to_euler())
 			
 			#q_trans=Quaternion([0,1,0])
 			if q_trans is not None:
@@ -431,7 +435,7 @@ class Polar:
 				prev_pos =  prev_pos * self.campos_avg[i]
 			poslist.append(prev_pos)
 		
-		print [p.to_euler() for p in poslist]
+		log.info([p.to_euler() for p in poslist])
 		
 		pos = Quaternion.average(poslist)
 
@@ -441,7 +445,7 @@ class Polar:
 			self.save()
 			
 		t = pos / self.p2_from
-		print t.to_euler()
+		log.info(t.to_euler())
 		self.ra, self.dec = t.transform_ra_dec([self.ref_ra, self.ref_dec])
 	
 
@@ -614,7 +618,7 @@ if __name__ == "__main__":
 	qp = precession()
 	ra, dec = qp.inv().transform_ra_dec([0, 90])
 	extra.append((ra, dec, "p"))
-	print "precession", ra, dec
+	log.info("precession", ra, dec)
 	
 	
 	ra = 0.
@@ -631,6 +635,6 @@ if __name__ == "__main__":
 	plot = Plotter(wcs)
 	cv2.imshow("plot", plot.plot(extra=extra))
 	
-	print p.zenith()
+	log.info(p.zenith())
 	
 	cv2.waitKey(0)

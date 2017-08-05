@@ -6,9 +6,12 @@ import numpy as np
 import io
 from PIL import Image
 from cmd import cmdQueue
-import Queue
+import queue
 import threading
 import atexit
+import logging
+
+log = logging.getLogger()
 
 class MyGUI_CV2(threading.Thread):
 	cmds = {
@@ -63,7 +66,7 @@ class MyGUI_CV2(threading.Thread):
 
 	def __init__(self):
 		threading.Thread.__init__(self)
-		self.queue = Queue.Queue()
+		self.queue = queue.Queue()
 		self.stop = False
 		self.daemon = True
 		atexit.register(self.terminate)
@@ -90,7 +93,7 @@ class MyGUI_CV2(threading.Thread):
 
 			try:
 				(name, img) = self.queue.get(block=False)
-			except Queue.Empty:
+			except queue.Empty:
 				continue
 			if img is None:
 				cv2.namedWindow(name, cv2.WINDOW_NORMAL)

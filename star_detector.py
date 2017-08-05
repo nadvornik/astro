@@ -3,6 +3,9 @@ import cv2
 import threading
 from centroid import centroid, sym_center
 import sys
+import logging
+log = logging.getLogger()
+
 
 class MaxDetector(threading.Thread):
 	def __init__(self, img, d, n, y1, y2, no_over = False):
@@ -78,16 +81,14 @@ def find_max(img, d, n = 40, no_over = False):
 			md.start()
 			mds.append(md)
 		except:
-			print "Error: " +  sys.exc_info().__str__()
-
+			log.exception('Unexpected error')
 
 	for md in mds:
 		try:
 			md.join()
 			joined += md.found
 		except:
-			print "Error: " +  sys.exc_info().__str__()
-
+			log.exception('Unexpected error')
 	if len(joined) == 0:
 		return []
 
@@ -429,7 +430,7 @@ def pt_transform_opt(pt1m, pt2m, noise = 2, pt_func = pt_translation):
 	try:
 		m = pt_func(pt1, pt2, weights)
 	except:
-		print "Unexpected error: " + sys.exc_info().__str__()
+		log.exception('Unexpected error')
 		pt_func = pt_translation
 		m = pt_func(pt1, pt2, weights)
 	
