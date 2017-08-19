@@ -34,6 +34,7 @@ class Camera_test_kstars:
 		self.e_dec = 65
 		self.status['exp_in_progress'] = False
 		self.t0 = time.time()
+		self.hyst = 2
 		
 		import gobject
 
@@ -59,6 +60,14 @@ class Camera_test_kstars:
 		log.info("camera: %s", cmd)
 		if cmd.startswith('exp-sec-'):
 			self.status['exp-sec'] = float(cmd[len('exp-sec-'):])
+
+		if cmd == "f-1" and self.hyst > 0:
+			self.hyst -= 1
+			return
+
+		if cmd == "f+1" and self.hyst < 5:
+			self.hyst += 1
+			return
 
 		if cmd in ["f-3", "f-2", "f-1", "f+3", "f+2", "f+1"]:
 			self.focuser.cmd(cmd)

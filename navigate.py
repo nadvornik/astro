@@ -1003,6 +1003,7 @@ class Guider:
 			self.full_res.setdefault('last_step', 0)
 			self.full_res.setdefault('diff_thr', 0.5)
 			self.full_res['diff_acc'] = 0
+			self.full_res.setdefault('hyst', 0)
 			
 
 		self.reset()
@@ -1187,11 +1188,13 @@ class Guider:
 		        self.full_res['diff_acc'] = 0
 			if self.full_res['last_step'] < 0:
 				log.info("focus_loop rev 1")
-				cmdQueue.put('f+1')
+				for st in range(0, 1 + self.full_res['hyst']):
+					cmdQueue.put('f+1')
 				self.full_res['last_step'] = 1.0
 			else:
 				log.info("focus_loop rev -1")
-				cmdQueue.put('f-1')
+				for st in range(0, 1 + self.full_res['hyst']):
+					cmdQueue.put('f-1')
 				self.full_res['last_step'] = -1.0
 		else:
 			if self.full_res['last_step'] < 0:
@@ -1542,7 +1545,7 @@ def smooth(x,window_len=11,window='hanning'):
     return y[window_len + window_len / 2: window_len + window_len / 2 + x.size]
 
 class Focuser:
-	def __init__(self, tid, status, dark = None):
+	def __init__(self, tid, status, dark = None, full_res = None):
 		self.status = status
 		self.stack = Stack(ratio=0.3)
 		if dark is None:
@@ -1557,6 +1560,7 @@ class Focuser:
 		self.focus_yx = None
 		self.prev_t = 0
 		self.cmdtab = ['f+3', 'f+2', 'f+1', '', 'f-1', 'f-2', 'f-3']
+		self.full_res = full_res
 
 	hfr_size = 30
 
@@ -1886,6 +1890,8 @@ class Focuser:
 				log.info("remaining %d", self.status['remaining_steps'])
 				if self.status['remaining_steps'] < 5:
 					self.status['phase'] = 'focus_v2'
+					if self.full_res is not None:
+						self.full_res['hyst'] = max(0, int(round(- self.status['hyst'])))
 			self.step(1)
 			self.phase_wait = 1
 			self.status['v_curve2'].append(self.hfr)
@@ -2677,7 +2683,7 @@ def run_test_2_kstars():
 
 
 	focuser = Focuser('navigator', status.path(["navigator", "focuser"]), dark = dark1)
-	zoom_focuser = Focuser('navigator', status.path(["navigator", "focuser"]))
+	zoom_focuser = Focuser('navigator', status.path(["navigator", "focuser"]), full_res = status.path(["full_res"]))
 	
 	runner = Runner('navigator', cam1, navigator = nav1, focuser = focuser, zoom_focuser = zoom_focuser)
 	runner.start()
@@ -2757,7 +2763,7 @@ def run_2():
 	
 	nav1 = Navigator(status.path(["navigator"]), dark1, mount, 'navigator', polar_tid = 'polar', full_res = status.path(["full_res"]))
 	focuser = Focuser('navigator', status.path(["navigator", "focuser"]), dark = dark1)
-	zoom_focuser = Focuser('navigator', status.path(["navigator", "focuser"]))
+	zoom_focuser = Focuser('navigator', status.path(["navigator", "focuser"]), full_res = status.path(["full_res"]))
 
 	nav = Navigator(status.path(["guider", "navigator"]), dark2, mount, 'guider')
 
