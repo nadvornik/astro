@@ -37,17 +37,17 @@ class FocuserOut:
 	
 	def cmd(self, cmd):
 		if cmd == "f-3":
-			self.move(-2048)
+			self.move(-640)
 		if cmd == "f-2":
-			self.move(-256)
+			self.move(-128)
 		if cmd == "f-1":
-			self.move(-32)
+			self.move(-16)
 		if cmd == "f+3":
-			self.move(2048)
+			self.move(640)
 		if cmd == "f+2":
-			self.move(256)
+			self.move(128)
 		if cmd == "f+1":
-			self.move(32)
+			self.move(16)
 
 
 if __name__ == "__main__":
