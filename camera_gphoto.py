@@ -359,7 +359,7 @@ class Camera_gphoto:
 				self.do_fps_hack()
 				im, t = self.capture()
 				while im.shape[0] != self.zoom_shape[0] or im.shape[1] != self.zoom_shape[1]:
-					log.info("zoom shape", im.shape, self.zoom_shape)
+					log.info("zoom shape %s %s", im.shape, self.zoom_shape)
 					im, t = self.capture()
 				
         
@@ -370,7 +370,7 @@ class Camera_gphoto:
 				self.do_fps_hack()
 				im, t = self.capture()
 				while im.shape[0] != self.shape[0] or im.shape[1] != self.shape[1]:
-					log.info("shape", im.shape, self.shape)
+					log.info("shape %s %s", im.shape, self.shape)
 					im, t = self.capture()
 
 			if cmd == "zcenter":
