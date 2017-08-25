@@ -576,6 +576,8 @@ class Navigator:
 				extra_lines = []
 				if self.tid == 'navigator':
 					extra_lines = self.mount.get_guider_plot()
+				elif self.tid == 'guider':
+                                        extra_lines = self.mount.get_main_plot()
 				plot_bg(self.tid, status, self.plotter.plot, normalize(filtered), self.plotter_off, scale=zoom, extra_lines = extra_lines)
 			else:
 				disp = normalize(filtered)
@@ -1967,12 +1969,14 @@ class Mount:
 		self.status.setdefault('oag', True)
 		if self.status['oag']:
 			self.status.setdefault('oag_pos', None)
+			self.status.setdefault('main_pos', None)
 			self.status.setdefault('t_dif', 120)
 			if self.status['oag_pos'] is None:
 				self.status['t_dif'] = 120
 			self.status.setdefault('guider_roll', None)
 		else:
 			self.status['oag_pos'] = None
+			self.status['main_pos'] = None
 			self.status['t_dif'] = 120
 			self.status['guider_roll'] = None
 
@@ -2048,6 +2052,22 @@ class Mount:
 				
 				res.append(sq.to_euler().tolist())
 			self.status['oag_pos'] = res
+
+			main_w = self.main_tan.get_width()
+			main_h = self.main_tan.get_height()
+			
+			gra, gdec, groll, gpixscale, gparity = self.tan_to_euler(self.guider_tan)
+			gq = Quaternion([gra, gdec, groll])
+			
+			res = []
+			for x, y in [(0, 0), (main_w - 1, 0), (main_w - 1, main_h - 1), (0, main_h - 1), (main_w / 2.0 - 0.5, main_h / 2.0 - 0.5)]:
+				ra, dec = self.main_tan.pixelxy2radec(x, y)
+				q = Quaternion([ra, dec, groll])
+				
+				sq = gq.inv() * q
+				
+				res.append(sq.to_euler().tolist())
+			self.status['main_pos'] = res
 	def get_guider_plot(self):
 		if self.status['oag_pos'] is not None and self.main_tan is not None:
 			res = []
@@ -2055,6 +2075,23 @@ class Mount:
 				sq = Quaternion(e)
 				mra, mdec, mroll, mpixscale, mparity = self.tan_to_euler(self.main_tan)
 				mq = Quaternion([mra, mdec, mroll])
+				q =  mq * sq
+				ra, dec, roll = q.to_euler()
+				res.append((ra, dec))
+			res2 = []
+			for i, e in enumerate(res):
+				res2.append((res[i - 1][0], res[i - 1][1], e[0], e[1]))
+			return res2
+		else:
+			return []
+
+	def get_main_plot(self):
+		if self.status['main_pos'] is not None and self.guider_tan is not None:
+			res = []
+			for e in self.status['main_pos'][0:4]:
+				sq = Quaternion(e)
+				gra, gdec, groll, gpixscale, gparity = self.tan_to_euler(self.guider_tan)
+				mq = Quaternion([gra, gdec, groll])
 				q =  mq * sq
 				ra, dec, roll = q.to_euler()
 				res.append((ra, dec))
