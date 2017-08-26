@@ -60,7 +60,7 @@ class Camera_gphoto:
 				gp.check_result(gp.gp_camera_set_config(self.camera, config, self.context))
 				break
 			except gp.GPhoto2Error as ex:
-				log.info("gphoto error %d", ex.code)
+				log.exception('failed')
 				time.sleep(0.1)
 				continue
 
@@ -77,7 +77,7 @@ class Camera_gphoto:
 				gp.check_result(gp.gp_camera_set_config(self.camera, config, self.context))
 				break
 			except gp.GPhoto2Error as ex:
-				log.info("gphoto error %d", ex.code)
+				log.exception('failed')
 				time.sleep(0.1)
 				continue
 
@@ -106,6 +106,16 @@ class Camera_gphoto:
 								break
 						except ValueError:
 							pass
+						try:
+							if '/' in vi:
+								fr = vi.split('/')
+								fr = float(fr[0]) / float(fr[1])
+								if abs(fr - float(value)) < abs(fr * 0.001):
+									value = vi
+									num = i
+									break
+						except:
+							pass
 					
 					if num is not None:
 						log.info("set %s => %s (choice %d)" % (name, value, num))
@@ -118,13 +128,16 @@ class Camera_gphoto:
 				gp.check_result(gp.gp_camera_set_config(self.camera, config, self.context))
 				break
 			except gp.GPhoto2Error as ex:
-				log.info("gphoto error %d", ex.code)
+				log.exception('failed')
 				time.sleep(0.1)
 				ret = False
 				continue
 		return ret
 	
 	def do_fps_hack(self):
+		if self.status['exp-sec'] < 1.0:
+			return
+
 		if self.fpshack == 'output':
 			time.sleep(.2)
 			self.set_config_choice('output', 1)
@@ -163,9 +176,12 @@ class Camera_gphoto:
 		self.status['f-number'] = self.get_config_value('aperture')
 
 		if callback_start is not None:
-			callback_start()
+			try:
+				callback_start()
+			except:
+				log.exception('Unexpected error')					
 
-		if sec <= 30:
+		if sec <= 4:
 			bulbmode = None
 			self.set_config_value_checked('autoexposuremode', 'Manual')
 			self.set_config_value_checked('shutterspeed', sec)
@@ -174,7 +190,7 @@ class Camera_gphoto:
 					log.info("trgger capture")
 					gp.check_result(gp.gp_camera_trigger_capture(self.camera, self.context))
 				except gp.GPhoto2Error as ex:
-					log.info(ex.code)
+					log.exception('failed')
 					time.sleep(0.1)
 					continue
 
@@ -244,14 +260,23 @@ class Camera_gphoto:
 							continue
 
 		if callback_end is not None:
-			callback_end(file_data)
+			try:
+				callback_end(file_data)
+			except:
+				log.exception('Unexpected error')					
+					
 
 		
+		log.info('callback end')
 		#stop review on display
 		self.set_config_value_checked('eosremoterelease', 'Press Half')
 		self.set_config_value_checked('eosremoterelease', 'Release Half')
+		log.info('review end')
 	
 		self.do_fps_hack()
+		self.set_config_value_checked('iso', 100)
+
+		log.info('fps hack end')
 		
 	def prepare(self):
 		self.shape = (704, 1056)
@@ -406,13 +431,13 @@ class Camera_gphoto:
         
 			if cmd.startswith('exp-sec-'):
 				try:
-					self.status['exp-sec'] = int(cmd[len('exp-sec-'):])
+					self.status['exp-sec'] = float(cmd[len('exp-sec-'):])
 				except:
 					pass
         
 			if cmd.startswith('test-exp-sec-'):
 				try:
-					self.status['test-exp-sec'] = int(cmd[len('test-exp-sec-'):])
+					self.status['test-exp-sec'] = float(cmd[len('test-exp-sec-'):])
 				except:
 					pass
 			
