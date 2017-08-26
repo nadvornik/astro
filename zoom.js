@@ -89,7 +89,7 @@ function isElementInViewport(el) {
     };
     xhr.send();
   };
-  
+
   function update_status() {
     $.ajax({type: "GET", url: "status.json",
       success:function(status) {
@@ -127,8 +127,10 @@ function isElementInViewport(el) {
           }
           else {
             $(this).removeData('allow_cb')
-            $(this).val(v);
-            $(this).data('allow_cb', 1)
+            if (($(this).val() != v) && !$(this).is(":focus")) {
+                $(this).val(v);
+            }
+            $(this).data('allow_cb', $.now())
           }
         });
       }
@@ -304,7 +306,10 @@ function isElementInViewport(el) {
     });
     $("select.ajax").change(function(){
         var sel = $(this);
-        if (!sel.data('allow_cb')) return;
+        sel.blur();
+        var allow_cb = sel.data('allow_cb')
+        if (!allow_cb) return;
+        if ($.now() - allow_cb > 30000) return;
 
         var cmd_a = this.value.split("!");
         //alert(JSON.stringify(cmd_a));
