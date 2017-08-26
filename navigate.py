@@ -706,9 +706,14 @@ class Navigator:
 		im = apply_gamma8(im, 2.2)
 		log.info("full_res bg")
 		pts = find_max(im, 12, 200, no_over = True)
+		
 		w = im.shape[1]
 		h = im.shape[0]
-		log.info("full_res max")
+		log.info("full_res max %d", len(pts))
+		if len(pts) < 1:
+			log.info("full_res no sources detected")
+			cmdQueue.put('capture-full-res-done')
+			return
 		
 		hfr_list = get_hfr_field(im, pts, sub_bg = True)
 		log.info("full_res get hfr")
@@ -731,6 +736,11 @@ class Navigator:
 		del im
 
 		log.info("full_res ell")
+		if len(pts) < 7:
+			log.info("full_res no sources detected")
+			cmdQueue.put('capture-full-res-done')
+			return
+
 
 		solver = Solver(sources_list = pts, field_w = w, field_h = h, ra = self.status['ra'], dec = self.status['dec'], field_deg = self.status['field_deg'], radius = 100)
 		solver.start()
