@@ -109,7 +109,7 @@ def fit_ellipse(a):
 		
 	s = np.sum(a)
 	if s == 0.0:
-		return 0, 0
+		return np.array([0.0, 0.0]), np.array([(0.0, 0.0), (0.0, 0.0)])
 	vx = cv2.sumElems(cv2.multiply(a, ell_mat_x2, dtype=cv2.CV_32FC1))[0] / s
 	vy = cv2.sumElems(cv2.multiply(a, ell_mat_y2, dtype=cv2.CV_32FC1))[0] / s
 	cov = -cv2.sumElems(cv2.multiply(a, ell_mat_xy, dtype=cv2.CV_32FC1))[0] / s
