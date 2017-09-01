@@ -390,8 +390,35 @@ class Navigator:
 		if self.full_res is not None:
 			self.full_res['full_hfr'] = []
 		self.status.setdefault('go_by', 0.1)
+		self.status.setdefault('profiles', [{}])
+		self.status.setdefault('profile', 0)
 		self.im = None
 
+	def set_profile(self, i):
+		try:
+			profile = self.status['profiles'][i]
+		except:
+			return
+		if "field_corr_limit" in profile:
+			self.status["field_corr_limit"] = profile["field_corr_limit"]
+		if "field_corr" in profile:
+			self.status["field_corr"] = profile["field_corr"]
+		else:
+			self.status["field_corr"] = None
+		
+		if self.status['field_corr'] is not None:
+			try:
+				self.field_corr = np.load(self.status['field_corr'])
+			except:
+				self.field_corr = None
+
+		if "field_deg" in profile:
+			self.status["field_deg"] = profile["field_deg"]
+		else:
+			self.status["field_deg"] = None
+
+		self.status['profile'] = i
+		
 
 	def hotpix_find(self):
 		bg = cv2.GaussianBlur(self.im, (7, 7), 0)
@@ -605,6 +632,8 @@ class Navigator:
 			else:
 				self.status['ra'], self.status['dec'] = self.mount.polar.zenith()
 			self.status['radius'] = self.status['max_radius']
+			self.field_corr = None
+			self.field_corr_limit = 10
 
 		if cmd == 'solver-retry':
 			if self.solver is not None:
@@ -677,6 +706,12 @@ class Navigator:
 				if x >= reg[0] and y >= reg[1] and x < reg[2] and y < reg[3] and (x - w / 2)**2 + (y - h / 2)**2 > 400:
 					self.mount.move_main_px(-x + w / 2, -y + h / 2, self.tid)
 					break
+
+		if cmd.startswith('profile-'):
+			try:
+				self.set_profile(int(cmd[len('profile-'):]))
+			except:
+				pass
 		
 	
 	def proc_full_res(self, jpg):
