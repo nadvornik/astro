@@ -421,6 +421,14 @@ class Navigator:
 		else:
 			self.status["field_deg"] = None
 
+		if "oag_pos" in profile:
+			self.mount.status['oag_pos'] = profile["oag_pos"]
+			self.mount.status['t_dif'] = 120
+
+		if "main_pos" in profile:
+			self.mount.status['main_pos'] = profile["main_pos"]
+			self.mount.status['t_dif'] = 120
+
 		self.status['profile'] = i
 		
 
@@ -2061,7 +2069,8 @@ class Mount:
 		self.guider_t = None
 		self.main_tan = None
 		self.guider_tan = None
-		self.temp_sensor = TempSensor()
+		self.status['temp_sensor'] = {}
+		self.temp_sensor = TempSensor(self.status['temp_sensor'])
 		
 	def tan_to_euler(self, tan, off=(0,0)):
 		ra, dec = tan.radec_center()

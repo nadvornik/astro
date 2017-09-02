@@ -15,14 +15,17 @@ import time
 import sys
 
 class TempSensor(threading.Thread):
-	def __init__(self):
+	def __init__(self, status):
 		threading.Thread.__init__(self)
 		self.daemon = True
 		self.history = []
 		self.terminating = False
 		self.bin_name = "./temp_sensor"
 		self.cmd = None
-		self.res = (0.0, 0.0)
+		self.status = status
+		self.status['temp'] = 0.0
+		self.status['rhum'] = 0.0
+		
 		self.start()
 	
 	def run(self):
@@ -40,7 +43,7 @@ class TempSensor(threading.Thread):
 				line = self.cmd.stdout.readline()
 				(temp, hum) = [float(s) for s in line.split()]
 				self.history.append((time.time(), temp, hum))
-				self.res = (temp, hum)
+				(self.status['temp'], self.status['rhum']) = (temp, hum)
 			except:
 				pass
 	
@@ -52,10 +55,10 @@ class TempSensor(threading.Thread):
 
 
 	def get(self):
-		return self.res
+		return (self.status['temp'], self.status['rhum'])
 
 if __name__ == "__main__":
-	t = TempSensor()
+	t = TempSensor({})
 	while True:
 		print(t.get())
 		time.sleep(10)
