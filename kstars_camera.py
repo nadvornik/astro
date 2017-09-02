@@ -134,7 +134,7 @@ class Camera_test_kstars:
 			#pil_image = Image.open('preview2.jpg')
 			pil_image.save(tmpFile,'JPEG')
 			file_data = tmpFile.getvalue()
-			callback_end(file_data)
+			callback_end(file_data, "img_{}.jpg".format(time.time()))
 
 
 	def shutdown(self):

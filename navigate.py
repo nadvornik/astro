@@ -41,6 +41,7 @@ import json
 from PIL import Image;
 
 from focuser_out import FocuserOut
+from temp_sensor import TempSensor
 from centroid import centroid, sym_center, hfr, fit_ellipse
 from polyfit import *
 from quat import Quaternion
@@ -389,6 +390,9 @@ class Navigator:
 		self.full_res = full_res
 		if self.full_res is not None:
 			self.full_res['full_hfr'] = []
+			self.full_res['full_temp'] = []
+			self.full_res['full_hum'] = []
+			self.full_res['full_name'] = []
 		self.status.setdefault('go_by', 0.1)
 		self.status.setdefault('profiles', [{}])
 		self.status.setdefault('profile', 0)
@@ -714,8 +718,9 @@ class Navigator:
 				pass
 		
 	
-	def proc_full_res(self, jpg):
+	def proc_full_res(self, jpg, name = None):
 		t = time.time()
+		(temp, hum) = self.mount.temp_sensor.get()
 		pil_image = Image.open(io.BytesIO(jpg))
 		im_c = np.array(pil_image)
 		del pil_image
@@ -758,7 +763,10 @@ class Navigator:
 		
 		if self.full_res is not None:
 			self.full_res['full_hfr'].append(full_hfr)
-			self.full_res['full_ts'] = time.time()
+			self.full_res['full_name'].append(name)
+			self.full_res['full_temp'].append(temp)
+			self.full_res['full_hum'].append(hum)
+			self.full_res['full_ts'] = t
 		
 		log.info("full_res filter hfr")
 
@@ -1043,6 +1051,7 @@ class Guider:
 			self.full_res['ra_err_list'] = []
 			self.full_res['dec_err_list'] = []
 			self.full_res['guider_hfr'] = []
+			self.full_res['focuser_pos'] = []
 			self.full_res['guider_ts'] = None
 			self.full_res['full_ts'] = None
 			
@@ -1262,7 +1271,12 @@ class Guider:
 				cmdQueue.put('f+1')
 				self.full_res['last_step'] = 1.0
 		
-
+		if len(self.full_res['focuser_pos']) > 0:
+			focuser_pos = self.full_res['focuser_pos'][-1]
+		else:
+			focuser_pos = 0
+		focuser_pos += self.full_res['last_step']
+		self.full_res['focuser_pos'].append(focuser_pos)
 
 	def proc_frame(self, im, i):
 		t = time.time()
@@ -2047,6 +2061,7 @@ class Mount:
 		self.guider_t = None
 		self.main_tan = None
 		self.guider_tan = None
+		self.temp_sensor = TempSensor()
 		
 	def tan_to_euler(self, tan, off=(0,0)):
 		ra, dec = tan.radec_center()
@@ -2439,13 +2454,13 @@ class Runner(threading.Thread):
 		cmdQueue.put('capture-started')
 		self.capture_in_progress = True
 	
-	def capture_end_cb(self, jpg):
+	def capture_end_cb(self, jpg, name):
 		self.capture_in_progress = False
 		log.info("capture_finished_cb")
 		cmdQueue.put('capture-finished')
 		if jpg is not None:
 			ui.imshow_jpg("full_res", jpg)
-			self.navigator.proc_full_res(jpg)
+			self.navigator.proc_full_res(jpg, name)
 			#threading.Thread(target=self.navigator.proc_full_res, args = [jpg] ).start()
 		else:
 			cmdQueue.put('capture-full-res-done')

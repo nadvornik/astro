@@ -243,7 +243,9 @@ class Camera_gphoto:
 		self.status['interrupt'] = False
 			
 		file_data = None
+		filename = None
 		if file_path is not None:
+			filename = file_path.name
 			target = os.path.join('/tmp', file_path.name)
 			n = 20
 			while True:
@@ -261,7 +263,7 @@ class Camera_gphoto:
 
 		if callback_end is not None:
 			try:
-				callback_end(file_data)
+				callback_end(file_data, filename)
 			except:
 				log.exception('Unexpected error')					
 					

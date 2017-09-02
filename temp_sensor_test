@@ -1,0 +1,6 @@
+#!/bin/sh
+
+while true ;  do
+	echo "20.5 50.5"
+	sleep 2
+done
