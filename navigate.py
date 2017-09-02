@@ -936,7 +936,7 @@ class GuiderAlg(object):
 		self.status.setdefault('min_move', 0.1)
 		self.status.setdefault('aggressivness', 0.5)
 		self.status['t_delay'] = t_delay
-		self.last_move = 0
+		self.status['last_move'] = 0
 		self.corr = 0
 		self.status['restart'] = False
 
@@ -950,10 +950,10 @@ class GuiderAlg(object):
 		
 		if corr > self.status['min_move']:
 			self.go.out(-1, corr / self.pixpersec_neg)
-			self.last_move = corr
+			self.status['last_move'] = corr
 		elif corr < -self.status['min_move']:
 			self.go.out(1, -corr / self.pixpersec)
-			self.last_move = corr
+			self.status['last_move'] = corr
 		else:
 			self.go.out(0)
 			self.corr = 0
@@ -987,12 +987,12 @@ class GuiderAlgDec(GuiderAlg):
 			self.corr_acc = 0
 			return corr
 			
-		if corr > 0 and self.last_move < 0 and corr < self.status['rev_move']:
+		if corr > 0 and self.status['last_move'] < 0 and corr < self.status['rev_move']:
 			corr = 0
-		elif corr < 0 and self.last_move > 0 and corr > -self.status['rev_move']:
+		elif corr < 0 and self.status['last_move'] > 0 and corr > -self.status['rev_move']:
 			corr = 0
 		
-		if corr * self.last_move < 0:
+		if corr * self.status['last_move'] < 0:
 			self.corr_acc = 0
 		
 		
@@ -1132,9 +1132,18 @@ class Guider:
 		
 			if self.capture_in_progress == 0:
 				try:
-					self.dither = complex((self.dither.real + 11) % 37, 0)
+					dither_dec = self.dither.imag
+					if self.status['pixpersec_dec'] is not None:
+						if self.status['pixpersec_dec'] * self.status['dec_alg']['last_move'] < 0:
+							dither_dec -= 1
+						else:
+							dither_dec += 1
+						if np.abs(dither_dec) > 50:
+							dither_dec = 0
+					self.dither = complex((self.dither.real + 11) % 37, dither_dec)
 					self.update_pt0()
 				except:
+					log.exception('dither')
 					pass
 				
 				#self.status['dec_alg']['restart'] = True
