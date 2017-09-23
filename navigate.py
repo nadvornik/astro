@@ -342,6 +342,7 @@ class Navigator:
 		self.stack = Stack()
 		self.solvedlock = threading.Lock()
 		self.solver = None
+		self.full_res_solver = None
 		self.solver_off = np.array([0.0, 0.0])
 		self.status.setdefault("dispmode", 'disp-normal')
 		self.status.setdefault("field_corr_limit", 10)
@@ -650,6 +651,8 @@ class Navigator:
 		if cmd == 'solver-retry':
 			if self.solver is not None:
 				self.solver.terminate(wait=False)
+			if self.full_res_solver is not None:
+                                self.navigator.full_res_solver.terminate(wait=False)
 			if self.tid == 'guider':
 				self.status['ra'], self.status['dec'], self.status['max_radius'] = self.mount.get_oag_pos()
 			else:
@@ -753,7 +756,7 @@ class Navigator:
 		
 		im = apply_gamma8(im, 2.2)
 		log.info("full_res bg")
-		pts = find_max(im, 12, 200, no_over = True)
+		pts = find_max(im, 12, 200)
 		
 		w = im.shape[1]
 		h = im.shape[0]
@@ -763,7 +766,14 @@ class Navigator:
 			cmdQueue.put('capture-full-res-done')
 			return
 		
-		hfr_list = get_hfr_field(im, pts, sub_bg = True)
+		pts_v_max = pts[0, 2]
+		pts_v_min = pts[-1, 2]
+		pts_v_thr = pts_v_min + (pts_v_max - pts_v_min) * 0.8
+		
+		pts_no_over = pts[np.where(pts[:, 2] <= pts_v_thr)]
+		log.info("pts min %f max %f thr %f", pts_v_min, pts_v_max, pts_v_thr)
+		
+		hfr_list = get_hfr_field(im, pts_no_over, sub_bg = True)
 		log.info("full_res get hfr")
 		hfr_list = filter_hfr_list(hfr_list)
 		
@@ -794,6 +804,7 @@ class Navigator:
 
 
 		solver = Solver(sources_list = pts, field_w = w, field_h = h, ra = self.status['ra'], dec = self.status['dec'], field_deg = self.status['field_deg'], radius = 100)
+		self.full_res_solver = solver
 		solver.start()
 		
 		im_c = cv2.normalize(im_c,  im_c, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8UC3)
@@ -2469,6 +2480,8 @@ class Runner(threading.Thread):
 	def capture_start_cb(self):
 		cmdQueue.put('capture-started')
 		self.capture_in_progress = True
+		if self.navigator.full_res_solver is not None:
+                                self.navigator.full_res_solver.terminate(wait=False)
 	
 	def capture_end_cb(self, jpg, name):
 		self.capture_in_progress = False
@@ -2476,8 +2489,8 @@ class Runner(threading.Thread):
 		cmdQueue.put('capture-finished')
 		if jpg is not None:
 			ui.imshow_jpg("full_res", jpg)
-			self.navigator.proc_full_res(jpg, name)
-			#threading.Thread(target=self.navigator.proc_full_res, args = [jpg] ).start()
+			#self.navigator.proc_full_res(jpg, name)
+			threading.Thread(target=self.navigator.proc_full_res, args = [jpg, name] ).start()
 		else:
 			cmdQueue.put('capture-full-res-done')
 
@@ -3072,9 +3085,9 @@ def run_test_full_res():
 	profiler.add_function(Navigator.proc_full_res)
 	profiler.enable_by_count()
 		
-	for i in range(5400, 5628):
+	for i in range(5733, 5880):
 		tmpFile = io.BytesIO()
-		pil_image = Image.open('../af8/IMG_%d.JPG' % i)
+		pil_image = Image.open('../af7/IMG_%d.JPG' % i)
 		pil_image.save(tmpFile,'JPEG')
 		file_data = tmpFile.getvalue()
 		nav1.proc_full_res(file_data)
