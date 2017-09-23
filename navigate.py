@@ -1109,6 +1109,7 @@ class Guider:
 		self.capture_proc_in_progress = 0
 		self.capture_init = False
 		self.countdown = 5
+		self.parity = 0
 		
 		
 		self.i0 = 0
@@ -1162,7 +1163,7 @@ class Guider:
 				try:
 					dither_dec = self.dither.imag
 					if self.status['pixpersec_dec'] is not None:
-						if self.status['pixpersec_dec'] * self.status['dec_alg']['last_move'] < 0:
+						if self.status['pixpersec_dec'] * self.status['dec_alg']['last_move'] * self.parity > 0:
 							dither_dec -= 1
 						else:
 							dither_dec += 1
