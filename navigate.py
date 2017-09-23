@@ -1094,10 +1094,10 @@ class Guider:
 		self.cnt = 0
 		self.pt0 = []
 		self.pt0base = []
-		self.ok = False
 		self.capture_in_progress = 0
 		self.capture_proc_in_progress = 0
 		self.capture_init = False
+		self.countdown = 5
 		
 		
 		self.i0 = 0
@@ -1559,11 +1559,18 @@ class Guider:
 				else:
 					status += " err:%.1f %.1f corr:%.1f t_d:%.1f t_p:%.1f" % (err.real, err.imag, self.alg_ra.corr, self.status['t_delay'], t_proc)
 				
-				self.ok = (err.real < 1.5 and err.real > -1.5)
+				ok = (np.abs(err.real) < np.abs(self.status['t_delay'] * self.status['pixpersec']))
 				if self.parity != 0:
-					self.ok = (self.ok and err.imag < 1.5 and err.imag > -1.5)
-					
-				if not self.capture_init and self.capture_proc_in_progress == 0 and (self.status['seq'] == 'seq-guided' and self.ok or self.status['seq'] == 'seq-unguided'):
+					ok = (ok and np.abs(err.imag) < np.abs(self.status['t_delay'] * self.status['pixpersec_dec']))
+				
+				if ok:
+					if self.countdown > 0:
+						self.countdown -= 1
+				else:
+					self.countdown = 4
+				ready = (self.countdown == 0)
+				
+				if not self.capture_init and self.capture_proc_in_progress == 0 and (self.status['seq'] == 'seq-guided' and ready or self.status['seq'] == 'seq-unguided'):
 					cmdQueue.put('capture')
 					self.capture_init = True
 					self.status['curr_ra_err_list'] = []
@@ -1577,7 +1584,7 @@ class Guider:
 				
 				log.info("capture %d %d %d", self.capture_init, self.capture_in_progress, self.capture_proc_in_progress)
 				
-				if self.ok:
+				if ok:
 					self.status['mode'] = 'close'
 				
 				for p in pt:
