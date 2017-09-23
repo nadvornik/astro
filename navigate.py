@@ -1263,12 +1263,12 @@ class Guider:
 				log.info("focus_loop rev 1")
 				for st in range(0, 1 + self.full_res['hyst']):
 					cmdQueue.put('f+1')
-				self.full_res['last_step'] = 1.0
+				self.full_res['last_step'] = 1.0 * (1 + self.full_res['hyst'])
 			else:
 				log.info("focus_loop rev -1")
 				for st in range(0, 1 + self.full_res['hyst']):
 					cmdQueue.put('f-1')
-				self.full_res['last_step'] = -1.0
+				self.full_res['last_step'] = -1.0 * (1 + self.full_res['hyst'])
 		else:
 			if self.full_res['last_step'] < 0:
 				log.info("focus_loop keep -1")
