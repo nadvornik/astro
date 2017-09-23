@@ -204,7 +204,7 @@ def filter_hfr_list(hfr_list):
 			coef = np.linalg.lstsq(A, hfr_list[:, 2])[0]
 	
 			cur_hfr = np.dot(A, coef)
-			cur_hfr[np.where(cur_hfr < 1)] = 1
+			cur_hfr[(cur_hfr < 1)] = 1
 			d2 = (hfr_list[:,2] - cur_hfr) ** 2 / cur_hfr**2
 			var = np.average(d2)
 			keep = np.where(d2 <= var * kappa**2 + 0.001)
@@ -442,7 +442,7 @@ class Navigator:
 		if self.hotpix_cnt is None:
 			self.hotpix_cnt = np.zeros_like(im, dtype=np.uint8)
 		
-		self.hotpix_cnt[np.where(im > stddev * 10)] += 1
+		self.hotpix_cnt[(im > stddev * 10)] += 1
 		
 	def hotpix_update(self):
 		self.hotpixels = list(zip(*np.where(self.hotpix_cnt > 2)))
@@ -770,7 +770,7 @@ class Navigator:
 		pts_v_min = pts[-1, 2]
 		pts_v_thr = pts_v_min + (pts_v_max - pts_v_min) * 0.8
 		
-		pts_no_over = pts[np.where(pts[:, 2] <= pts_v_thr)]
+		pts_no_over = pts[(pts[:, 2] <= pts_v_thr)]
 		log.info("pts min %f max %f thr %f", pts_v_min, pts_v_max, pts_v_thr)
 		
 		hfr_list = get_hfr_field(im, pts_no_over, sub_bg = True)
@@ -948,7 +948,7 @@ def fit_line(xylist, sigma = 2):
 	for i in range(1, 5):
 		d2 = (a[:, 0] * m + c - a[:, 1]) ** 2
 		var = np.mean(d2)
-		a = a[np.where(d2 < var * sigma ** 2)]
+		a = a[(d2 < var * sigma ** 2)]
 		m, c = np.polyfit(a[:, 0], a[:, 1], 1)
 		log.info("fit_line res2 %f %f" , m ,c)
 	return m, c
@@ -1416,7 +1416,7 @@ class Guider:
 				
 					log.info("pixpersec %f pixperframe %f t_delay1 %f", self.status['pixpersec'], self.pixperframe, self.status['t_delay1'])
 				
-					self.pt0 = np.array(self.pt0)[np.where(np.bincount(self.used_cnt) > 5)]
+					self.pt0 = np.array(self.pt0)[(np.bincount(self.used_cnt) > 5)]
 					self.pt0base = self.pt0
 				
 					self.cnt = 0
@@ -1809,7 +1809,7 @@ class Focuser:
 		d2 = (np.array(hfr_list) - cur_hfr) ** 2
 		var = np.average(d2, weights = weights)
 		noise = 2
-		weights[np.where(d2 > var * noise**2)] = 1.0
+		weights[(d2 > var * noise**2)] = 1.0
 		cur_hfr = np.average(hfr_list, weights = weights)
 		log.info("hfr_list_filt %s %s", hfr_list, weights)
 		return cur_hfr
@@ -3109,8 +3109,8 @@ if __name__ == "__main__":
 	#sys.stderr = mystderr
 	
 
-	run_gphoto()
-	#run_test_2_kstars()
+	#run_gphoto()
+	run_test_2_kstars()
 	#run_2_v4l2()
 	#run_test_2_gphoto()
 	#run_v4l2()

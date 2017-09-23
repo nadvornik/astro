@@ -61,7 +61,7 @@ def sym_center(I):
 	w = r2 / ((xm - rcx) **2 + (ym - rcy) ** 2 + 0.00001)**0.5
 
 	m = cv2.divide(ru + rv, ru - rv)
-	m[np.where(np.isinf(m))] = 10000
+	m[(np.isinf(m))] = 10000
 
 	b = ym - m*xm
 	return centerfit(m, b, w)
@@ -82,7 +82,7 @@ def hfr(a, sub_bg = False):
 		(mat, mask) = hfr_mat_cache[key]
 	
 	if sub_bg:
-		bg = np.median(a[np.where(mask == 0)])
+		bg = np.median(a[(mask == 0)])
 		a = cv2.subtract(a, bg)
 	
 	s = cv2.sumElems(cv2.multiply(a,  mask, dtype=cv2.CV_32FC1))[0]

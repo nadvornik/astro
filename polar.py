@@ -247,7 +247,7 @@ class Polar:
 
 		d2 = dif0**2 + dif1**2
 		var = np.mean(d2)
-		qa = qa[np.where(d2 < var * noise**2)]
+		qa = qa[(d2 < var * noise**2)]
 
 		# again, with filtered values
 		A = np.column_stack((qa[:,ao[2]], qa[:,ao[3]]))
@@ -327,7 +327,7 @@ class Polar:
 				d2 = np.sum(aa[:, 0:2] ** 2, axis = 1)
 				var = np.mean(d2)
 
-				aa = aa[np.where(d2 < var * 4)]
+				aa = aa[(d2 < var * 4)]
 
 
 				line = cv2.fitLine(aa / aa[0,2] * 100, cv2.DIST_L2, 0.001, 0.000001, 0.000001)[0:3].reshape(3)

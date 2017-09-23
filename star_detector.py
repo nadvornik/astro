@@ -345,7 +345,7 @@ def avg_pt(pt1m, pt2m, noise = 2):
 			v = np.average(dif, axis = 0, weights = weights)
 			difdif2 = np.sum((dif - v)**2, axis = 1)
 			var = np.sum(difdif2 * weights) / sumw
-			weights[np.where(difdif2 > var * noise**2)] = 0.0
+			weights[(difdif2 > var * noise**2)] = 0.0
 			v = np.average(dif, axis = 0, weights = weights)
 			return v, weights
 	elif pt1m.shape[0] == 1:
@@ -438,7 +438,7 @@ def pt_transform_opt(pt1m, pt2m, noise = 2, pt_func = pt_translation):
 	
 	d2 = np.sum((pt2 - pt1t)**2, axis = 1)
 	var = np.sum(d2 * weights) / sumw
-	weights[np.where(d2 > var * noise**2)] = 1.0
+	weights[(d2 > var * noise**2)] = 1.0
 	
 	m = pt_func(pt1, pt2, weights)
 	
