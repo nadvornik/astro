@@ -1079,6 +1079,7 @@ class Guider:
 			self.full_res.setdefault('diff_thr', 0.5)
 			self.full_res['diff_acc'] = 0
 			self.full_res.setdefault('hyst', 0)
+			self.full_res['temp_cor'] = 0
 			
 
 		self.reset()
@@ -1265,31 +1266,61 @@ class Guider:
 		log.info("focus_loop full: %f  guider: %f,  g: %f, cov %f", full_hfr_diff, guider_hfr_diff, g_diff, self.full_res['guider_hfr_cov'])
 		
 		self.full_res['diff_acc'] = max(self.full_res['diff_acc'] + full_hfr_diff, 0.0)
+
+		temp_coef = self.full_res.get('temp_coef', 0)
+		temp_pos = (self.full_res['full_temp'][-1] - self.full_res['full_temp'][0]) * temp_coef
 		
 		if self.full_res['diff_thr'] == 0:
-			return
-		
-		if self.full_res['diff_acc'] > self.full_res['diff_thr']:
-		        self.full_res['diff_acc'] = 0
-			if self.full_res['last_step'] < 0:
-				log.info("focus_loop rev 1")
-				for st in range(0, 1 + self.full_res['hyst']):
-					cmdQueue.put('f+1')
-				self.full_res['last_step'] = 1.0 * (1 + self.full_res['hyst'])
-			else:
-				log.info("focus_loop rev -1")
-				for st in range(0, 1 + self.full_res['hyst']):
-					cmdQueue.put('f-1')
-				self.full_res['last_step'] = -1.0 * (1 + self.full_res['hyst'])
+			temp_diff = temp_pos - self.full_res['temp_cor']
+			last_step = 0
+			if abs(temp_diff) > 0.5:
+				if self.full_res['last_step'] * temp_diff < 0:
+					for st in range(0, self.full_res['hyst']):
+						if temp_diff < 0:
+							log.info("focus_loop temp hyst -1")
+							cmdQueue.put('f-1')
+							last_step += -1.0
+						else:
+							log.info("focus_loop temp hyst +1")
+							cmdQueue.put('f+1')
+							last_step += 1.0
+				for st in range(0, int(abs(temp_diff) + 0.5)):
+					if temp_diff < 0:
+						log.info("focus_loop temp -1")
+						cmdQueue.put('f-1')
+						last_step += -1.0
+						self.full_res['temp_cor'] -= 1
+					else:
+						log.info("focus_loop temp +1")
+						cmdQueue.put('f+1')
+						last_step += 1.0
+						self.full_res['temp_cor'] += 1
+			self.full_res['last_step'] = last_step
+			
 		else:
-			if self.full_res['last_step'] < 0:
-				log.info("focus_loop keep -1")
-				cmdQueue.put('f-1')
-				self.full_res['last_step'] = -1.0
+			self.full_res['temp_cor'] = int(temp_pos) 
+		
+			if self.full_res['diff_acc'] > self.full_res['diff_thr']:
+			        self.full_res['diff_acc'] = 0 #reset
+				if self.full_res['last_step'] < 0:
+					log.info("focus_loop rev 1")
+					for st in range(0, 1 + self.full_res['hyst']):
+						cmdQueue.put('f+1')
+					self.full_res['last_step'] = 1.0 * (1 + self.full_res['hyst'])
+				else:
+					log.info("focus_loop rev -1")
+					for st in range(0, 1 + self.full_res['hyst']):
+						cmdQueue.put('f-1')
+					self.full_res['last_step'] = -1.0 * (1 + self.full_res['hyst'])
 			else:
-				log.info("focus_loop keep +1")
-				cmdQueue.put('f+1')
-				self.full_res['last_step'] = 1.0
+				if self.full_res['last_step'] < 0:
+					log.info("focus_loop keep -1")
+					cmdQueue.put('f-1')
+					self.full_res['last_step'] = -1.0
+				else:
+					log.info("focus_loop keep +1")
+					cmdQueue.put('f+1')
+					self.full_res['last_step'] = 1.0
 		
 		if len(self.full_res['focuser_pos']) > 0:
 			focuser_pos = self.full_res['focuser_pos'][-1]
