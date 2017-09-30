@@ -7,7 +7,7 @@ def polyfit2d(x, y, f, deg):
 	f = f.reshape((vander.shape[0],))
 	c = np.linalg.lstsq(vander, f)[0]
 	res = np.zeros((deg + 1, deg + 1))
-	res[(np.flipud(np.tri(deg + 1)))] = c
+	res[np.where(np.flipud(np.tri(deg + 1)))] = c
 	return res
 
 def interpolate2d(a, x, y):
