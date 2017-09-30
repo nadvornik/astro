@@ -343,6 +343,7 @@ class Navigator:
 		self.solvedlock = threading.Lock()
 		self.solver = None
 		self.full_res_solver = None
+		self.full_res_lock = threading.Lock()
 		self.solver_off = np.array([0.0, 0.0])
 		self.status.setdefault("dispmode", 'disp-normal')
 		self.status.setdefault("field_corr_limit", 10)
@@ -732,147 +733,161 @@ class Navigator:
 	def proc_full_res(self, jpg, name = None):
 		t = time.time()
 		(temp, hum) = self.mount.temp_sensor.get()
-		pil_image = Image.open(io.BytesIO(jpg))
-		im_c = np.array(pil_image)
-		del pil_image
+		with self.full_res_lock:
+			try:
+				pil_image = Image.open(io.BytesIO(jpg))
+				im_c = np.array(pil_image)
+				del pil_image
 		
-		log.info("full_res decoded")
-		#mean, stddev = cv2.meanStdDev(im_c)
-		#im_c[:,:,0] = cv2.subtract(im_c[:,:,0], mean[0])
-		#im_c[:,:,1] = cv2.subtract(im_c[:,:,1], mean[1])
-		#im_c[:,:,2] = cv2.subtract(im_c[:,:,2], mean[2])
-		scale= 10
-		bg = cv2.resize(im_c, ((im_c.shape[1] + scale - 1) / scale, (im_c.shape[0] + scale - 1) / scale), interpolation=cv2.INTER_AREA)
-		bg = cv2.erode(bg, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3,3)))
-		log.info("full_res erode")
-		bg = cv2.blur(bg, (20,20))
-		bg = cv2.blur(bg, (20,20))
-		bg = cv2.blur(bg, (20,20))
-		bg = cv2.resize(bg, (im_c.shape[1], im_c.shape[0]), interpolation=cv2.INTER_AREA)
-		im_c = cv2.subtract(im_c, bg)
-		del bg
+				log.info("full_res decoded")
+				#mean, stddev = cv2.meanStdDev(im_c)
+				#im_c[:,:,0] = cv2.subtract(im_c[:,:,0], mean[0])
+				#im_c[:,:,1] = cv2.subtract(im_c[:,:,1], mean[1])
+				#im_c[:,:,2] = cv2.subtract(im_c[:,:,2], mean[2])
+				scale= 10
+				bg = cv2.resize(im_c, ((im_c.shape[1] + scale - 1) / scale, (im_c.shape[0] + scale - 1) / scale), interpolation=cv2.INTER_AREA)
+				bg = cv2.erode(bg, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3,3)))
+				log.info("full_res erode")
+				bg = cv2.blur(bg, (20,20))
+				bg = cv2.blur(bg, (20,20))
+				bg = cv2.blur(bg, (20,20))
+				bg = cv2.resize(bg, (im_c.shape[1], im_c.shape[0]), interpolation=cv2.INTER_AREA)
+				im_c = cv2.subtract(im_c, bg)
+				del bg
 
-		im = cv2.cvtColor(im_c, cv2.COLOR_RGB2GRAY);
+				im = cv2.cvtColor(im_c, cv2.COLOR_RGB2GRAY);
 		
-		im = apply_gamma8(im, 2.2)
-		log.info("full_res bg")
-		pts = find_max(im, 12, 200)
+				im = apply_gamma8(im, 2.2)
+				log.info("full_res bg")
+				pts = find_max(im, 12, 200)
 		
-		w = im.shape[1]
-		h = im.shape[0]
-		log.info("full_res max %d", len(pts))
-		if len(pts) < 1:
-			log.info("full_res no sources detected")
-			cmdQueue.put('capture-full-res-done')
-			return
-		
-		pts_v_max = pts[0, 2]
-		pts_v_min = pts[-1, 2]
-		pts_v_thr = pts_v_min + (pts_v_max - pts_v_min) * 0.8
-		
-		pts_no_over = pts[(pts[:, 2] <= pts_v_thr)]
-		log.info("pts min %f max %f thr %f", pts_v_min, pts_v_max, pts_v_thr)
-		
-		hfr_list = get_hfr_field(im, pts_no_over, sub_bg = True)
-		log.info("full_res get hfr")
-		hfr_list = filter_hfr_list(hfr_list)
-		
-		full_hfr = np.mean(hfr_list[:,2])
-		
-		if self.full_res is not None:
-			self.full_res['full_hfr'].append(full_hfr)
-			self.full_res['full_name'].append(name)
-			self.full_res['full_temp'].append(temp)
-			self.full_res['full_hum'].append(hum)
-			self.full_res['full_ts'] = t
-		
-		log.info("full_res filter hfr")
+				w = im.shape[1]
+				h = im.shape[0]
+				log.info("full_res max %d", len(pts))
+			except:
+				log.exception('full_res bg')
+				cmdQueue.put('capture-full-res-done')
+				return
 
-		ell_list = []
-		for p in hfr_list:
-			patch_size = int(p[2] * 4 + 2)
-			a = cv2.getRectSubPix(im, (patch_size, patch_size), (p[1] - 0.5, p[0] - 0.5), patchType=cv2.CV_32FC1)
-			ell_list.append(fit_ellipse(a))
+			if len(pts) < 1:
+				log.info("full_res no sources detected")
+				cmdQueue.put('capture-full-res-done')
+				return
+		
+			try:
+				pts_v_max = pts[0, 2]
+				pts_v_min = pts[-1, 2]
+				pts_v_thr = pts_v_min + (pts_v_max - pts_v_min) * 0.8
+			
+				pts_no_over = pts[(pts[:, 2] <= pts_v_thr)]
+				log.info("pts min %f max %f thr %f", pts_v_min, pts_v_max, pts_v_thr)
+		
+				hfr_list = get_hfr_field(im, pts_no_over, sub_bg = True)
+				log.info("full_res get hfr")
+				hfr_list = filter_hfr_list(hfr_list)
+		
+				full_hfr = np.mean(hfr_list[:,2])
+			
+				if self.full_res is not None:
+					self.full_res['full_hfr'].append(full_hfr)
+					self.full_res['full_name'].append(name)
+					self.full_res['full_temp'].append(temp)
+					self.full_res['full_hum'].append(hum)
+					self.full_res['full_ts'] = t
+		
+				log.info("full_res filter hfr")
+
+				ell_list = []
+				for p in hfr_list:
+					patch_size = int(p[2] * 4 + 2)
+					a = cv2.getRectSubPix(im, (patch_size, patch_size), (p[1] - 0.5, p[0] - 0.5), patchType=cv2.CV_32FC1)
+					ell_list.append(fit_ellipse(a))
 				
-		del im
+				del im
+			except:
+				log.exception('full_res hfr')
+				cmdQueue.put('capture-full-res-done')
+				return
 
-		log.info("full_res ell")
-		if len(pts) < 7:
-			log.info("full_res no sources detected")
-			cmdQueue.put('capture-full-res-done')
-			return
+			log.info("full_res ell")
+			if len(pts) < 7:
+				log.info("full_res no sources detected")
+				cmdQueue.put('capture-full-res-done')
+				return
 
-
-		solver = Solver(sources_list = pts, field_w = w, field_h = h, ra = self.status['ra'], dec = self.status['dec'], field_deg = self.status['field_deg'], radius = 100)
-		self.full_res_solver = solver
-		solver.start()
+			try:
+				solver = Solver(sources_list = pts, field_w = w, field_h = h, ra = self.status['ra'], dec = self.status['dec'], field_deg = self.status['field_deg'], radius = 100)
+				self.full_res_solver = solver
+				solver.start()
 		
-		im_c = cv2.normalize(im_c,  im_c, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8UC3)
-		im_c = apply_gamma8(im_c, 0.6)
+				im_c = cv2.normalize(im_c,  im_c, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8UC3)
+				im_c = apply_gamma8(im_c, 0.6)
 
-		log.info("full_res norm")
+				log.info("full_res norm")
 
-		for i, p in enumerate(hfr_list):
-			val, vec = ell_list[i]
-			log.info("%s %s", val, vec)
-			#fwhm = get_fwhm(a)
-			#log.info "fwhm", fwhm, p[2]
-			cv2.circle(im_c, (int(p[1]), int(p[0])), int(p[2] * 10), (100,100,100), 2)
-			#cv2.circle(im_c, (int(p[1]), int(p[0])), int(fwhm * 10), (255,255,255), 2)
-			if val[0] > val[1]:
-				v = val[0] * 10
-				vec = vec[0]
-				v2 = val[1] * 10
-			else:
-				v = val[1] * 10
-				vec = vec[1]
-				v2 = val[0] * 10
+				for i, p in enumerate(hfr_list):
+					val, vec = ell_list[i]
+					log.info("%s %s", val, vec)
+					#fwhm = get_fwhm(a)
+					#log.info "fwhm", fwhm, p[2]
+					cv2.circle(im_c, (int(p[1]), int(p[0])), int(p[2] * 10), (100,100,100), 2)
+					#cv2.circle(im_c, (int(p[1]), int(p[0])), int(fwhm * 10), (255,255,255), 2)
+					if val[0] > val[1]:
+						v = val[0] * 10
+						vec = vec[0]
+						v2 = val[1] * 10
+					else:
+						v = val[1] * 10
+						vec = vec[1]
+						v2 = val[0] * 10
 		
-			v += (v - v2) * 5
+					v += (v - v2) * 5
 		
-			p11 = (p[1], p[0]) - vec * v
-			p12 = (p[1], p[0]) - vec * v2
-			p13 = (p[1], p[0]) + vec * v
-			p14 = (p[1], p[0]) + vec * v2
-			cv2.line(im_c, (int(p11[0]), int(p11[1])), (int(p12[0]), int(p12[1])), (255,0,0), 2)
-			cv2.line(im_c, (int(p13[0]), int(p13[1])), (int(p14[0]), int(p14[1])), (255,0,0), 2)
+					p11 = (p[1], p[0]) - vec * v
+					p12 = (p[1], p[0]) - vec * v2
+					p13 = (p[1], p[0]) + vec * v
+					p14 = (p[1], p[0]) + vec * v2
+					cv2.line(im_c, (int(p11[0]), int(p11[1])), (int(p12[0]), int(p12[1])), (255,0,0), 2)
+					cv2.line(im_c, (int(p13[0]), int(p13[1])), (int(p14[0]), int(p14[1])), (255,0,0), 2)
 
-		log.info("full_res plot")
+				log.info("full_res plot")
 
-		ui.imshow('full_res', im_c)
+				ui.imshow('full_res', im_c)
 		
-		solver.join()
-		if solver.solved:
-			log.info("full-res solved: %f %f", solver.ra, solver.dec)
-			with self.solvedlock:
-				self.status['ra'] = solver.ra
-				self.status['dec'] = solver.dec
-				self.status['field_deg'] = solver.field_deg
-				self.status['radius'] = solver.field_deg
-				self.mount.polar.set_pos_tan(solver.wcs, t, "full-res")
+				solver.join()
+				if solver.solved:
+					log.info("full-res solved: %f %f", solver.ra, solver.dec)
+					with self.solvedlock:
+						self.status['ra'] = solver.ra
+						self.status['dec'] = solver.dec
+						self.status['field_deg'] = solver.field_deg
+						self.status['radius'] = solver.field_deg
+						self.mount.polar.set_pos_tan(solver.wcs, t, "full-res")
 				
-				if self.im is not None:
-					self.wcs = scale_wcs(solver.wcs, (self.im.shape[1], self.im.shape[0]))
-					self.plotter_off = np.array([0.0, 0.0])
-					self.plotter = Plotter(self.wcs)
-					self.mount.set_pos_tan(self.wcs, t, self.tid)
+						if self.im is not None:
+							self.wcs = scale_wcs(solver.wcs, (self.im.shape[1], self.im.shape[0]))
+							self.plotter_off = np.array([0.0, 0.0])
+							self.plotter = Plotter(self.wcs)
+							self.mount.set_pos_tan(self.wcs, t, self.tid)
 
 
-			if (self.status['dispmode'].startswith('disp-zoom-')):
-				zoom = self.status['dispmode'][len('disp-zoom-'):]
-			else:
-				zoom = 1
+					if (self.status['dispmode'].startswith('disp-zoom-')):
+						zoom = self.status['dispmode'][len('disp-zoom-'):]
+					else:
+						zoom = 1
 			
 
 			
-			plotter=Plotter(solver.wcs)
-			plot = plotter.plot(im_c, scale = zoom)
-			ui.imshow('full_res', plot)
+					plotter=Plotter(solver.wcs)
+					plot = plotter.plot(im_c, scale = zoom)
+					ui.imshow('full_res', plot)
 
-		else:
-			log.info("full-res not solved")
+				else:
+					log.info("full-res not solved")
 		
-		cmdQueue.put('capture-full-res-done')
+			except:
+				log.exception('full_res solver')
+			cmdQueue.put('capture-full-res-done')
 	
 	def get_xy_cor(self):
 		xy = self.stack.get_xy()
@@ -2494,15 +2509,19 @@ class Runner(threading.Thread):
 				time.sleep(5)
 				
 			if not self.video_capture:
-				#cv2.imwrite("testimg23_" + str(i) + ".tif", im)
-				if mode == 'navigator':
-					self.navigator.proc_frame(im, i, t)
-				if mode == 'guider':
-					self.guider.proc_frame(im, i)
-				if mode == 'focuser':
-					self.focuser.proc_frame(im, i)
-				if mode == 'zoom_focuser':
-					self.zoom_focuser.proc_frame(im, i)
+				try:
+					#cv2.imwrite("testimg23_" + str(i) + ".tif", im)
+					if mode == 'navigator':
+						self.navigator.proc_frame(im, i, t)
+					if mode == 'guider':
+						self.guider.proc_frame(im, i)
+					if mode == 'focuser':
+						self.focuser.proc_frame(im, i)
+					if mode == 'zoom_focuser':
+						self.zoom_focuser.proc_frame(im, i)
+				except:
+					log.exception('proc_frame')
+
 			i += 1
 			#if i == 300:
 			#	cmdQueue.put('exit')
