@@ -13,6 +13,9 @@ import subprocess
 import atexit
 import time
 import sys
+import logging
+
+log = logging.getLogger()
 
 class TempSensor(threading.Thread):
 	def __init__(self, status):
@@ -33,7 +36,7 @@ class TempSensor(threading.Thread):
 			if self.cmd is None or self.cmd.poll() is not None:
 				restart = self.cmd is not None
 				if restart:
-					print "guide_out_rt exited with %d\n" % (self.cmd.poll()),
+					log.error("guide_out_rt exited with %d\n" % (self.cmd.poll()))
 				if self.terminating:
 					return
 				self.cmd = subprocess.Popen([self.bin_name], close_fds=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, bufsize=1 )
@@ -44,6 +47,7 @@ class TempSensor(threading.Thread):
 				(temp, hum) = [float(s) for s in line.split()]
 				self.history.append((time.time(), temp, hum))
 				(self.status['temp'], self.status['rhum']) = (temp, hum)
+				log.info("temp %f, hum %f" % (temp, hum))
 			except:
 				pass
 	
