@@ -197,7 +197,8 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 	"""Handle requests in a separate thread."""
 
 	def handle_error(self, request, client_address):
-		log.exception('Unexpected error')
+		#log.exception('Unexpected error')
+		pass
 
 class ServerThread(threading.Thread):
 	def __init__(self):
