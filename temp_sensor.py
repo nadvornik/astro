@@ -36,7 +36,7 @@ class TempSensor(threading.Thread):
 			if self.cmd is None or self.cmd.poll() is not None:
 				restart = self.cmd is not None
 				if restart:
-					log.error("guide_out_rt exited with %d\n" % (self.cmd.poll()))
+					log.error("temp_sensor exited with %d\n" % (self.cmd.poll()))
 				if self.terminating:
 					return
 				self.cmd = subprocess.Popen([self.bin_name], close_fds=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, bufsize=1 )

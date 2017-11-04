@@ -144,6 +144,7 @@ class Solver(threading.Thread):
 		prihdr['ANSOLVED'] = tmp_dir + '/field.solved'
 		#prihdr['ANMATCH'] = tmp_dir + '/field.match'
 		prihdr['ANCANCEL'] = tmp_dir + '/field.solved'
+		prihdr['ANCLIM'] = 60 #timeout
 		
 		
 		prihdr['ANPOSERR'] = self.field_w / 400.0

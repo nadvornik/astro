@@ -23,6 +23,8 @@ class MaxDetector(threading.Thread):
 		
 		self.img = img
 		self.no_over = no_over
+		self.found = []
+		
 	
 	def run(self):
 		(h, w) = self.img.shape
@@ -46,7 +48,6 @@ class MaxDetector(threading.Thread):
 		ordmax = np.argsort(valmax)[::-1]
 		ordmax = ordmax[:self.n]
 
-		self.found = []
 		
 		centroid_size = 7
 	

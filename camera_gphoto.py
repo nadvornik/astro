@@ -13,6 +13,7 @@ from gui import ui
 from cmd import cmdQueue
 from stacktraces import stacktraces
 
+import gc
 
 log = logging.getLogger()
 
@@ -149,6 +150,7 @@ class Camera_gphoto:
 			
 
 	def capture_bulb(self, test = False, callback_start = None, callback_end = None):
+		gc.collect()
 		if test:
 			sec = self.status['test-exp-sec']
 

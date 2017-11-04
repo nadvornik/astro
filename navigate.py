@@ -416,6 +416,7 @@ class Navigator:
 			try:
 				self.field_corr = np.load(self.status['field_corr'])
 			except:
+				log.exception("load field_corr");
 				self.field_corr = None
 
 		if "field_deg" in profile:
@@ -827,7 +828,7 @@ class Navigator:
 
 				for i, p in enumerate(hfr_list):
 					val, vec = ell_list[i]
-					log.info("%s %s", val, vec)
+					#log.info("%s %s", val, vec)
 					#fwhm = get_fwhm(a)
 					#log.info "fwhm", fwhm, p[2]
 					cv2.circle(im_c, (int(p[1]), int(p[0])), int(p[2] * 10), (100,100,100), 2)
@@ -1055,7 +1056,7 @@ class GuiderAlgRa(GuiderAlg):
 	
 		smooth_c = self.status['smooth_c']
 		corr_acc = self.corr_acc + corr * smooth_c
-		if np.abs(corr_acc) < 3:
+		if np.abs(corr_acc) < np.abs(pixpersec / 2.0):
 			self.corr_acc = corr_acc
 	
 		err2norm = (err2 ** 2 / self.smooth_var2) ** 0.5
@@ -1617,7 +1618,7 @@ class Guider:
 				else:
 					status += " err:%.1f %.1f corr:%.1f t_d:%.1f t_p:%.1f" % (err.real, err.imag, self.alg_ra.corr, self.status['t_delay'], t_proc)
 				
-				ok = (np.abs(err.real) < np.abs(self.status['t_delay'] * self.status['pixpersec']))
+				ok = (np.abs(err.real) < max(0.5, np.abs(self.status['t_delay'] * self.status['pixpersec'])))
 				if self.parity != 0:
 					ok = (ok and np.abs(err.imag) < np.abs(self.status['t_delay'] * self.status['pixpersec_dec']))
 				
