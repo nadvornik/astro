@@ -305,6 +305,7 @@ class Camera_gphoto:
 		self.set_config_value_checked('eosremoterelease', 'Press Half')
 		self.set_config_value_checked('eosremoterelease', 'Release Half')
 		self.set_config_value_checked('eosremoterelease', 'Release Full')
+		self.set_config_value('bulb', 0)
 		
 		self.cameramodel = self.get_config_value('cameramodel')
 		log.info(self.cameramodel)
@@ -362,19 +363,18 @@ class Camera_gphoto:
 			if cmd in ["f-3", "f-2", "f-1", "f+3", "f+2", "f+1"]:
 				if self.focuser is not None:
 					self.focuser.cmd(cmd)
-				if self.focuser is None or self.focuser.testmode:
-					if cmd == "f-3":
-						self.set_config_choice('manualfocusdrive', 2)
-					if cmd == "f-2":
-						self.set_config_choice('manualfocusdrive', 1)
-					if cmd == "f-1":
-						self.set_config_choice('manualfocusdrive', 0)
-					if cmd == "f+1":
-						self.set_config_choice('manualfocusdrive', 4)
-					if cmd == "f+2":
-						self.set_config_choice('manualfocusdrive', 5)
-					if cmd == "f+3":
-						self.set_config_choice('manualfocusdrive', 6)
+				if cmd == "f-3":
+					self.set_config_choice('manualfocusdrive', 2)
+				if cmd == "f-2":
+					self.set_config_choice('manualfocusdrive', 1)
+				if cmd == "f-1":
+					self.set_config_choice('manualfocusdrive', 0)
+				if cmd == "f+1":
+					self.set_config_choice('manualfocusdrive', 4)
+				if cmd == "f+2":
+					self.set_config_choice('manualfocusdrive', 5)
+				if cmd == "f+3":
+					self.set_config_choice('manualfocusdrive', 6)
 			
 			if cmd == "z1":
         
