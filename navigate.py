@@ -30,7 +30,7 @@ from camera_gphoto import *
 from guide_out import GuideOut
 
 import random
-from line_profiler import LineProfiler
+#from line_profiler import LineProfiler
 
 from gui import ui
 from cmd import cmdQueue
@@ -2357,20 +2357,20 @@ class Runner(threading.Thread):
 		
 		
 	def run(self):
-		profiler = LineProfiler()
-		profiler.add_function(Navigator.proc_frame)
-		profiler.add_function(Guider.proc_frame)
-		profiler.add_function(Stack.add)
-		profiler.add_function(Median.add)
-		profiler.add_function(Median.add_masked)
-		profiler.add_function(find_max)
-		profiler.add_function(match_triangle)
-		profiler.add_function(Runner.run)
-		profiler.add_function(Camera_test.capture)
-		profiler.add_function(Polar.solve)
-		#profiler.add_function(Polar.camera_position)
+#		profiler = LineProfiler()
+#		profiler.add_function(Navigator.proc_frame)
+#		profiler.add_function(Guider.proc_frame)
+#		profiler.add_function(Stack.add)
+#		profiler.add_function(Median.add)
+#		profiler.add_function(Median.add_masked)
+#		profiler.add_function(find_max)
+#		profiler.add_function(match_triangle)
+#		profiler.add_function(Runner.run)
+#		profiler.add_function(Camera_test.capture)
+#		profiler.add_function(Polar.solve)
+#		#profiler.add_function(Polar.camera_position)
 		
-		profiler.enable_by_count()
+#		profiler.enable_by_count()
 		
 		
 		cmdQueue.register(self.tid)
@@ -2389,7 +2389,7 @@ class Runner(threading.Thread):
 				if cmd == 'exit' or cmd == 'shutdown':
 					if self.guider is not None:
 						self.guider.cmd('stop')
-					profiler.print_stats()
+					#profiler.print_stats()
 					try:
 						self.camera.shutdown()
 					except:
@@ -3133,9 +3133,9 @@ def run_test_full_res():
 	focuser = Focuser('navigator', status.path(["navigator", "focuser"]), dark = dark1)
 	zoom_focuser = Focuser('navigator', status.path(["navigator", "focuser"]))
 	
-	profiler = LineProfiler()
-	profiler.add_function(Navigator.proc_full_res)
-	profiler.enable_by_count()
+#	profiler = LineProfiler()
+#	profiler.add_function(Navigator.proc_full_res)
+#	profiler.enable_by_count()
 		
 	for i in range(5733, 5880):
 		tmpFile = io.BytesIO()
@@ -3145,7 +3145,7 @@ def run_test_full_res():
 		nav1.proc_full_res(file_data)
 		time.sleep(1)
 	
-	profiler.print_stats()
+#	profiler.print_stats()
 					
 
 if __name__ == "__main__":
