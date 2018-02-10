@@ -334,6 +334,33 @@ def apply_gamma8(img, gamma):
 	lut = np.fromiter( ( (x / 255.0)**gamma * 255.0 for x in xrange(256)), dtype=np.uint8 )
 	return np.take(lut, img)
 
+def format_coords(ra, dec):
+	ret = {}
+	ra = ra % 360.0
+
+	ret['ra_deg'] = '{:03.2f}'.format(ra)
+	ret['dec_deg'] = '{:03.2f}'.format(dec)
+	sign = 1
+	if dec < 0:
+		sign = -1
+		dec = -dec
+		
+	i_dec_deg = int(dec)
+	i_dec_min = int((dec - i_dec_deg) * 60 + 1e-61)
+	i_dec_sec = int((((dec - i_dec_deg) * 60) - i_dec_min) * 60 + 1e-6)
+	ret['dec_dms'] = '{:03d}:{:02d}:{:02d}'.format(i_dec_deg * sign, i_dec_min, i_dec_sec)
+	i_ra_deg = int(ra)
+	i_ra_min = int((ra - i_ra_deg) * 60 + 1e-6)
+	i_ra_sec = int((((ra - i_ra_deg) * 60) - i_ra_min) * 60 + 1e-6)
+	ret['ra_dms'] = '{:03d}:{:02d}:{:02d}'.format(i_ra_deg, i_ra_min, i_ra_sec)
+	hra = ra / 15
+	ret['ra_h'] = '{:03.2f}'.format(hra)
+	i_hra_deg = int(hra)
+	i_hra_min = int((hra - i_hra_deg) * 60 + 1e-6)
+	i_hra_sec = int((((hra - i_hra_deg) * 60) - i_hra_min) * 60 + 1e-6)
+	ret['ra_hms'] = '{:3d}:{:02d}:{:02d}'.format(i_hra_deg, i_hra_min, i_hra_sec)
+	return ret
+
 
 class Navigator:
 	def __init__(self, status, dark, mount, tid, polar_tid = None, full_res = None):
@@ -376,6 +403,7 @@ class Navigator:
 		self.status['max_radius'] = 100
 		if tid == 'guider':
 			self.status['ra'], self.status['dec'], self.status['max_radius'] = self.mount.get_oag_pos()
+		self.status.update(format_coords(self.status['ra'], self.status['dec']))
 		self.status['radius'] = self.status['max_radius']
 		self.hotpixels = None
 		self.hotpix_cnt = None
@@ -502,6 +530,7 @@ class Navigator:
 				with self.solvedlock:
 					self.status['ra'] = self.solver.ra
 					self.status['dec'] = self.solver.dec
+					self.status.update(format_coords(self.status['ra'], self.status['dec']))
 					self.status['field_deg'] = self.solver.field_deg
 					self.status['radius'] = self.status['field_deg']
 					self.wcs = self.solver.wcs
@@ -1056,7 +1085,7 @@ class GuiderAlgRa(GuiderAlg):
 	
 		smooth_c = self.status['smooth_c']
 		corr_acc = self.corr_acc + corr * smooth_c
-		if np.abs(corr_acc) < np.abs(pixpersec / 2.0):
+		if np.abs(corr_acc) < np.abs(self.pixpersec / 2.0):
 			self.corr_acc = corr_acc
 	
 		err2norm = (err2 ** 2 / self.smooth_var2) ** 0.5
@@ -3150,7 +3179,6 @@ def run_test_full_res():
 
 if __name__ == "__main__":
 	os.environ["LC_NUMERIC"] = "C"
-
 	#mystderr = os.fdopen(os.dup(sys.stderr.fileno()), 'w', 0)
 	#devnull = open(os.devnull,"w")
 	#os.dup2(devnull.fileno(), sys.stdout.fileno())

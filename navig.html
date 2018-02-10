@@ -53,7 +53,10 @@
                             <td><button class='ajax' value='polar-align'>polar-align</button></td>
                         </tr>
                         <tr>
-                            <td/>
+				<td><span class='ajax_up' data-jsonp='navigator.ra_deg'/></td><td><span class='ajax_up' data-jsonp='navigator.ra_h'/></td><td><span class='ajax_up' data-jsonp='navigator.dec_deg'/></td>
+                        </tr>
+                        <tr>
+				<td><span class='ajax_up' data-jsonp='navigator.ra_dms'/></td><td><span class='ajax_up' data-jsonp='navigator.ra_hms'/></td><td><span class='ajax_up' data-jsonp='navigator.dec_dms'/></td>
                         </tr>
                         <tr>
                             <td><button class='ajax' value='navigator!center-ul'>*</button></td>
@@ -71,7 +74,8 @@
                             <td><button class='ajax' value='navigator!center-lr'>*</button></td>
                         </tr>
                         <tr>
-                            <td><span class='ajax_up' data-jsonp='navigator.ra'/></td><td><span class='ajax_up' data-jsonp='navigator.dec'/></td>
+                            <td/>
+                            <td/>
                             <td>
                                 <select class='ajax ajax_up' data-jsonp='navigator.go_by' data-prefix='navigator!go-by-'>
                                 <option value='navigator!go-by-0.1'>0.1</option>
