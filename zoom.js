@@ -122,7 +122,7 @@ function isElementInViewport(el) {
             if (v) $(this).addClass("ajaxrun");
             else $(this).removeClass("ajaxrun");
           }
-          else if ($(this).is("span")) {
+          else if ($(this).is("span") || $(this).is("option")) {
             $(this).text(v);
           }
           else {
