@@ -398,7 +398,7 @@ class Plotter:
             		plot.close_path()
             		plot.stroke()
 
-		plot_image = plot.get_image_as_numpy()
+		plot_image = plot.get_image_as_numpy()[:, :, 0:3]
 		del plot
 
 		if img is not None and scale <= 8:
@@ -432,14 +432,18 @@ def scale_wcs(wcs, shape):
 	return new_wcs
 
 if __name__ == "__main__":
+	from star_detector import find_max
 	img = cv2.imread("field.tif")
 	img = np.amin(img, axis = 2)
+	
+	sources_list = find_max(img, 12, n=40)
 
-	solver = Solver(sources_img = img)
+	solver = Solver(sources_list = sources_list, field_w = img.shape[1], field_h = img.shape[0])
 	solver.start()
 	solver.join()
 	
 	plotter=Plotter(solver.wcs)
 	plot = plotter.plot(img, scale = 5)
+	print plot.shape
 	cv2.imshow("plot", plot)
 	cv2.waitKey(0)

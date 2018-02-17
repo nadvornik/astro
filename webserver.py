@@ -197,7 +197,9 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 	"""Handle requests in a separate thread."""
 
 	def handle_error(self, request, client_address):
-		#log.exception('Unexpected error')
+		ex, val = sys.exc_info()[:2]
+		if 'Broken pipe' not in val:
+			log.exception('Unexpected error')
 		pass
 
 class ServerThread(threading.Thread):
