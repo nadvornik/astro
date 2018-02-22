@@ -398,7 +398,7 @@ class Plotter:
             		plot.close_path()
             		plot.stroke()
 
-		plot_image = plot.get_image_as_numpy()[:, :, 0:3]
+		plot_image = np.array(plot.get_image_as_numpy()[:, :, 0:3], copy=True)
 		del plot
 
 		if img is not None and scale <= 8:
