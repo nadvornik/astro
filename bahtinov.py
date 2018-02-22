@@ -87,10 +87,12 @@ class Bahtinov:
 	def ba_angle(self, skel_pts):
 		cov = np.cov(skel_pts)
 		w, v = np.linalg.eig(cov)
+	
+		log.info("eig %s %s" % (w, v))
 		if w[0] > w[1]:
-			return np.arctan2(v[0][0], v[0][1])
+			return -np.arctan2(v[0][0], v[0][1])
 		else:
-			return np.arctan2(v[1][0], v[1][1])
+			return -np.arctan2(v[1][0], v[1][1])
 
 	def ba_lines_coarse(self, skel_pts):
 		hist_off = np.pi / 2 - self.angle
@@ -225,6 +227,8 @@ class Bahtinov:
 
 			skel_pts = np.array(np.where(skel))
 			self.angle = self.ba_angle(skel_pts)
+			log.info("main angle %d", self.angle / np.pi * 180)
+			
 			if self.angle > np.pi / 4 and self.angle < np.pi * 3 / 4:
 				self.x_axis = 0
 			else:
@@ -280,8 +284,9 @@ class Bahtinov:
 if __name__ == "__main__":
 	logging.basicConfig(format="%(filename)s:%(lineno)d: %(message)s", level=logging.INFO)
 	
-	imgc = cv2.imread("ba1.jpg")
-	imgc = cv2.imread("Bhatinov.jpg")
+	imgc = cv2.imread("b.jpg")
+	#imgc = cv2.imread("ba1.jpg")
+	#imgc = cv2.imread("Bhatinov.jpg")
 	img = np.amin(imgc, axis = 2)
 	
 	b = Bahtinov()
