@@ -46,6 +46,7 @@ from centroid import centroid, sym_center, hfr, fit_ellipse
 from polyfit import *
 from quat import Quaternion
 from star_detector import *
+from bahtinov import Bahtinov
 
 import logging
 from functools import reduce
@@ -1734,6 +1735,8 @@ class Focuser:
 		self.prev_t = 0
 		self.cmdtab = ['f+3', 'f+2', 'f+1', '', 'f-1', 'f-2', 'f-3']
 		self.full_res = full_res
+		self.bahtinov = Bahtinov()
+		self.ba_step = 0
 
 	hfr_size = 30
 
@@ -1789,6 +1792,11 @@ class Focuser:
 			self.status['phase'] = 'seek'
 		if cmd == 'af_fast':
 			self.status['phase'] = 'fast_search_start'
+
+		if cmd == 'stop':
+			self.status['phase'] = 'wait'
+		if cmd == 'bahtinov':
+			self.status['phase'] = 'bahtinov_start'
 
 	def reset(self):
 		self.status['phase'] = 'wait'
@@ -2082,6 +2090,37 @@ class Focuser:
 				
 			log.info("hfr %f", self.hfr)
 
+		elif self.status['phase'] == 'bahtinov_start':
+			if self.bahtinov.prepare(self.stack_im):
+				self.ba_pos = self.bahtinov.result()
+				self.step(2)
+				self.phase_wait = 3
+				self.status['phase'] = 'bahtinov_init'
+			else:
+				self.status['phase'] = 'wait'
+		elif self.status['phase'] == 'bahtinov_init':
+			if self.bahtinov.update(im_sub):
+				ba_pos = self.bahtinov.result()
+				if ba_pos - self.ba_pos > 0:
+					self.ba_dir = 1
+				else:
+					self.ba_dir = -1
+				self_ba_pos = ba_pos
+				self.status['phase'] = 'bahtinov_run'
+			
+		elif self.status['phase'] == 'bahtinov_run':
+			if self.bahtinov.update(im_sub):
+				self.ba_pos = self.bahtinov.result()
+				if np.abs(self.ba_pos) > 0.3:
+					if self.ba_pos * self.ba_dir > 0:
+						self.step(-1)
+						self.ba_step -= 1
+					else:
+						self.step(1)
+						self.ba_step += 1
+					self.phase_wait = 1
+					log.info("ba_step %d" % self.ba_step)
+			
 		else:
 			if self.focus_yx is not None:
 				self.hfr = self.get_hfr(im_sub)
@@ -2090,13 +2129,17 @@ class Focuser:
 			
 			
 			
-
-		status = "#%d F: %s %s hfr:%.2f fps:%.1f" % (i, self.status['phase'], self.dispmode, self.hfr, fps)
+		if 'bahtinov' in self.status['phase']:
+			status = "#%d F: %s %s ba:%.2f fps:%.1f" % (i, self.status['phase'], self.dispmode, self.ba_pos, fps)
+		else:
+			status = "#%d F: %s %s hfr:%.2f fps:%.1f" % (i, self.status['phase'], self.dispmode, self.hfr, fps)
 	
 
 		if (self.dispmode == 'disp-orig'):
 			disp = normalize(im)
 			cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
+			if 'bahtinov' in self.status['phase']:
+				self.bahtinov.plot(disp)
 			if self.focus_yx is not None:
 				for p in self.focus_yx:
 					cv2.circle(disp, (int(p[1] + 0.5), int(p[0] + 0.5)), 20, (255), 1)
@@ -2104,12 +2147,16 @@ class Focuser:
 		elif (self.dispmode == 'disp-df-cor'):
 			disp = normalize(im_sub)
 			cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
+			if 'bahtinov' in self.status['phase']:
+				self.bahtinov.plot(disp)
 			if self.focus_yx is not None:
 				for p in self.focus_yx:
 					cv2.circle(disp, (int(p[1] + 0.5), int(p[0] + 0.5)), 20, (255), 1)
 			ui.imshow(self.tid, disp)
 		elif (self.dispmode == 'disp-normal'):
 			disp = normalize(self.stack_im)
+			if 'bahtinov' in self.status['phase']:
+				self.bahtinov.plot(disp)
 			cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
 			if self.focus_yx is not None:
 				for p in self.focus_yx:
@@ -2128,6 +2175,8 @@ class Focuser:
 		else:
 			disp = cv2.cvtColor(normalize(self.stack_im), cv2.COLOR_GRAY2RGB)
 			cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 0), 2)
+			if 'bahtinov' in self.status['phase']:
+				self.bahtinov.plot(disp)
 			ui.imshow(self.tid, disp)
 		self.prev_t = t
 

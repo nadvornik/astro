@@ -35,6 +35,7 @@ class Camera_test_kstars:
 		self.status['exp_in_progress'] = False
 		self.t0 = time.time()
 		self.hyst = 2
+		self.bahtinov = False
 		
 		import gobject
 
@@ -71,6 +72,13 @@ class Camera_test_kstars:
 
 		if cmd in ["f-3", "f-2", "f-1", "f+3", "f+2", "f+1"]:
 			self.focuser.cmd(cmd)
+		
+		if cmd == 'z1':
+			self.bahtinov = True
+		
+		if cmd == 'z0':
+			self.bahtinov = False
+		
 
 	
 	def capture(self):
@@ -88,17 +96,36 @@ class Camera_test_kstars:
 		self.iface.exportImage("/tmp/kstars.jpg") #,2000,2000, signature='sii')
 
 		im = cv2.imread("/tmp/kstars.jpg")
+		if self.bahtinov:
+			d = self.focuser.pos / 5.0
+			id = int(d)
+			
+			im2 = np.zeros((500, 500, 3), dtype = im.dtype)
+		
+			cv2.line(im2,(0,200),(500,400),(200, 200, 200),3)
+			cv2.line(im2,(0,400),(500,200),(200, 200, 200),3)
+			cv2.line(im2,(0,300 + id),(500,300+id),(200,200,200),3)
+			
+			M = cv2.getRotationMatrix2D((250,250),60,0.2)
+			im2 = cv2.warpAffine(im2, M, (500, 500), flags=cv2.INTER_LANCZOS4)
+			print im.shape
+			im[0:500, 0:500] = cv2.add(im[0:500, 0:500], im2)
+
 		self.im = apply_gamma(im, 2.2)
 		h, w, c = self.im.shape
 		im = np.rot90(self.im[:, 0:w/2])
 		
 		log.info("focuser %d" % self.focuser.pos)
 		bl = np.abs(self.focuser.pos / 150.0)**2 + 1
+		
+		
+		
 		ibl = int(bl + 1)
 		#im = cv2.blur(im, (ibl, ibl))
 		#im = cv2.blur(im, (ibl, ibl))
 		im = cv2.GaussianBlur(im, (51, 51), bl)
 		im = cv2.add(im, np.random.normal(3, 3, im.shape), dtype = cv2.CV_16UC3)
+		
 		
 		return im, time.time()
 
@@ -157,7 +184,8 @@ class Camera_test_kstars_g:
 		self.cam0.capture()
 		im = self.cam0.im
 		h, w, c = im.shape
-		im = cv2.flip(im[h/4:h/4*3, w/2:], 1)
+		im = im[h/4:h/4*3, w/2:]
+		#im = cv2.flip(im, 1)
 
 		bl = np.abs((self.cam0.focuser.pos + 200) / 150.0)**2 + 1
 		ibl = int(bl + 1)
