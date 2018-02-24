@@ -47,6 +47,7 @@ from polyfit import *
 from quat import Quaternion
 from star_detector import *
 from bahtinov import Bahtinov
+from smooth import smooth
 
 import logging
 from functools import reduce
@@ -1694,30 +1695,6 @@ class Guider:
 		ui.imshow(self.tid, disp)
 		self.prev_t = t
 
-def smooth(x,window_len=11,window='hanning'):
-
-    if x.ndim != 1:
-        raise ValueError("smooth only accepts 1 dimension arrays.")
-
-
-    if window_len<3:
-        return x
-
-
-    if not window in ['flat', 'hanning', 'hamming', 'bartlett', 'blackman']:
-        raise ValueError("Window is on of 'flat', 'hanning', 'hamming', 'bartlett', 'blackman'")
-
-
-    s=np.append(np.append([x[0] for i in range(0, window_len)], x),[x[-1] for i in range(0, window_len)])
-    #log.info(len(s))
-    if window == 'flat': #moving average
-        w=np.ones(window_len,'d')
-    else:
-        w=eval('np.'+window+'(window_len)')
-
-    y=np.convolve(w/w.sum(),s,mode='full')
-    return y[window_len + window_len / 2: window_len + window_len / 2 + x.size]
-
 class Focuser:
 	def __init__(self, tid, status, dark = None, full_res = None):
 		self.status = status
@@ -1916,7 +1893,7 @@ class Focuser:
 			fps = 0
 		
 		if im.ndim > 2:
-			im = cv2.min(cv2.min(im[:, :, 0], im[:, :, 1]), im[:, :, 2])
+			im = cv2.add(cv2.add(im[:, :, 0], im[:, :, 1]), im[:, :, 2])
 
 		self.im = im
 		
@@ -2111,14 +2088,14 @@ class Focuser:
 		elif self.status['phase'] == 'bahtinov_run':
 			if self.bahtinov.update(im_sub):
 				self.ba_pos = self.bahtinov.result()
-				if np.abs(self.ba_pos) > 0.3:
+				if np.abs(self.ba_pos) > 1.5:
 					if self.ba_pos * self.ba_dir > 0:
 						self.step(-1)
 						self.ba_step -= 1
 					else:
 						self.step(1)
 						self.ba_step += 1
-					self.phase_wait = 1
+					self.phase_wait = 4
 					log.info("ba_step %d" % self.ba_step)
 			
 		else:
