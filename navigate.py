@@ -1219,6 +1219,7 @@ class Guider:
 							dither_dec = 0
 					self.dither = complex((self.dither.real + 11) % 37, dither_dec)
 					self.update_pt0()
+					self.countdown = 4
 				except:
 					log.exception('dither')
 					pass
@@ -1653,14 +1654,15 @@ class Guider:
 				if self.parity != 0:
 					ok = (ok and np.abs(err.imag) < np.abs(self.status['t_delay'] * self.status['pixpersec_dec']))
 				
-				if ok:
+				if ok or self.status['seq'] == 'seq-free':
 					if self.countdown > 0:
 						self.countdown -= 1
 				else:
-					self.countdown = 4
+					if self.status['seq'] == 'seq-guided':
+						self.countdown = 4
 				ready = (self.countdown == 0)
 				
-				if not self.capture_init and self.capture_proc_in_progress == 0 and (self.status['seq'] == 'seq-guided' and ready or self.status['seq'] == 'seq-unguided'):
+				if not self.capture_init and self.capture_proc_in_progress == 0 and ready and self.status['seq'] != 'seq-stop':
 					cmdQueue.put('capture')
 					self.capture_init = True
 					self.status['curr_ra_err_list'] = []
