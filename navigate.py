@@ -23,6 +23,8 @@ import io
 import os.path
 import time
 import threading
+import os
+import psutil
 
 from v4l2_camera import *
 from camera_gphoto import *
@@ -2438,7 +2440,10 @@ class Runner(threading.Thread):
 		else:
 			mode = 'guider'
 
+		process = psutil.Process(os.getpid())
 		while True:
+			mem_info = process.memory_info()
+			log.info("mem_used %d %d" % (mem_info.rss,mem_info.vms) )
 			while True:
 				cmd=cmdQueue.get(self.tid, 0.0001)
 				if cmd is None:
@@ -2517,7 +2522,6 @@ class Runner(threading.Thread):
 					if mode == 'zoom_focuser':
 						self.camera.cmd('z0')
 						mode = 'navigator'
-
 					try:
 						self.camera.capture_bulb(test=(cmd == 'test-capture'), callback_start = self.capture_start_cb, callback_end = self.capture_end_cb)
 					except AttributeError:
@@ -2531,7 +2535,6 @@ class Runner(threading.Thread):
 						cmdQueue.put('capture-finished')
 						cmdQueue.put('capture-full-res-done')
 						self.capture_in_progress = False
-
 					break
 				elif cmd == 'capture_start':
 					self.camera.cmd(cmd)
@@ -2588,6 +2591,7 @@ class Runner(threading.Thread):
 	
 	def capture_start_cb(self):
 		cmdQueue.put('capture-started')
+		log.info("gc.collect %d" % gc.collect())
 		self.capture_in_progress = True
 		if self.navigator.full_res_solver is not None:
                                 self.navigator.full_res_solver.terminate(wait=False)
