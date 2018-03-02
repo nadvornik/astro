@@ -46,6 +46,8 @@ class TempSensor(threading.Thread):
 				line = self.cmd.stdout.readline()
 				(temp, hum) = [float(s) for s in line.split()]
 				self.history.append((time.time(), temp, hum))
+				l = max(len(self.history), 5)
+				(t, temp, hum) = np.median(self.history[-l:-1], axis = 0)
 				(self.status['temp'], self.status['rhum']) = (temp, hum)
 				log.info("temp %f, hum %f" % (temp, hum))
 			except:
