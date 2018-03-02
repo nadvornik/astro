@@ -7,65 +7,52 @@ import logging
 log = logging.getLogger()
 
 
-class MaxDetector(threading.Thread):
-	def __init__(self, img, d, n, y1, y2, no_over = False):
-		threading.Thread.__init__(self)
-		self.d = d
-		self.n = n
-		self.y1 = y1
-		self.y2 = y2
-		
-		self.y1e = max(0, y1 - d)
-		self.y2e = min(img.shape[0], y2 + d)
-		
-		self.y1e0 = y1 - self.y1e
-		self.y2e0 = y2 - self.y1e
-		
-		self.img = img
-		self.no_over = no_over
-		self.found = []
-		
+def _find_max_str(out, img, d, n, y1, y2, no_over):
+	y1e = max(0, y1 - d)
+	y2e = min(img.shape[0], y2 + d)
 	
-	def run(self):
-		(h, w) = self.img.shape
-		imge = np.array(self.img[self.y1e:self.y2e, : ], dtype = np.float32)
+	y1e0 = y1 - y1e
+	y2e0 = y2 - y1e
 	
-		imge = cv2.GaussianBlur(imge, (9, 9), 0)
+	(h, w) = img.shape
+	imge = np.array(img[y1e:y2e, : ], dtype = np.float32)
+
+	imge = cv2.GaussianBlur(imge, (9, 9), 0)
 
 
-		dilkernel = np.ones((self.d,self.d),np.uint8)
-		dil = cv2.dilate(imge, dilkernel)
-		img = imge[self.y1e0:self.y2e0, : ]
-		dil = dil[self.y1e0:self.y2e0, : ]
-		
-		locmax = np.where(img >= dil)
-		valmax = img[locmax]
-
-		if self.no_over:
-			maxv = np.amax(valmax) * 0.8
-			valmax[valmax > maxv] = 0.0
-
-		ordmax = np.argsort(valmax)[::-1]
-		ordmax = ordmax[:self.n]
-
-		
-		centroid_size = 7
+	dilkernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (d,d))
+	dil = cv2.dilate(imge, dilkernel)
+	img = imge[y1e0:y2e0, : ]
+	dil = dil[y1e0:y2e0, : ]
 	
-		for (y, x, v) in zip(locmax[0][ordmax], locmax[1][ordmax], valmax[ordmax]):
-			if (v <= 0.0):
-				break
-			if (x < centroid_size):
-				continue
-			if (y + self.y1 < centroid_size):
-				continue
-			if (x > w - centroid_size - 1):
-				continue
-			if (y + self.y1 > h - centroid_size - 1):
-				continue
-			xs, ys = sym_center(imge[y + self.y1e0 - centroid_size : y + self.y1e0 + centroid_size + 1, x - centroid_size : x + centroid_size + 1])
-			#print "centroid", xs, ys, xs2, ys2
-			
-			self.found.append((y + self.y1 + ys, x + xs, v))
+	locmax = np.where(img >= dil)
+	valmax = img[locmax]
+
+	if no_over:
+		maxv = np.amax(valmax) * 0.8
+		valmax[valmax > maxv] = 0.0
+
+	ordmax = np.argsort(valmax)[::-1]
+	ordmax = ordmax[:n]
+
+	
+	centroid_size = 7
+
+	for (y, x, v) in zip(locmax[0][ordmax], locmax[1][ordmax], valmax[ordmax]):
+		if (v <= 0.0):
+			break
+		if (x < centroid_size):
+			continue
+		if (y + y1 < centroid_size):
+			continue
+		if (x > w - centroid_size - 1):
+			continue
+		if (y + y1 > h - centroid_size - 1):
+			continue
+		xs, ys = sym_center(imge[y + y1e0 - centroid_size : y + y1e0 + centroid_size + 1, x - centroid_size : x + centroid_size + 1])
+		#print "centroid", xs, ys, xs2, ys2
+		
+		out.append((y + y1 + ys, x + xs, v))
 
 	
 
@@ -77,26 +64,27 @@ def find_max(img, d, n = 40, no_over = False):
 	joined = []
 	for y in xrange(0, h, step):
 		try:
-			md = MaxDetector(img, d, n / par + 1, y, min(y + step, h), no_over)
-			#md.run()
-			md.start()
+			md = threading.Thread(target=_find_max_str, args = (joined, img, d, n / par + 1, y, min(y + step, h), no_over))
 			mds.append(md)
+			md.start()
 		except:
 			log.exception('Unexpected error')
 
-	for md in mds:
+	for i, md in enumerate(mds):
 		try:
 			md.join()
-			joined += md.found
 		except:
 			log.exception('Unexpected error')
+		finally:
+			mds[i] = None
+			del md
 	if len(joined) == 0:
 		return []
 
 	joined = np.array(joined)
 	ordmax = np.argsort(joined[:, 2])[::-1]
 	ordmax = ordmax[:n]
-	joined = joined[ordmax]
+	joined = np.array(joined[ordmax], copy=True)
 	
 	return joined
 
