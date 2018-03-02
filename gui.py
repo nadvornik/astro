@@ -4,7 +4,6 @@ import webserver
 import cv2
 import numpy as np
 import io
-from PIL import Image
 from cmd import cmdQueue
 import queue
 import threading
@@ -117,8 +116,7 @@ class MyGUI_Web:
 		webserver.mjpeglist.add(name)
 	
 	def imshow(self, name, img):
-		pil_image = Image.fromarray(img)
-		webserver.mjpeglist.update(name, pil_image)
+		webserver.mjpeglist.update(name, img)
 
 	def imshow_jpg(self, name, jpg):
 		webserver.mjpeglist.update_jpg(name,jpg)

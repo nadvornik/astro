@@ -40,8 +40,6 @@ from cmd import cmdQueue
 from stacktraces import stacktraces
 import json
 
-from PIL import Image;
-
 from focuser_out import FocuserOut
 from temp_sensor import TempSensor
 from centroid import centroid, sym_center, hfr, fit_ellipse
@@ -765,13 +763,12 @@ class Navigator:
 		
 	
 	def proc_full_res(self, jpg, name = None):
+		process = psutil.Process(os.getpid())
 		t = time.time()
 		(temp, hum) = self.mount.temp_sensor.get()
 		with self.full_res_lock:
 			try:
-				pil_image = Image.open(io.BytesIO(jpg))
-				im_c = np.array(pil_image)
-				del pil_image
+				im_c = cv2.imdecode(np.fromstring(jpg, dtype=np.uint8), -1)
 		
 				log.info("full_res decoded")
 				#mean, stddev = cv2.meanStdDev(im_c)

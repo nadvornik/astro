@@ -6,7 +6,6 @@ import os
 import sys
 import time
 import io
-from PIL import Image
 import numpy as np
 
 from gui import ui
@@ -470,10 +469,8 @@ class Camera_gphoto:
 					raise
 						
 				file_data = gp.check_result(gp.gp_file_get_data_and_size(camera_file))
-	
-				pil_image = Image.open(io.BytesIO(file_data))
-				#pil_image.save("testimg2_" + str(i) + ".tif")
-				im = np.array(pil_image)
+
+				im = cv2.imdecode(np.fromstring(file_data, dtype=np.uint8), -1)
 				im = apply_gamma(im, 2.2)
 				if self.fpshackiso > 0:
 					self.set_config_value_checked('iso', 1600)

@@ -1,10 +1,10 @@
 #!/usr/bin/python
 
+import cv2
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from socketserver import ThreadingMixIn
 import cgi
 import threading
-from PIL import Image
 import io
 import time
 import os
@@ -24,16 +24,16 @@ class MjpegBuf:
 		self.encoded = True
 		self.seq = -1
 
-	def update(self, pil_image):
+	def update(self, image):
 		with self.condition:
-			self.buf = pil_image
+			self.buf = image
 			self.encoded = False
 			self.condition.notify_all()
 			self.seq += 1
 
 	def update_jpg(self, jpg):
 		with self.condition:
-			self.buf = memoryview(jpg).tobytes()
+			self.buf = jpg
 			self.encoded = True
 			self.condition.notify_all()
 			self.seq += 1
@@ -42,16 +42,15 @@ class MjpegBuf:
 	        t0 = time.time()
 		with self.condition:
 			while self.buf is None or seq == self.seq + 1:
-				if time.time() > t0 + 120:
+				if time.time() > t0 + 12:
 					log.info("req timeout")
 					raise exceptions.EOFError()
 				self.condition.wait(120)
 			if not self.encoded:
-				tmpFile = io.BytesIO()
-				self.buf.save(tmpFile,'JPEG')
-				self.buf = tmpFile.getvalue()
+				ret, file_data = cv2.imencode('.jpg', self.buf)
+                                self.buf = file_data.tobytes()
+                                del file_data
 				self.encoded = True
-				tmpFile.close()
 				
 			buf = self.buf
 			seq = self.seq
@@ -81,8 +80,8 @@ class MjpegList:
 		else:
 			return None
 	
-	def update(self, name, pil_image):
-		self.dict[name].update(pil_image)
+	def update(self, name, image):
+		self.dict[name].update(image)
 
 	def update_jpg(self, name, jpg):
 		self.dict[name].update_jpg(jpg)
@@ -198,9 +197,9 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 
 	def handle_error(self, request, client_address):
 		ex, val = sys.exc_info()[:2]
-		if 'Broken pipe' not in val:
-			log.exception('Unexpected error')
-		pass
+		#if 'Broken pipe' not in val:
+		log.exception('Unexpected error')
+		#pass
 
 class ServerThread(threading.Thread):
 	def __init__(self):

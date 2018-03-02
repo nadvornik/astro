@@ -7,7 +7,6 @@ import random
 import math
 import cv2
 import numpy as np
-from PIL import Image
 import io
 
 import logging
@@ -89,13 +88,18 @@ class Camera_test_kstars:
 		ra = -(self.go_ra.recent_avg() - self.go_ra.recent_avg(0.001)) / 3600.0 * 60.0  + self.e_ra
 		dec = (self.go_dec.recent_avg() - self.go_dec.recent_avg(0.001)) / 3600.0 * 60.0  + self.e_dec
 		
-		log.info("set ra, dec %f,%f" % (ra,dec))
-		self.iface.setRaDec(ra / 360.0 * 24.0, dec)
-		time.sleep(0.5)
+		while True:
+			log.info("set ra, dec %f,%f" % (ra,dec))
+			self.iface.setRaDec(ra / 360.0 * 24.0, dec)
+			time.sleep(0.4)
 		
-		self.iface.exportImage("/tmp/kstars.jpg") #,2000,2000, signature='sii')
+			self.iface.exportImage("/tmp/kstars.jpg") #,2000,2000, signature='sii')
+			time.sleep(0.1)
 
-		im = cv2.imread("/tmp/kstars.jpg")
+			im = cv2.imread("/tmp/kstars.jpg")
+			if im is not None:
+				break
+		
 		if self.bahtinov:
 			d = self.focuser.pos / 5.0
 			id = int(d)
@@ -105,6 +109,7 @@ class Camera_test_kstars:
 			cv2.line(im2,(0,200),(500,400),(200, 200, 200),3)
 			cv2.line(im2,(0,400),(500,200),(200, 200, 200),3)
 			cv2.line(im2,(0,300 + id),(500,300+id),(200,200,200),3)
+			cv2.circle(im2, (250,300), 20, (255,), 40)
 			
 			M = cv2.getRotationMatrix2D((250,250),60,0.2)
 			im2 = cv2.warpAffine(im2, M, (500, 500), flags=cv2.INTER_LANCZOS4)
@@ -156,11 +161,12 @@ class Camera_test_kstars:
 
 		if callback_end is not None:
 			im = np.array(im, dtype=np.uint8)
-			tmpFile = io.BytesIO()
-			pil_image = Image.fromarray(im)
-			#pil_image = Image.open('preview2.jpg')
-			pil_image.save(tmpFile,'JPEG')
-			file_data = tmpFile.getvalue()
+			ret, file_data = cv2.imencode('.jpg', im)
+			file_data = file_data.tobytes()
+			
+			#f = open('IMG_6662.JPG', 'rb')
+			#file_data = f.read()
+			#f.close()
 			callback_end(file_data, "img_{}.jpg".format(time.time()))
 
 
