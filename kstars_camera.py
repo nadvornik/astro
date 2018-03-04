@@ -35,6 +35,7 @@ class Camera_test_kstars:
 		self.t0 = time.time()
 		self.hyst = 2
 		self.bahtinov = False
+		self.i = 0
 		
 		import gobject
 
@@ -100,25 +101,16 @@ class Camera_test_kstars:
 			if im is not None:
 				break
 		
-		if self.bahtinov:
-			d = self.focuser.pos / 5.0
-			id = int(d)
-			
-			im2 = np.zeros((500, 500, 3), dtype = im.dtype)
-		
-			cv2.line(im2,(0,200),(500,400),(200, 200, 200),3)
-			cv2.line(im2,(0,400),(500,200),(200, 200, 200),3)
-			cv2.line(im2,(0,300 + id),(500,300+id),(200,200,200),3)
-			cv2.circle(im2, (250,300), 20, (255,), 40)
-			
-			M = cv2.getRotationMatrix2D((250,250),60,0.2)
-			im2 = cv2.warpAffine(im2, M, (500, 500), flags=cv2.INTER_LANCZOS4)
-			print im.shape
-			im[0:500, 0:500] = cv2.add(im[0:500, 0:500], im2)
+
 
 		self.im = apply_gamma(im, 2.2)
 		h, w, c = self.im.shape
 		im = np.rot90(self.im[:, 0:w/2])
+
+		if self.bahtinov:
+                	im = cv2.imread("ba_test/test%d.jpg" % (self.i % 300 + 264))
+                	im = apply_gamma(im, 2.2)
+                	self.i += 1
 		
 		log.info("focuser %d" % self.focuser.pos)
 		bl = np.abs(self.focuser.pos / 150.0)**2 + 1

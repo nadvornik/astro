@@ -82,7 +82,6 @@ class Bahtinov:
 		x, y = centroid(img)
 		self.center = (maxLoc[1] + int(y), maxLoc[0] + int(x))
 		log.info("center off %d %d" % (x, y))
-		self.roi_center = self.center
 		
 	
 	def ba_roi(self, img):
@@ -93,7 +92,8 @@ class Bahtinov:
 			a = get_rect(img, (r, r), self.center)
 		self.radius = int(12 * hfr(a))
 		log.info("roi hfr %d" % self.radius)
-
+		self.roi_center = (self.radius, self.radius)
+			
 	def ba_angle(self, skel_pts):
 		cov = np.cov(skel_pts)
 		w, v = np.linalg.eig(cov)
@@ -168,7 +168,7 @@ class Bahtinov:
 	    	
 		self.ba_zero_center(img)	
 	
-	def ba_fit_line(self, img, l):
+	def ba_fit_line(self, img, l, sigma):
 		(p, v) = l
 	
 		mask = np.zeros_like(img)
@@ -177,22 +177,30 @@ class Bahtinov:
 	
 		pts = np.where(mask)
 		
+		#show = np.array(img, copy=True)
+		#show[mask == 0] = 0
+		#cv2.imshow("line", show)
+		#cv2.waitKey(1)
+		
 		weights = np.array(img[pts], dtype=np.float32)
 		
 		
 		dist2 = (v[0]*pts[1] - v[1]*pts[0] + (p[0]*v[1]  - v[0] * p[1])) ** 2 / (v[0] ** 2 + v[1] ** 2)
 		dist = dist2 ** 0.5
-		var = np.average(dist2, weights=weights)
+		#var = np.average(dist2, weights=weights**2)
 		#log.info("sigma %f" % (var**0.5))
 	
-	
-		weights /= dist + var
+		#show = np.array(img, copy=True)
+		#show[pts] = dist*16
+		#cv2.imshow("line", show)
+		#cv2.waitKey(100)
+
+		weights /= dist + sigma
 		
 		pts = np.array(pts)
 		
-		#r = np.sum((pts - np.array(self.roi_center)[:, np.newaxis]) ** 2, axis = 0) ** 0.5
-		
-		#weights *= r
+		r = np.sum((pts - np.array(self.roi_center)[:, np.newaxis]) ** 2, axis = 0) ** 0.5
+		weights *= r**0.5
 		
 		A = np.ones((len(weights), 2), dtype=np.float32)
 		A[:,0] = pts[self.x_axis]
@@ -205,10 +213,15 @@ class Bahtinov:
 	
 		line = np.linalg.lstsq(Aw, yw)[0]
 	
+		diff2 = (np.dot(A, line) - y) ** 2
+		sigma = np.average(diff2, weights = weights) ** 0.5
+		sigma /= (1 + line[0]**2) ** 0.5
+		#log.info("sigma %s %f" % (line, sigma))
+	
 		if self.x_axis:
-			return (line[1], 0.0), (line[0], 1.0)
+			return ((line[1], 0.0), (line[0], 1.0)), sigma
 		else:
-			return (0.0, line[1]), (1.0, line[0])
+			return ((0.0, line[1]), (1.0, line[0])), sigma
 
 
 	def fit_all(self, img, check=False):
@@ -216,8 +229,9 @@ class Bahtinov:
 		for l in range(3):
 			line0 = self.lines[l]
 			line = line0
-			for i in range(20):
-				line = self.ba_fit_line(img, line)
+			sigma = 10
+			for i in range(10):
+				line, sigma = self.ba_fit_line(img, line, sigma)
 			if check:
 				v1 = line0[1] / np.linalg.norm(line0[1])
 				v2 = line[1] / np.linalg.norm(line[1])
@@ -247,16 +261,21 @@ class Bahtinov:
 			self.ba_center(img)
 			mean, sigma = cv2.meanStdDev(img)
 			if bg:
-				bl = cv2.blur(img, (5, 5))
-				bl = cv2.erode(bl, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(20,20)))
-				bl = cv2.blur(bl, (30, 30))
-				img = cv2.subtract(img, bl)
+				img = cv2.medianBlur(img, 3)
+
+				#bg = cv2.erode(img, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(20,20)))
+				bg = cv2.blur(img, (200, 200))
+				bg = cv2.blur(bg, (200, 200))
+				img = cv2.subtract(img, bg)
+				#bl = cv2.blur(img, (5, 5))
+				#bl = cv2.erode(bl, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(20,20)))
+				#bl = cv2.blur(bl, (30, 30))
+				#img = cv2.subtract(img, bl)
 
 			skel = cv2.subtract(img, mean + sigma)
 			self.ba_roi(skel)
 
 			skel = get_rect(skel, (self.radius * 2, self.radius * 2), self.center)
-			self.roi_center = (self.radius, self.radius)
 			
 			self.ba_zero_center(skel)
 			skel = self.ba_skel(skel)
@@ -290,10 +309,16 @@ class Bahtinov:
 			self.ba_center(img)
 
 			if bg:
-				bl = cv2.blur(img, (5, 5))
-				bl = cv2.erode(bl, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(20,20)))
-				bl = cv2.blur(bl, (30, 30))
-				img = cv2.subtract(img, bl)
+				img = cv2.medianBlur(img, 3)
+				
+				#bg = cv2.erode(img, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(20,20)))
+				bg = cv2.blur(img, (200, 200))
+				bg = cv2.blur(bg, (200, 200))
+				img = cv2.subtract(img, bg)
+				#bl = cv2.blur(img, (5, 5))
+				#bl = cv2.erode(bl, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(20,20)))
+				#bl = cv2.blur(bl, (30, 30))
+				#img = cv2.subtract(img, bl)
 
 			img = get_rect(img, (self.radius * 2, self.radius * 2), self.center)
 			return self.fit_all(img, check=True)
@@ -305,19 +330,23 @@ class Bahtinov:
 		try:
 			for i, (p, v) in enumerate(self.lines):
 				v = np.array(v) / np.linalg.norm(v)
+				
+				c = intersect((p, v), (self.roi_center, (v[1], -v[0])))
+				c = np.array(c) - np.array(self.roi_center) + np.array(self.center)
+				
 				r = self.radius
 				if i == 1:
 					r *= 1.2
 			
-				x1 = int(self.center[1] + r*(v[1]))
-				y1 = int(self.center[0] + r*(v[0]))
-				x2 = int(self.center[1] - r*(v[1]))
-				y2 = int(self.center[0] - r*(v[0]))
+				x1 = int(c[1] + r*(v[1]))
+				y1 = int(c[0] + r*(v[0]))
+				x2 = int(c[1] - r*(v[1]))
+				y2 = int(c[0] - r*(v[0]))
 
 				cv2.line(img,(x1,y1),(x2,y2),(255,),1)
 
-			c = int(self.radius / 8)
-			cv2.circle(img, (int(self.center[1]), int(self.center[0])), c * 2, (255,), 1)
+			r = int(self.radius / 8)
+			cv2.circle(img, (int(self.center[1]), int(self.center[0])), r * 2, (255,), 1)
 
 		except:
 			log.exception('Unexpected error')
@@ -329,37 +358,25 @@ if __name__ == "__main__":
 	
 	
 	b = Bahtinov()
-	
-	imgc = cv2.imread("b.jpg")
-	imgc = cv2.imread("ba1.jpg")
-	#imgc = cv2.imread("Bhatinov.jpg")
-	img = np.amin(imgc, axis = 2)
-	b.prepare(img, bg=True)
-	print "result", b.result()
-	
+        r = 0.0
 
-	imgc = cv2.imread("ba2.jpg")
-	img = np.amin(imgc, axis = 2)
-	b.update(img, bg=True)
-	print "result", b.result()
-	#cv2.waitKey(0)
-
-	imgc = cv2.imread("ba3.jpg")
-	img = np.amin(imgc, axis = 2)
-	b.update(img, bg=True)
-	print "result", b.result()
-	
-	for a in range(0,360,4):
-		imgc = cv2.imread("IMG_6660.JPG")
-		img = np.amin(imgc, axis = 2)
-		M = cv2.getRotationMatrix2D((img.shape[1] / 2, img.shape[0] / 2),a,1)
-		im2 = cv2.warpAffine(img, M, (img.shape[1], img.shape[0]), flags=cv2.INTER_LANCZOS4, borderMode=cv2.BORDER_REPLICATE)
-		im2c = cv2.warpAffine(imgc, M, (img.shape[1], img.shape[0]), flags=cv2.INTER_LANCZOS4, borderMode=cv2.BORDER_REPLICATE)
-		b.prepare(im2, bg=True)
-		print "result", b.result()
+	for i in range(264, 3219,1):
+		im2c = cv2.imread("ba_test/test%d.jpg" % i)
+		im2 = cv2.add(cv2.add(im2c[:, :, 0], im2c[:, :, 1]), im2c[:, :, 2])
+		#imgc = cv2.imread("IMG_6662.JPG")
+		#img = np.amin(imgc, axis = 2)
+		#M = cv2.getRotationMatrix2D((img.shape[1] / 2, img.shape[0] / 2),a,1)
+		#im2 = cv2.warpAffine(img, M, (img.shape[1], img.shape[0]), flags=cv2.INTER_LANCZOS4, borderMode=cv2.BORDER_REPLICATE)
+		#im2c = cv2.warpAffine(imgc, M, (img.shape[1], img.shape[0]), flags=cv2.INTER_LANCZOS4, borderMode=cv2.BORDER_REPLICATE)
+		if i < 265:
+			b.prepare(im2, bg=True)
+		else:
+			b.update(im2, bg=True)
+		r = r * 0.9 + 0.1 * b.result()
+		print "result", r
 		b.plot(im2c)
 		cv2.imshow("res", im2c)
-		cv2.waitKey(0)
+		cv2.waitKey(1)
 
 
 
