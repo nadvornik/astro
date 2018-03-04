@@ -7,6 +7,7 @@ import sys
 import time
 import io
 import numpy as np
+import cv2
 
 from gui import ui
 from cmd import cmdQueue
@@ -263,7 +264,7 @@ class Camera_gphoto:
 
 		if callback_end is not None:
 			try:
-				callback_end(file_data, filename)
+				callback_end(memoryview(file_data).tobytes(), filename)
 			except:
 				log.exception('Unexpected error')					
 					
@@ -470,7 +471,7 @@ class Camera_gphoto:
 						
 				file_data = gp.check_result(gp.gp_file_get_data_and_size(camera_file))
 
-				im = cv2.imdecode(np.fromstring(file_data, dtype=np.uint8), -1)
+				im = cv2.imdecode(np.fromstring(memoryview(file_data).tobytes(), dtype=np.uint8), -1)
 				im = apply_gamma(im, 2.2)
 				if self.fpshackiso > 0:
 					self.set_config_value_checked('iso', 1600)
