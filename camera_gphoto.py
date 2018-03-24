@@ -37,6 +37,9 @@ class Camera_gphoto:
 		self.focuser = focuser
 		self.fpshack = ''
 		self.fpshackiso = 0
+		self.status.setdefault('capture_idx', 0)
+		self.status['capture'] = False
+		self.status.setdefault('capture_path', None)
 
 	def get_config_value(self, name):
 		config = gp.check_result(gp.gp_camera_get_config(self.camera, self.context))
@@ -447,7 +450,14 @@ class Camera_gphoto:
 			if cmd.startswith('f-number-'):
 				self.set_config_value('aperture', cmd[len('f-number-'):])
 				self.status['f-number'] = self.get_config_value('aperture')
-        
+
+
+			if cmd == 'capture_start' and self.status['capture_path'] is not None:
+				self.status['capture'] = True
+			elif cmd == 'capture_stop':
+				self.status['capture'] = False
+		
+
 			
 		except gp.GPhoto2Error as ex:
 			log.exception('Unexpected error')
@@ -470,6 +480,17 @@ class Camera_gphoto:
 					raise
 						
 				file_data = gp.check_result(gp.gp_file_get_data_and_size(camera_file))
+				if self.status['capture'] and self.status['capture_path'] is not None:
+					i = self.status['capture_idx']
+					while os.path.isfile(self.status['capture_path'] + 'capt%04d.jpg' % i):
+						i += 1
+					f = open(self.status['capture_path'] + 'capt%04d.jpg' % i, "wb")
+					f.write(file_data)
+					f.close()
+
+					log.info("saved {}".format(i))
+					i += 1
+					self.status['capture_idx'] = i
 
 				im = cv2.imdecode(np.fromstring(memoryview(file_data).tobytes(), dtype=np.uint8), -1)
 				im = apply_gamma(im, 2.2)
