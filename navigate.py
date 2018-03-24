@@ -1717,6 +1717,7 @@ class Focuser:
 		self.ba_int = 0.0
 		self.ba_pos = 0.0
 		self.ba_step = 0
+		self.ba_dir = 0
 
 	hfr_size = 30
 
@@ -2073,9 +2074,14 @@ class Focuser:
 		elif self.status['phase'] == 'ba_start':
 			if self.bahtinov.prepare(self.stack_im):
 				self.ba_pos = self.bahtinov.result()
-				self.step(2)
-				self.phase_wait = 3
-				self.status['phase'] = 'ba_init'
+				if self.ba_dir == 0:
+					self.step(2)
+					self.phase_wait = 3
+					self.status['phase'] = 'ba_init'
+				else:
+					self.ba_pos = ba_pos
+					self.ba_int = 0.0
+					self.status['phase'] = 'ba_run'
 			else:
 				self.status['phase'] = 'wait'
 		elif self.status['phase'] == 'ba_init':
