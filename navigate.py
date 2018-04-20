@@ -1809,7 +1809,7 @@ class Focuser:
 			else:
 				if hfr(im[y - Focuser.hfr_size : y + Focuser.hfr_size + 1, x - Focuser.hfr_size : x + Focuser.hfr_size + 1]) < cur_hfr + 1:
 					ret.append(p)
-		log.info("hfr %f %s", cur_hfr, ret)
+		log.info("hfr %s %s", cur_hfr, ret)
 				
 		if len(ret) > 0:
 			return ret[0][2], cur_hfr, np.array(ret)
@@ -1929,7 +1929,7 @@ class Focuser:
 			self.status['phase'] = 'wait'
 		elif self.status['phase'] == 'seek': # move near, out of focus
 			self.hfr = self.get_hfr(im_sub)
-			log.info("in-focus hfr ", self.hfr)
+			log.info("in-focus hfr %f", self.hfr)
 			if self.hfr < Focuser.hfr_size / 3:
 				self.status['phase'] = 'prep_record_v'
 				self.phase_wait = 3
@@ -2079,7 +2079,6 @@ class Focuser:
 					self.phase_wait = 3
 					self.status['phase'] = 'ba_init'
 				else:
-					self.ba_pos = ba_pos
 					self.ba_int = 0.0
 					self.status['phase'] = 'ba_run'
 			else:
