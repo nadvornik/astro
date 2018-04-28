@@ -42,6 +42,7 @@ import json
 
 from focuser_out import FocuserOut
 from temp_sensor import TempSensor
+from ext_trigger import ExtTrigger
 from centroid import centroid, sym_center, hfr, fit_ellipse
 from polyfit import *
 from quat import Quaternion
@@ -2202,6 +2203,8 @@ class Mount:
 		self.guider_tan = None
 		self.status['temp_sensor'] = {}
 		self.temp_sensor = TempSensor(self.status['temp_sensor'])
+		self.ext_trigger = ExtTrigger()
+		
 		
 	def tan_to_euler(self, tan, off=(0,0)):
 		ra, dec = tan.radec_center()
