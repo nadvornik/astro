@@ -42,10 +42,10 @@ class MjpegBuf:
 	        t0 = time.time()
 		with self.condition:
 			while self.buf is None or seq == self.seq + 1:
-				if time.time() > t0 + 12:
+				if time.time() > t0 + 80:
 					log.info("req timeout")
 					raise exceptions.EOFError()
-				self.condition.wait(120)
+				self.condition.wait(30)
 			if not self.encoded:
 				ret, file_data = cv2.imencode('.jpg', self.buf)
                                 self.buf = file_data.tobytes()
