@@ -687,7 +687,7 @@ class Navigator:
 			if self.solver is not None:
 				self.solver.terminate(wait=False)
 			if self.full_res_solver is not None:
-                                self.navigator.full_res_solver.terminate(wait=False)
+                                self.full_res_solver.terminate(wait=False)
 			if self.tid == 'guider':
 				self.status['ra'], self.status['dec'], self.status['max_radius'] = self.mount.get_oag_pos()
 			else:
@@ -883,6 +883,8 @@ class Navigator:
 					solver = Solver(sources_list = pts, field_w = w, field_h = h, ra = self.status['ra'], dec = self.status['dec'], field_deg = self.status['field_deg'], radius = 100)
 					self.full_res_solver = solver
 					solver.start()
+				else:
+					self.full_res_solver = None
 		
 				im_c = cv2.normalize(im_c,  im_c, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8UC3)
 				im_c = apply_gamma8(im_c, 0.6)
