@@ -1158,7 +1158,7 @@ class Guider:
 		self.capture_init = False
 		self.countdown = 5
 		self.parity = 0
-		
+		self.status['alarm_count'] = 0
 		
 		self.i0 = 0
 		self.dither = complex(0, 0)
@@ -1688,6 +1688,9 @@ class Guider:
 					self.mount.go_ra.save("go_ra_%d.npy" % self.t0)
 					self.mount.go_dec.save("go_dec_%d.npy" % self.t0)
 					log.info("SAVED") 
+				self.status['alarm_count'] = 0
+			else:
+				self.status['alarm_count'] += 1
 				
 		if len(self.pt0) > 0:
 			for p in self.pt0:
