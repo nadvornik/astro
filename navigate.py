@@ -376,6 +376,7 @@ class Navigator:
 		self.full_res_lock = threading.Lock()
 		self.solver_off = np.array([0.0, 0.0])
 		self.status.setdefault("dispmode", 'disp-normal')
+		self.status.setdefault("full_dispmode", 'full-disp-normal')
 		self.status.setdefault("field_corr_limit", 10)
 		self.status.setdefault("field_corr", None)
 		try:
@@ -704,6 +705,10 @@ class Navigator:
 		
 		if cmd.startswith('disp-'):
 			self.status['dispmode'] = cmd
+
+		if cmd.startswith('full-disp-'):
+			self.status['full_dispmode'] = cmd
+
 		if cmd == 'save':
 			cv2.imwrite(self.tid + str(int(time.time())) + ".tif", self.stack.get())
 
@@ -767,6 +772,18 @@ class Navigator:
 		process = psutil.Process(os.getpid())
 		t = time.time()
 		(temp, hum) = self.mount.temp_sensor.get()
+
+		if (self.status['full_dispmode'] == 'full-disp-orig'):
+			if self.full_res is not None:
+				self.full_res['full_hfr'].append(0)
+				self.full_res['full_name'].append(name)
+				self.full_res['full_temp'].append(temp)
+				self.full_res['full_hum'].append(hum)
+				self.full_res['full_ts'] = t
+			cmdQueue.put('capture-full-res-done')
+			return
+				
+
 		with self.full_res_lock:
 			try:
 				im_c = cv2.imdecode(np.fromstring(jpg, dtype=np.uint8), -1)
@@ -798,11 +815,23 @@ class Navigator:
 				log.info("full_res max %d", len(pts))
 			except:
 				log.exception('full_res bg')
+				if self.full_res is not None:
+					self.full_res['full_hfr'].append(0)
+					self.full_res['full_name'].append(name)
+					self.full_res['full_temp'].append(temp)
+					self.full_res['full_hum'].append(hum)
+					self.full_res['full_ts'] = t
 				cmdQueue.put('capture-full-res-done')
 				return
 
 			if len(pts) < 1:
 				log.info("full_res no sources detected")
+				if self.full_res is not None:
+					self.full_res['full_hfr'].append(0)
+					self.full_res['full_name'].append(name)
+					self.full_res['full_temp'].append(temp)
+					self.full_res['full_hum'].append(hum)
+					self.full_res['full_ts'] = t
 				cmdQueue.put('capture-full-res-done')
 				return
 		
@@ -842,15 +871,18 @@ class Navigator:
 				return
 
 			log.info("full_res ell")
+
+				
 			if len(pts) < 7:
 				log.info("full_res no sources detected")
 				cmdQueue.put('capture-full-res-done')
 				return
 
 			try:
-				solver = Solver(sources_list = pts, field_w = w, field_h = h, ra = self.status['ra'], dec = self.status['dec'], field_deg = self.status['field_deg'], radius = 100)
-				self.full_res_solver = solver
-				solver.start()
+				if (self.status['full_dispmode'] != 'full-disp-hfr'):
+					solver = Solver(sources_list = pts, field_w = w, field_h = h, ra = self.status['ra'], dec = self.status['dec'], field_deg = self.status['field_deg'], radius = 100)
+					self.full_res_solver = solver
+					solver.start()
 		
 				im_c = cv2.normalize(im_c,  im_c, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8UC3)
 				im_c = apply_gamma8(im_c, 0.6)
@@ -886,6 +918,9 @@ class Navigator:
 
 				ui.imshow('full_res', im_c)
 		
+				if (self.status['full_dispmode'] == 'full-disp-hfr'):
+					cmdQueue.put('capture-full-res-done')
+					return
 				solver.join()
 				if solver.solved:
 					log.info("full-res solved: %f %f", solver.ra, solver.dec)
@@ -903,8 +938,8 @@ class Navigator:
 							self.mount.set_pos_tan(self.wcs, t, self.tid)
 
 
-					if (self.status['dispmode'].startswith('disp-zoom-')):
-						zoom = self.status['dispmode'][len('disp-zoom-'):]
+					if (self.status['full_dispmode'].startswith('full-disp-zoom-')):
+						zoom = self.status['full_dispmode'][len('full-disp-zoom-'):]
 					else:
 						zoom = 1
 			
