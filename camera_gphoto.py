@@ -185,6 +185,16 @@ class Camera_gphoto:
 			except:
 				log.exception('Unexpected error')					
 
+
+		self.t_start = time.time()
+		while True:
+			e, file_path =  gp.check_result(gp.gp_camera_wait_for_event(self.camera, 100,self.context))
+			t = time.time() - self.t_start
+			log.info("camera event %f %s %s", t, e, file_path)
+			if t > 1 or file_path is None:
+				break
+
+
 		if sec <= 4:
 			bulbmode = None
 			self.set_config_value_checked('autoexposuremode', 'Manual')
@@ -198,7 +208,7 @@ class Camera_gphoto:
 					time.sleep(0.1)
 					continue
 
-			
+
 		else:
 			self.set_config_value_checked('autoexposuremode', 'Manual')
 			if not self.set_config_value_checked('shutterspeed', 'Bulb'):
@@ -213,16 +223,25 @@ class Camera_gphoto:
 		self.status['exp_in_progress'] = True
 		self.status['interrupt'] = False
 		while True:
-			if t < sec - 4 and not self.status['interrupt']:
-				time.sleep(3)
+			#if t < sec - 4 and not self.status['interrupt']:
+			#	time.sleep(3)
 			e, file_path =  gp.check_result(gp.gp_camera_wait_for_event(self.camera, 1000,self.context))
 			t = time.time() - self.t_start
 			log.info("camera event %f %s %s", t, e, file_path)
+			try:
+				ev = str(file_path)
+				if ev.startswith("BulbExposureTime "):
+					tp = int(ev[len("BulbExposureTime "):])
+					log.info("exp time parsed %f", tp)
+					self.t_start += t - tp
+					t = tp
+			except:
+				pass
 			
 			if self.status['exp_in_progress']:
 				self.status['cur_time'] = int(t)
 
-			if self.status['exp_in_progress'] and (t > sec or self.status['interrupt']):
+			if self.status['exp_in_progress'] and (t >= sec or self.status['interrupt']):
 				if bulbmode == 'bulb':
 					self.set_config_value('bulb', 0)
 				elif  bulbmode == 'eosremoterelease':
@@ -330,7 +349,7 @@ class Camera_gphoto:
 		try:
 			cur_time = int(cur_time)
 			if cur_time - time.time() > 1500:
-				log.info("adjusting time ", time.time(), cur_time)
+				log.info("adjusting time %s %s", time.time(), cur_time)
 				subprocess.call(['date', '--set', '@' + str(cur_time) ])
 		except:
 			pass
@@ -506,7 +525,7 @@ class Camera_gphoto:
 			except gp.GPhoto2Error as ex:
 				log.exception('Unexpected error')
 				time.sleep(1)
-				if ex.code == -7 or ex.code == -1:
+				if ex.code == -7 or ex.code == -1 or ex.code == -52:
 					gp.gp_camera_exit(self.camera, self.context)
 					self.prepare()
 
