@@ -89,7 +89,10 @@ class MjpegList:
 
 
 class Handler(BaseHTTPRequestHandler):
-    
+
+	wbufsize = 1024 * 1024
+	timeout = 120
+
 	def do_GET(self):
 		s_path = self.path.split('?')
 		path = self.path

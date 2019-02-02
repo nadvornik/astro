@@ -96,7 +96,7 @@ function beep() {
   };
 
   function update_status() {
-    $.ajax({type: "GET", url: "status.json", async: false,
+    $.ajax({type: "GET", url: "status.json",
       success:function(status) {
         $("#json").text( JSON.stringify(status, null, 2) );
 
