@@ -1532,7 +1532,9 @@ class Guider:
 				
 					log.info("pixpersec %f pixperframe %f t_delay1 %f", self.status['pixpersec'], self.pixperframe, self.status['t_delay1'])
 				
-					self.pt0 = np.array(self.pt0)[(np.bincount(self.used_cnt) > 5)]
+					bincnt = np.bincount(self.used_cnt, minlength=len(self.pt0))
+					cntlimit = min(5, np.mean(bincnt))
+					self.pt0 = np.array(self.pt0)[(bincnt > cntlimit)]
 					self.pt0base = self.pt0
 				
 					self.cnt = 0
@@ -1661,7 +1663,7 @@ class Guider:
 
 		elif self.status['mode'] == 'track' or self.status['mode'] == 'close':
 			if self.status['mode'] == 'track':
-				pt1m, pt2m, match = match_triangle(self.pt0, pt, 5, 30, self.off)
+				pt1m, pt2m, match = match_triangle(self.pt0, pt, 5, 80, self.off)
 				if len(match) > 0:
 					off, weights = avg_pt(pt1m, pt2m)
 					#log.info "triangle", off, match
@@ -1732,6 +1734,7 @@ class Guider:
 		if len(self.pt0) > 0:
 			for p in self.pt0:
 				cv2.circle(disp, (int(p[1] + 0.5), int(p[0] + 0.5)), 13, (255), 1)
+				cv2.circle(disp, (int(p[1] + self.off[1] + 0.5), int(p[0] + self.off[0] + 0.5)), 5, (255), 1)
 
 		cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
 		ui.imshow(self.tid, disp)
