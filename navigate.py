@@ -187,6 +187,9 @@ def get_hfr_field(im, pts, hfr_size = 20, sub_bg = False):
 			hf = hfr(im[iy - hfr_size : iy + hfr_size + 1, ix - hfr_size : ix + hfr_size + 1], sub_bg)
 			if hf < 0.9:
 				continue
+			
+			if hf > hfr_size * 0.5:
+				continue
 
 			hfr_list.append((y, x, hf) )
 
@@ -1945,8 +1948,12 @@ class Focuser:
 
 	def set_xy_from_stack(self, stack):
 		im = stack.get()
-		mean, self.stddev = cv2.meanStdDev(im)
-		self.max_flux, self.min_hfr, self.focus_yx = self.get_max_flux(im, stack.get_xy(), 0)
+#		mean, self.stddev = cv2.meanStdDev(im)
+#		self.max_flux, self.min_hfr, self.focus_yx = self.get_max_flux(im, stack.get_xy(), 0)
+		self.focus_yx = get_hfr_field(im, stack.get_xy(), hfr_size = Focuser.hfr_size, sub_bg = True)
+		log.info("hfr_list_1 %s", self.focus_yx)
+		self.focus_yx = filter_hfr_list(self.focus_yx)
+		log.info("hfr_list_2 %s", self.focus_yx)
 
 	def step(self, s):
 		cmdQueue.put(self.cmdtab[s + 3])
@@ -2025,9 +2032,10 @@ class Focuser:
 				self.step(-1)
 			else:
 				if flux > self.max_flux:
-					self.focus_yx = yx
+					#self.focus_yx = yx
 					self.max_flux = flux
 					self.min_hfr = hfr
+					self.set_xy_from_stack(self.stack)
 				else:
 					self.step(2)
 				self.search_steps += 1
