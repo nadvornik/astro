@@ -1771,7 +1771,7 @@ class Focuser:
 		v_len = len(v_curve)
 		side_len = int(v_len * 0.4)
 
-		smooth_size = side_len / 3 * 2 + 1
+		smooth_size = side_len // 4 * 2 + 1
 		v_curve_s = smooth(v_curve, smooth_size, 'flat')
 		v_curve_s = smooth(v_curve_s, smooth_size, 'flat')
 		
@@ -1791,20 +1791,39 @@ class Focuser:
 		#m2, c2 = np.polyfit(range(v_len - side_len, v_len), self.status['v_curve'][v_len - side_len: v_len], 1)
 		xmin =  (c2 - c1) / (m1 - m2)
 		side_len = xmin * 0.8
+		smooth_size = int(side_len) // 4 * 2 + 1
 		log.info("v_len %f side_len %f m1 %f c1 %f m2 %f c2 %f xmin %f", v_len, side_len, m1, c1, m2, c2, xmin)
 		
 		return xmin, side_len, smooth_size, c1, m1, c2, m2, v_curve_s
 	
 	@staticmethod
-	def v_shift(v_curve2, smooth_size, c1, m1):
+	def v_shift(v_curve1, v_curve2, smooth_size, c1, m1, c2, m2):
+		v_curve1_s = smooth(np.array(v_curve1), smooth_size, 'flat')
+		v_curve1_s = smooth(v_curve1_s, smooth_size, 'flat')
 		v_curve2_s = smooth(np.array(v_curve2), smooth_size, 'flat')
 		v_curve2_s = smooth(v_curve2_s, smooth_size, 'flat')
-		derived = np.gradient(v_curve2_s)
-		i1 = np.argmin(derived)
-		y = v_curve2_s[i1]
-		log.info("i1 %f", i1)
-		hyst = (y - c1) / m1 - i1
-		log.info("hyst %f", hyst)
+		derived2 = np.gradient(v_curve2_s)
+		derived1 = np.gradient(v_curve1_s)
+
+		i2 = np.argmin(derived2)
+		m2 = derived2[i2]
+		c2 = v_curve2_s[i2] - i2 * m2
+		log.info("i2 m2 c2 %f %f %f", i2, m2, c2)
+
+		i1 = np.argmin(derived1)
+		m1 = derived1[i1]
+		c1 = v_curve1_s[i1] - i1 * m1
+		log.info("i1 m1 c1 %f %f %f", i1, m1, c1)
+		
+		
+		y = v_curve2_s[i2]
+		hyst2 = (y - c1) / m1 - i2
+
+		y = v_curve1_s[i1]
+		hyst1 = (y - c2) / m2 - i1
+		
+		hyst = (hyst2 - hyst1) / 2.0
+		log.info("hyst %f %f %f", hyst, hyst1, hyst2)
 		return hyst, v_curve2_s
 	
 
@@ -2060,13 +2079,14 @@ class Focuser:
 
 				if self.status['cur_hfr'] < self.status['min_hfr']:
 					self.status['min_hfr'] = self.status['cur_hfr']
+					self.status['side_len'] = len(self.status['v_curve'])
 
 			if len(self.status['v_curve']) > 30:
 				self.status['prev_hfr'] = np.median(self.status['v_curve'][-30:-15])
 
 				if (self.status['cur_hfr'] > self.status['start_hfr'] or 
 				    self.status['cur_hfr'] > max(8, self.status['min_hfr'] * 3) or
-				    self.status['cur_hfr'] > self.status['min_hfr'] * 1.2 and self.status['cur_hfr'] <= self.status['prev_hfr']):
+				    len(self.status['v_curve']) > 2 * self.status['side_len']):
 					self.status['phase'] = 'focus_v'
 					for i in range(0, len(self.status['v_curve']) - 16):
 						start_hfr = np.median(self.status['v_curve'][i:i+15])
@@ -2089,7 +2109,7 @@ class Focuser:
 		elif self.status['phase'] == 'focus_v': # go back, record first part of second v curve
 			self.hfr = self.get_hfr(im_sub)
 			if len(self.status['v_curve2']) > self.status['side_len'] or self.hfr <= self.status['min_hfr'] and len(self.status['v_curve2']) > 4:
-				self.status['hyst'], v_curve2_s = Focuser.v_shift(np.array(self.status['v_curve2']), self.status['smooth_size'], self.status['c1'], self.status['m1'])
+				self.status['hyst'], v_curve2_s = Focuser.v_shift(np.array(self.status['v_curve']), np.array(self.status['v_curve2']), self.status['smooth_size'], self.status['c1'], self.status['m1'], self.status['c2'], self.status['m2'])
 				self.status['v_curve2_s'] = v_curve2_s.tolist()
 
 				self.status['remaining_steps'] = round(self.status['xmin'] - len(self.status['v_curve2']) - self.status['hyst'])
