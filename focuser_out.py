@@ -54,6 +54,6 @@ if __name__ == "__main__":
 	focuser = FocuserOut()
 	
 	while True:
-		focuser.move(5000)
-		focuser.move(-5000)
+		focuser.move(3000)
+		focuser.move(-3000)
 		

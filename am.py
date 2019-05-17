@@ -252,7 +252,6 @@ class Solver(threading.Thread):
 		if wait:
 			self.join()
 		
-
 def match_kdtree_catalog(rc, dc, rr, catfn):
     from astrometry.libkd.spherematch import tree_open, tree_close, tree_build_radec, tree_free, trees_match, tree_permute
     from astrometry.libkd import spherematch_c
@@ -266,14 +265,13 @@ def match_kdtree_catalog(rc, dc, rr, catfn):
     kd2 = tree_build_radec(np.array([rc]), np.array([dc]))
     r = deg2dist(rr)
     I,J,nil = trees_match(kd, kd2, r, permuted=False)
+    del kd2
     # HACK
     #I2,J,d = trees_match(kd, kd2, r)
-    xyz = spherematch_c.kdtree_get_positions(kd, I.astype(np.uint32))
+    xyz = kd.get_data(I.astype(np.uint32))
     #print 'I', I
-    I2 = tree_permute(kd, I)
-    #print 'I2', I2
-    tree_free(kd2)
-    tree_close(kd)
+    I2 = kd.permute(I)
+    del kd
     tra,tdec = xyztoradec(xyz)
     #print tra, tdec, I2
     return tra, tdec, I2
@@ -433,7 +431,7 @@ def scale_wcs(wcs, shape):
 
 if __name__ == "__main__":
 	from star_detector import find_max
-	img = cv2.imread("field.tif")
+	img = cv2.imread("IMG_0533.jpg")
 	img = np.amin(img, axis = 2)
 	
 	sources_list = find_max(img, 12, n=40)

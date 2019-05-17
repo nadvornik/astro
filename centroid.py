@@ -58,10 +58,12 @@ def sym_center(I):
 	
 	r2 = ru * ru + rv * rv
 	rcx, rcy = centroid(r2)
-	w = r2 / ((xm - rcx) **2 + (ym - rcy) ** 2 + 0.00001)**0.5
 
+	w = r2 / ((xm - rcx) **2 + (ym - rcy) ** 2 + 0.00001)**0.5
 	m = cv2.divide(ru + rv, ru - rv)
+
 	m[(np.isinf(m))] = 10000
+	m[(np.isnan(m))] = 0
 
 	b = ym - m*xm
 	return centerfit(m, b, w)
@@ -83,7 +85,7 @@ def hfr(a, sub_bg = False):
 	
 	if sub_bg:
 		bg = np.median(a[(mask == 0)])
-		a = cv2.subtract(a, bg)
+		a = cv2.subtract(a, bg, dtype=cv2.CV_32FC1)
 	
 	s = cv2.sumElems(cv2.multiply(a,  mask, dtype=cv2.CV_32FC1))[0]
 	if s == 0.0:
@@ -144,11 +146,11 @@ def gaussian2d((y, x), my, mx, sig, mag, shift):
 
 if __name__ == "__main__":
 
-	I = np.array([  [ 0,   0,   0,   0,   0  , 0],
-			[ 0,   0,   0,   0,   0  , 0],
-			[ 0,   0,   0,   0,   0  , 0],
+	I = np.array([  [ 0,   1,   0,   0,   0  , 0],
+			[ 0,   1,   1,   0,   0  , 0],
+			[ 0,   1,   1,   0,   0  , 0],
 			[ 0,   0,   1.0, 1.0, 0  , 0],
-			[ 0,   0,   1.0, 1.0, 0  , 0],
+			[ 0,   0,   1.0, 0,   0  , 0],
 			[ 0,   0,   0,   0,   0  , 0],
 			[ 0,   0,   0,   0,   0  , 0],
 			])

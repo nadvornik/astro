@@ -64,6 +64,7 @@ class Status:
 			self.status["conf_file"] = conf_file
 		except:
 			self.status = {"conf_file" : conf_file}
+			log.exception("conf load")
 		ui.set_status(self)
 		
 	def save(self):
@@ -561,9 +562,9 @@ class Navigator:
 					cmdQueue.put('save')
 					
 				log.info("field corr len %d", len(self.field_corr_list))
-				if len(self.field_corr_list) > self.status['field_corr_limit']:
-					self.update_field_cor()
-					self.status['field_corr_limit'] *= 2
+#				if len(self.field_corr_list) > self.status['field_corr_limit']:
+#					self.update_field_cor()
+#					self.status['field_corr_limit'] *= 2
 					
 			else:
 				if self.status['radius'] > 0 and self.status['radius'] * 2 + 15 < self.status['max_radius']:
@@ -1358,7 +1359,7 @@ class Guider:
 		temp_coef = self.full_res.get('temp_coef', 0)
 		temp_pos = (self.full_res['full_temp'][-1] - self.full_res['full_temp'][0]) * temp_coef
 		
-		if self.full_res['diff_thr'] == 0:
+		if self.full_res['diff_thr'] == 0 or self.full_res['full_hfr'][-1] == 0:
 			temp_diff = temp_pos - self.full_res['temp_cor']
 			last_step = 0
 			if abs(temp_diff) > 0.5:
@@ -1714,7 +1715,7 @@ class Guider:
 				if self.capture_in_progress > 0:
 					self.status['curr_ra_err_list'].append(err.real)
 					self.status['curr_dec_err_list'].append(err.imag)
-					self.status['curr_hfr_list'].append(get_hfr_list(im_sub, pt))
+					self.status['curr_hfr_list'].append(get_hfr_list(im_sub, pt, sub_bg=True))
 				
 				log.info("capture %d %d %d", self.capture_init, self.capture_in_progress, self.capture_proc_in_progress)
 				
@@ -1882,7 +1883,7 @@ class Focuser:
 		else:
 			return 0, None, None
 
-	def get_hfr(self, im):
+	def get_hfr(self, im, min_hfr = None):
 		cur_hfr = 0
 		(h, w) = im.shape
 		if self.focus_yx is None or len(self.focus_yx) == 0:
@@ -1908,6 +1909,7 @@ class Focuser:
 			if (y > h - Focuser.hfr_size - 1):
 				continue
 			xs, ys = sym_center(im[y  - centroid_size : y + centroid_size + 1, x - centroid_size : x + centroid_size + 1])
+			log.info("sym_center %f %f", xs, ys)
 			x += xs
 			y += ys
 			ix = int(x + 0.5)
@@ -1920,10 +1922,13 @@ class Focuser:
 				continue
 			if (iy > h - Focuser.hfr_size - 1):
 				continue
+			hf = hfr(im[iy - Focuser.hfr_size : iy + Focuser.hfr_size + 1, ix - Focuser.hfr_size : ix + Focuser.hfr_size + 1], sub_bg = True)
 
+			if min_hfr is not None and hf < min_hfr:
+				continue
 			filtered.append( (y, x, v) )
 			original.append( p )
-			hfr_list.append( hfr(im[iy - Focuser.hfr_size : iy + Focuser.hfr_size + 1, ix - Focuser.hfr_size : ix + Focuser.hfr_size + 1]) )
+			hfr_list.append( hf )
 
 		if len(filtered) == 0:
 			return Focuser.hfr_size
@@ -1931,6 +1936,9 @@ class Focuser:
 		filtered = np.array(filtered)
 		original = np.array(original)
 		M, weights = pt_transform_opt(original, filtered, pt_func = pt_translation_scale)
+		
+
+		log.info("transf M %s", M)
 		filtered[:, 0:2] = np.insert(original[:, 0:2], 2, 1.0, axis=1).dot(M).A
 
 		self.focus_yx = filtered
@@ -1948,9 +1956,20 @@ class Focuser:
 
 	def set_xy_from_stack(self, stack):
 		im = stack.get()
-#		mean, self.stddev = cv2.meanStdDev(im)
+		mean, self.stddev = cv2.meanStdDev(im)
 #		self.max_flux, self.min_hfr, self.focus_yx = self.get_max_flux(im, stack.get_xy(), 0)
-		self.focus_yx = get_hfr_field(im, stack.get_xy(), hfr_size = Focuser.hfr_size, sub_bg = True)
+		yx = stack.get_xy()
+		log.info("hfr_list_00 %s", yx)
+                yx = [p for p in yx if p[2] > self.stddev * 4]
+		log.info("hfr_list_00 stddev*4  %f", self.stddev * 4)
+
+		log.info("hfr_list_01 %s", yx)
+                max_flux = np.amax([p[2] for p in yx])
+                yx = [p for p in yx if p[2] > max_flux / 3]
+		log.info("hfr_list_02 %s", yx)
+
+
+		self.focus_yx = get_hfr_field(im, yx, hfr_size = Focuser.hfr_size, sub_bg = True)
 		log.info("hfr_list_1 %s", self.focus_yx)
 		self.focus_yx = filter_hfr_list(self.focus_yx)
 		log.info("hfr_list_2 %s", self.focus_yx)
@@ -2069,6 +2088,8 @@ class Focuser:
 				self.status['v_curve2_s'] = None
 				self.status['hyst'] = None
 				self.status['remaining_steps'] = None
+
+				self.hfr = self.get_hfr(im_sub, min_hfr = 5)
 
 				self.status['phase'] = 'record_v'
 			self.step(-1)
@@ -2705,6 +2726,25 @@ def main_loop():
 		if cmd == 'interrupt':
 			camera = status.path(["navigator", "camera"])
 			camera['interrupt'] = True
+		
+		if cmd == 'sync':
+			try:
+				from indi_python.basic_indi_client import BasicIndiClient
+				import indi_python.indi_xml as indiXML
+				client = BasicIndiClient("localhost", 7624, 0.01)
+				client.sendMessage(indiXML.newSwitchVector([indiXML.oneSwitch("On", indi_attr = {"name" : "SYNC"})],
+					indi_attr = {"name" : "ON_COORD_SET", "device" : "EQMod Mount"}))
+				ra = status.path(["navigator"]).get('ra', 0.0) / 15.0
+				dec = status.path(["navigator"]).get('dec', 0.0)
+				client.sendMessage(indiXML.newNumberVector([indiXML.oneNumber(ra, indi_attr = {"name" : "RA"}), indiXML.oneNumber(dec, indi_attr = {"name" : "DEC"})],
+					indi_attr = {"name" : "EQUATORIAL_EOD_COORD", "device" : "EQMod Mount"}))
+				client.sendMessage(indiXML.newSwitchVector([indiXML.oneSwitch("On", indi_attr = {"name" : "TRACK"})],
+					indi_attr = {"name" : "ON_COORD_SET", "device" : "EQMod Mount"}))
+
+				client.close()
+			except:
+				log.exception('sync')
+
 
 	status.save()
 	
@@ -3301,11 +3341,11 @@ if __name__ == "__main__":
 	
 
 	#run_gphoto()
-	run_test_2_kstars()
-	#run_2_v4l2()
+	#run_test_2_kstars()
+	#run_v4l2()
 	#run_test_2_gphoto()
 	#run_v4l2()
-	#run_2()
+	run_2()
 	#run_test_g()
 	#run_2()
 	#run_test()

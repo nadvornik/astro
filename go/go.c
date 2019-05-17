@@ -17,10 +17,10 @@
 int dec = 0;
 
 unsigned int st4pins[4] = {
-	SUNXI_GPD(14),
-	SUNXI_GPC(4),
-	SUNXI_GPC(7),
-	SUNXI_GPA(7)
+	SUNXI_GPC(12),
+	SUNXI_GPC(11),
+	SUNXI_GPC(10),
+	SUNXI_GPC(9)
 };
 
 void set_pin(int v)

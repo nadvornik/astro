@@ -155,5 +155,5 @@ extern int sunxi_gpio_output(unsigned int pin, unsigned int val);
 extern int sunxi_gpio_pullup(unsigned int pin, unsigned int pull);
 
 
-extern unsigned int SUNXI_PIO_BASE;
+extern size_t SUNXI_PIO_BASE;
 #endif // _GPIO_LIB_H_ 

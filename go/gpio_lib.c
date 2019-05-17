@@ -39,7 +39,7 @@
 
 #include "gpio_lib.h"
 
-unsigned int SUNXI_PIO_BASE = 0;
+size_t SUNXI_PIO_BASE = 0;
 
 int sunxi_gpio_init(void) {
     int fd;
@@ -64,7 +64,7 @@ int sunxi_gpio_init(void) {
         return (-1);
     }
 
-    SUNXI_PIO_BASE = (unsigned int) pc;
+    SUNXI_PIO_BASE = (size_t) pc;
     SUNXI_PIO_BASE += addr_offset;
 
     close(fd);

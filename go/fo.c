@@ -20,24 +20,26 @@ unsigned int motor_pins[4] = {
 	SUNXI_GPA(8),
 	SUNXI_GPA(9),
 	SUNXI_GPA(10),
-	SUNXI_GPA(20)
+	SUNXI_GPD(11)
 };
 
 void motor_move(int m)
 {
 	int step = 1;
+	int w = 3000;
         if (m < 0) step = -1;
         m *= step;
 
         for (int i = 0; i < m; i++) {
+    		if (i < 50) w -= 20;
+    		if (i > m - 50) w += 20;
 		pos += step;
-		
 		sunxi_gpio_output(motor_pins[pos & 3], 1);
-		usleep(1300);
+		usleep(w);
 		for (int p = 0; p < 4; p++) {
 			if (p != (pos & 3)) sunxi_gpio_output(motor_pins[p], 0);
 		}
-		usleep(1300);
+		usleep(w);
 	}
 }
 
