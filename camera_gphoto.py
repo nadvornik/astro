@@ -18,7 +18,7 @@ import gc
 log = logging.getLogger()
 
 def apply_gamma(img, gamma):
-	lut = np.fromiter( ( (x / 255.0)**gamma * 65535.0 for x in xrange(256)), dtype=np.uint16 )
+	lut = np.fromiter( ( (x / 255.0)**gamma * 65535.0 for x in range(256)), dtype=np.uint16 )
 	return np.take(lut, img)
 
 
@@ -338,8 +338,8 @@ class Camera_gphoto:
 		elif self.cameramodel == "Canon EOS 7D":
 			self.shape = (704, 1056)
 			self.zoom_shape = (680, 1024)
-	                self.fpshack = 'output'
-	                self.zoom_scale = 5
+			self.fpshack = 'output'
+			self.zoom_scale = 5
 
 		
 		

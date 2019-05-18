@@ -59,12 +59,12 @@ def _find_max_str(out, img, d, n, y1, y2, no_over):
 def find_max(img, d, n = 40, no_over = False):
 	(h, w) = img.shape
 	par = 4
-	step = (h + par - 1) / par
+	step = (h + par - 1) // par
 	mds = []
 	joined = []
-	for y in xrange(0, h, step):
+	for y in range(0, h, step):
 		try:
-			md = threading.Thread(target=_find_max_str, args = (joined, img, d, n / par + 1, y, min(y + step, h), no_over))
+			md = threading.Thread(target=_find_max_str, args = (joined, img, d, n // par + 1, y, min(y + step, h), no_over))
 			mds.append(md)
 			md.start()
 		except:
@@ -212,15 +212,15 @@ def match_triangle(pt1, pt2, maxdif = 5.0, maxdrift = 20, off = (0.0, 0.0), n_ma
 	
 	bestmatch = []
 
-	for a1 in xrange(0, len(pt1) - 2):
-		for b1 in xrange(a1 + 1, len(pt1s) - 1):
+	for a1 in range(0, len(pt1) - 2):
+		for b1 in range(a1 + 1, len(pt1s) - 1):
 			#print a1, b1, len(bestmatch)
 			ab1 = dist1[a1, b1]
 			((a2, b2), dif) = find_nearest(dist2, ab1)
 			if dif > maxdif:
 				continue
 			match = []
-			for c1 in xrange(b1 + 1, len(pt1s)):
+			for c1 in range(b1 + 1, len(pt1s)):
 				ac1 = dist1[a1, c1]
 				bc1 = dist1[b1, c1]
 				
@@ -243,7 +243,7 @@ def match_triangle(pt1, pt2, maxdif = 5.0, maxdrift = 20, off = (0.0, 0.0), n_ma
 					c2 = c2_1
 					break
 			
-			for d1 in xrange(c1 + 1, len(pt1s)):
+			for d1 in range(c1 + 1, len(pt1s)):
 				ad1 = dist1[a1, d1]
 				bd1 = dist1[b1, d1]
 				cd1 = dist1[c1, d1]
@@ -274,8 +274,8 @@ def match_triangle(pt1, pt2, maxdif = 5.0, maxdrift = 20, off = (0.0, 0.0), n_ma
 		return match_take(pt1s, pt2s, bestmatch, ord1, ord2)
 	
 	if len(bestmatch) == 0 and len(pt1s) > 0 and len(pt2s) > 0:
-		for i in xrange(0, min(3, len(pt1s))):
-			for j in xrange(0, min(3, len(pt2s))):
+		for i in range(0, min(3, len(pt1s))):
+			for j in range(0, min(3, len(pt2s))):
 				if check_drift(pt1s, pt2s, [[i, j]], maxdif, maxdrift, off):
 					bestmatch.append([i, j])
 	return match_take(pt1s, pt2s, bestmatch, ord1, ord2)

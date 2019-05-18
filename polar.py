@@ -454,7 +454,7 @@ class Polar:
 		qha = Quaternion([90-ha, 0, 0])
 		
 		img = np.zeros((size, size, 3), dtype=np.uint8)
-		c = size / 2
+		c = size // 2
 		scale = size / area
 		
 		if self.ra is not None and self.dec is not None:

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 # Copyright (C) 2015 Vladimir Nadvornik
 #
@@ -106,7 +106,7 @@ class Median:
 		a = np.array(self.list)
 		for i in range(a.shape[1]):
 			a[:, i, :] = cv2.sort(a[:, i, :], cv2.SORT_DESCENDING | cv2.SORT_EVERY_COLUMN)
-		self.res = np.array(a[a.shape[0] / 2, :, :])
+		self.res = np.array(a[a.shape[0] // 2, :, :])
 		#a = np.median(self.list, axis = 0)
 		#self.res = np.empty_like(self.list[0])
 		#self.res[:,:] = a
@@ -338,7 +338,7 @@ def plot_bg(*args, **kwargs):
 	threading.Thread(target=_plot_bg, args = args, kwargs = kwargs).start()
 
 def apply_gamma8(img, gamma):
-	lut = np.fromiter( ( (x / 255.0)**gamma * 255.0 for x in xrange(256)), dtype=np.uint8 )
+	lut = np.fromiter( ( (x / 255.0)**gamma * 255.0 for x in range(256)), dtype=np.uint8 )
 	return np.take(lut, img)
 
 def format_coords(ra, dec):
@@ -798,7 +798,7 @@ class Navigator:
 				#im_c[:,:,1] = cv2.subtract(im_c[:,:,1], mean[1])
 				#im_c[:,:,2] = cv2.subtract(im_c[:,:,2], mean[2])
 				scale= 10
-				bg = cv2.resize(im_c, ((im_c.shape[1] + scale - 1) / scale, (im_c.shape[0] + scale - 1) / scale), interpolation=cv2.INTER_AREA)
+				bg = cv2.resize(im_c, ((im_c.shape[1] + scale - 1) // scale, (im_c.shape[0] + scale - 1) // scale), interpolation=cv2.INTER_AREA)
 				bg = cv2.erode(bg, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3,3)))
 				log.info("full_res erode")
 				bg = cv2.blur(bg, (20,20))
@@ -1390,7 +1390,7 @@ class Guider:
 			self.full_res['temp_cor'] = int(temp_pos) 
 		
 			if self.full_res['diff_acc'] > self.full_res['diff_thr']:
-			        self.full_res['diff_acc'] = 0 #reset
+				self.full_res['diff_acc'] = 0 #reset
 				if self.full_res['last_step'] < 0:
 					log.info("focus_loop rev 1")
 					for st in range(0, 1 + self.full_res['hyst']):
@@ -1960,12 +1960,12 @@ class Focuser:
 #		self.max_flux, self.min_hfr, self.focus_yx = self.get_max_flux(im, stack.get_xy(), 0)
 		yx = stack.get_xy()
 		log.info("hfr_list_00 %s", yx)
-                yx = [p for p in yx if p[2] > self.stddev * 4]
+		yx = [p for p in yx if p[2] > self.stddev * 4]
 		log.info("hfr_list_00 stddev*4  %f", self.stddev * 4)
 
 		log.info("hfr_list_01 %s", yx)
-                max_flux = np.amax([p[2] for p in yx])
-                yx = [p for p in yx if p[2] > max_flux / 3]
+		max_flux = np.amax([p[2] for p in yx])
+		yx = [p for p in yx if p[2] > max_flux / 3]
 		log.info("hfr_list_02 %s", yx)
 
 
@@ -2244,8 +2244,8 @@ class Focuser:
 			ui.imshow(self.tid, disp)
 		elif (self.dispmode.startswith('disp-zoom-')):
 			zoom = int(self.dispmode[len('disp-zoom-'):])
-			rect = np.array(self.stack_im.shape) / zoom
-			shift = np.array(self.stack_im.shape) / 2 - rect / 2
+			rect = np.array(self.stack_im.shape) // zoom
+			shift = np.array(self.stack_im.shape) // 2 - rect // 2
 			disp = self.stack_im[shift[0]:shift[0]+rect[0], shift[1]:shift[1]+rect[1]]
 			disp = normalize(disp)
 			disp = cv2.resize(disp, (self.stack_im.shape[1], self.stack_im.shape[0]))
@@ -2458,18 +2458,18 @@ class Mount:
 		if camera == 'navigator':
 			if self.main_tan is None:
 				return
-                        log.info("move pix %f %f", dx, dy)
+			log.info("move pix %f %f", dx, dy)
 
 			mra, mdec, mroll, mpixscale, mparity = self.tan_to_euler(self.main_tan)
 			
 			mroll = np.deg2rad(mroll)
 			ra = (np.cos(mroll) * dx - np.sin(mroll) * dy) * mpixscale / np.max([np.cos(np.deg2rad(mdec)), 0.2])
-                        dec =(np.sin(mroll) * dx + np.cos(mroll) * dy) * mpixscale
+			dec =(np.sin(mroll) * dx + np.cos(mroll) * dy) * mpixscale
                         
-                        dec *= mparity
+			dec *= mparity
                         
-                        log.info("move arcsec %f %f", ra, dec)
-                        if self.go_ra is not None:
+			log.info("move arcsec %f %f", ra, dec)
+			if self.go_ra is not None:
 				if ra > 0:
 					log.info("move_ra sec %f", ra / self.status['arcsec_per_sec_ra_plus'])
 					self.go_ra.out(1, ra / self.status['arcsec_per_sec_ra_plus'])
@@ -2479,7 +2479,7 @@ class Mount:
 				else:
 					self.go_ra.out(0)
 
-                        if self.go_dec is not None:
+			if self.go_dec is not None:
 				if dec > 0:
 					log.info("move_dec sec %f", dec / self.status['arcsec_per_sec_dec_plus'])
 					self.go_dec.out(-1, dec / self.status['arcsec_per_sec_dec_plus'])
@@ -2504,8 +2504,8 @@ class Mount:
 
 class Runner(threading.Thread):
 	def __init__(self, tid, camera, navigator = None, guider = None, zoom_focuser = None, focuser = None, video_tid = None):
-                threading.Thread.__init__(self)
-                self.tid = tid
+		threading.Thread.__init__(self)
+		self.tid = tid
 		self.camera = camera
 		self.navigator = navigator
 		self.guider = guider
@@ -2850,8 +2850,8 @@ def run_v4l2():
 	ui.namedWindow('navigator')
 	ui.namedWindow('polar')
 
-        polar = Polar(status.path(["polar"]), ['navigator'])
-        mount = Mount(status.path(["mount"]), polar)
+	polar = Polar(status.path(["polar"]), ['navigator'])
+	mount = Mount(status.path(["mount"]), polar)
 	cam = Camera(status.path(["navigator", "camera"]))
 	cam.prepare(1280, 960)
 	dark = Median(5)
@@ -2873,8 +2873,8 @@ def run_gphoto():
 	ui.namedWindow('polar')
 	ui.namedWindow('full_res')
 
-        polar = Polar(status.path(["polar"]), ['navigator', 'full-res'])
-        mount = Mount(status.path(["mount"]), polar)
+	polar = Polar(status.path(["polar"]), ['navigator', 'full-res'])
+	mount = Mount(status.path(["mount"]), polar)
 
 	dark = Median(5)
 	nav = Navigator(status.path(["navigator"]), dark, mount, 'navigator', polar_tid = 'polar')
@@ -2897,12 +2897,12 @@ def run_v4l2_g():
 	ui.namedWindow('guider')
 	ui.namedWindow('polar')
 
-        polar = Polar(status.path(["polar"]), ['guider'])
+	polar = Polar(status.path(["polar"]), ['guider'])
         
-        go_ra = GuideOut("./guide_out_ra")
+	go_ra = GuideOut("./guide_out_ra")
 	go_dec = GuideOut("./guide_out_dec")
 	
-        mount = Mount(status.path(["mount"]), polar, go_ra, go_dec)
+	mount = Mount(status.path(["mount"]), polar, go_ra, go_dec)
 
 
 	dark = Median(5)
@@ -2921,12 +2921,12 @@ def run_gphoto_g():
 	ui.namedWindow('navigator')
 	ui.namedWindow('polar')
 
-        polar = Polar(status.path(["polar"]), ['navigator', 'full-res'])
+	polar = Polar(status.path(["polar"]), ['navigator', 'full-res'])
 	
 	go_ra = GuideOut("./guide_out_ra")
 	go_dec = GuideOut("./guide_out_dec")
 
-        mount = Mount(status.path(["mount"]), polar, go_ra, go_dec)
+	mount = Mount(status.path(["mount"]), polar, go_ra, go_dec)
 
 	cam = Camera_gphoto(status.path(["guider", "navigator", "camera"]))
 	cam.prepare()
@@ -2947,12 +2947,12 @@ def run_test_g():
 	ui.namedWindow('guider')
 	ui.namedWindow('polar')
 
-        polar = Polar(status.path(["polar"]), ['guider'])
+	polar = Polar(status.path(["polar"]), ['guider'])
 	
 	go_ra = GuideOut("./guide_out_ra")
 	go_dec = GuideOut("./guide_out_dec")
         
-        mount = Mount(status.path(["mount"]), polar, go_ra, go_dec)
+	mount = Mount(status.path(["mount"]), polar, go_ra, go_dec)
 
 	dark = Median(5)
 	nav = Navigator(status.path(["guider", "navigator"]), dark, mount, 'guider', polar_tid = 'polar')
@@ -2970,8 +2970,8 @@ def run_test():
 	ui.namedWindow('navigator')
 	ui.namedWindow('polar')
 
-        polar = Polar(status.path(["polar"]), ['navigator'])
-        mount = Mount(status.path(["mount"]), polar)
+	polar = Polar(status.path(["polar"]), ['navigator'])
+	mount = Mount(status.path(["mount"]), polar)
 
 	cam = Camera_test(status.path(["navigator", "camera"]))
 	dark = Median(5)
@@ -2989,12 +2989,12 @@ def run_test_2():
 	ui.namedWindow('guider')
 	ui.namedWindow('polar')
 
-        polar = Polar(status.path(["polar"]), ['navigator', 'guider'])
+	polar = Polar(status.path(["polar"]), ['navigator', 'guider'])
 
 	go_ra = GuideOut("./guide_out_ra")
 	go_dec = GuideOut("./guide_out_dec")
 
-        mount = Mount(status.path(["mount"]), polar, go_ra, go_dec)
+	mount = Mount(status.path(["mount"]), polar, go_ra, go_dec)
 
 	dark1 = Median(5)
 	dark2 = Median(5)
@@ -3029,12 +3029,12 @@ def run_test_2_kstars():
 	ui.namedWindow('polar')
 	ui.namedWindow('full_res')
 
-        polar = Polar(status.path(["polar"]), ['navigator', 'guider', 'full-res'])
+	polar = Polar(status.path(["polar"]), ['navigator', 'guider', 'full-res'])
 
 	go_ra = GuideOut("./guide_out_ra")
 	go_dec = GuideOut("./guide_out_dec")
 
-        mount = Mount(status.path(["mount"]), polar, go_ra, go_dec)
+	mount = Mount(status.path(["mount"]), polar, go_ra, go_dec)
 
 	dark1 = Median(5)
 	dark2 = Median(5)
@@ -3071,12 +3071,12 @@ def run_test_2_gphoto():
 	cam1 = Camera_gphoto(status.path(["navigator", "camera"]))
 	cam1.prepare()
 
-        polar = Polar(status.path(["polar"]), ['navigator', 'guider', 'full-res'])
+	polar = Polar(status.path(["polar"]), ['navigator', 'guider', 'full-res'])
 
 	go_ra = GuideOut("./guide_out_ra")
 	go_dec = GuideOut("./guide_out_dec")
 
-        mount = Mount(status.path(["mount"]), polar, go_ra, go_dec)
+	mount = Mount(status.path(["mount"]), polar, go_ra, go_dec)
 
 	dark1 = Median(5)
 	dark2 = Median(5)
@@ -3119,12 +3119,12 @@ def run_2():
 	cam1 = Camera_gphoto(status.path(["navigator", "camera"]), fo)
 	cam1.prepare()
 
-        polar = Polar(status.path(["polar"]), ['navigator', 'guider', 'full-res'])
+	polar = Polar(status.path(["polar"]), ['navigator', 'guider', 'full-res'])
 
 	go_ra = GuideOut("./guide_out_ra")
 	go_dec = GuideOut("./guide_out_dec")
 
-        mount = Mount(status.path(["mount"]), polar, go_ra, go_dec)
+	mount = Mount(status.path(["mount"]), polar, go_ra, go_dec)
 
 	dark1 = Median(5)
 	dark2 = Median(5)
@@ -3245,12 +3245,12 @@ def run_2_v4l2():
 	cam1 = Camera(status.path(["navigator", "camera"]), fo)
 	cam1.prepare(1280, 960)
 
-        polar = Polar(status.path(["polar"]), ['navigator', 'guider', 'full-res'])
+	polar = Polar(status.path(["polar"]), ['navigator', 'guider', 'full-res'])
 
 	go_ra = GuideOut("./guide_out_ra")
 	go_dec = GuideOut("./guide_out_dec")
 
-        mount = Mount(status.path(["mount"]), polar, go_ra, go_dec)
+	mount = Mount(status.path(["mount"]), polar, go_ra, go_dec)
 
 	dark1 = Median(5)
 	dark2 = Median(5)
@@ -3290,12 +3290,12 @@ def run_test_full_res():
 	ui.namedWindow('polar')
 	ui.namedWindow('full_res')
 
-        polar = Polar(status.path(["polar"]), ['navigator', 'guider', 'full-res'])
+	polar = Polar(status.path(["polar"]), ['navigator', 'guider', 'full-res'])
 
 	go_ra = GuideOut("./guide_out_ra")
 	go_dec = GuideOut("./guide_out_dec")
 
-        mount = Mount(status.path(["mount"]), polar, go_ra, go_dec)
+	mount = Mount(status.path(["mount"]), polar, go_ra, go_dec)
 
 	dark1 = Median(5)
 	dark2 = Median(5)
@@ -3341,11 +3341,11 @@ if __name__ == "__main__":
 	
 
 	#run_gphoto()
-	#run_test_2_kstars()
+	run_test_2_kstars()
 	#run_v4l2()
 	#run_test_2_gphoto()
 	#run_v4l2()
-	run_2()
+	#run_2()
 	#run_test_g()
 	#run_2()
 	#run_test()

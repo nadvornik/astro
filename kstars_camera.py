@@ -14,7 +14,7 @@ import logging
 log = logging.getLogger()
 
 def apply_gamma(img, gamma):
-	lut = np.fromiter( ( (x / 255.0)**gamma * 65535.0 for x in xrange(256)), dtype=np.uint16 )
+	lut = np.fromiter( ( (x / 255.0)**gamma * 65535.0 for x in range(256)), dtype=np.uint16 )
 	return np.take(lut, img)
 
 
@@ -105,7 +105,7 @@ class Camera_test_kstars:
 
 		self.im = apply_gamma(im, 2.2)
 		h, w, c = self.im.shape
-		im = np.rot90(self.im[:, 0:w/2])
+		im = np.rot90(self.im[:, 0:w//2])
 
 		if self.bahtinov:
                 	im = cv2.imread("ba_test/test%d.jpg" % (self.i % 300 + 264))
@@ -142,7 +142,7 @@ class Camera_test_kstars:
 		
 		self.status['exp_in_progress'] = False
 		h, w, c = self.im.shape
-		im = np.rot90(self.im[:, 0:w/2])
+		im = np.rot90(self.im[:, 0:w//2])
 
 		bl = np.abs(self.focuser.pos / 150.0)**2 + 1
 		ibl = int(bl + 1)
@@ -182,7 +182,7 @@ class Camera_test_kstars_g:
 		self.cam0.capture()
 		im = self.cam0.im
 		h, w, c = im.shape
-		im = im[h/4:h/4*3, w/2:]
+		im = im[h//4:h//4*3, w//2:]
 		#im = cv2.flip(im, 1)
 
 		bl = np.abs((self.cam0.focuser.pos + 200) / 150.0)**2 + 1
@@ -201,8 +201,8 @@ if __name__ == "__main__":
 	from guide_out import GuideOut
 	
 	go_ra = GuideOut("./guide_out_ra")
-        go_dec = GuideOut("./guide_out_dec")
+	go_dec = GuideOut("./guide_out_dec")
         
-        cam = Camera_test_kstars({}, go_ra, go_dec)
-        im, t = cam.capture()
+	cam = Camera_test_kstars({}, go_ra, go_dec)
+	im, t = cam.capture()
         

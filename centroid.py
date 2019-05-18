@@ -26,20 +26,20 @@ def centroid(a):
 	
 
 def centerfit(m, b, w):
-        wm2p1 = cv2.divide(w, m*m + 1, dtype=cv2.CV_32FC1)
-        sw  = np.sum(wm2p1)
-        smmw = np.sum(m * m * wm2p1)
-        smw  = np.sum(m * wm2p1)
-        smbw = np.sum(m * b * wm2p1)
-        sbw  = np.sum(b * wm2p1)
-        det = smw*smw - smmw*sw
-        if det == 0.0:
+	wm2p1 = cv2.divide(w, m*m + 1, dtype=cv2.CV_32FC1)
+	sw  = np.sum(wm2p1)
+	smmw = np.sum(m * m * wm2p1)
+	smw  = np.sum(m * wm2p1)
+	smbw = np.sum(m * b * wm2p1)
+	sbw  = np.sum(b * wm2p1)
+	det = smw*smw - smmw*sw
+	if det == 0.0:
 		return 0.0, 0.0
-        xc = (smbw*sw - smw*sbw)/det; 
-        yc = (smbw*smw - smmw*sbw)/det;
-        if np.isnan(xc) or np.isnan(yc):
-        	return 0.0, 0.0
-        return xc, yc
+	xc = (smbw*sw - smw*sbw)/det; 
+	yc = (smbw*smw - smmw*sbw)/det;
+	if np.isnan(xc) or np.isnan(yc):
+		return 0.0, 0.0
+	return xc, yc
 
 
 
@@ -121,7 +121,8 @@ def fit_ellipse(a):
 	return w, v
 
 
-def gaussian2d((y, x), my, mx, sig, mag, shift):
+def gaussian2d(c, my, mx, sig, mag, shift):
+	y, x = c
 	r2 = (x - mx) ** 2 + (y - my) ** 2
 	return (np.exp(-r2 / (2 * sig * sig)) * mag + shift)
 
@@ -155,9 +156,9 @@ if __name__ == "__main__":
 			[ 0,   0,   0,   0,   0  , 0],
 			])
 
-	print I
-	print sym_center(I)
-	print centroid(I)
-	print hfr(I)
-	#print fwhm(I)
+	print(I)
+	print(sym_center(I))
+	print(centroid(I))
+	print(hfr(I))
+	#print(fwhm(I))
 	

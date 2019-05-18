@@ -358,7 +358,7 @@ if __name__ == "__main__":
 	
 	
 	b = Bahtinov()
-        r = 0.0
+	r = 0.0
 
 	for i in range(264, 3219,1):
 		im2c = cv2.imread("ba_test/test%d.jpg" % i)
@@ -373,7 +373,7 @@ if __name__ == "__main__":
 		else:
 			b.update(im2, bg=True)
 		r = r * 0.9 + 0.1 * b.result()
-		print "result", r
+		print("result", r)
 		b.plot(im2c)
 		cv2.imshow("res", im2c)
 		cv2.waitKey(1)

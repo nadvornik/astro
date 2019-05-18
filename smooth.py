@@ -22,4 +22,4 @@ def smooth(x,window_len=11,window='hanning'):
         w=eval('np.'+window+'(window_len)')
 
     y=np.convolve(w/w.sum(),s,mode='full')
-    return y[window_len + window_len / 2: window_len + window_len / 2 + x.size]
+    return y[window_len + window_len // 2: window_len + window_len // 2 + x.size]

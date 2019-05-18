@@ -56,7 +56,7 @@ class Quaternion:
 		z = w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2
 		return Quaternion([w, x, y, z])
 
-	def __div__(self, q2):
+	def __truediv__(self, q2):
 		return self * q2.inv()
 	
 	def transform_vector(self, v):
@@ -122,16 +122,16 @@ if __name__ == "__main__":
 	q2 = Quaternion([30,0,0.5])
 	q3 = Quaternion([30,0,0.5])
 
-        d12 = q2/q1
-        d23 = q3/q2
-        d13 = q3/q1
+	d12 = q2/q1
+	d23 = q3/q2
+	d13 = q3/q1
         
-        print d13.a
-        print d12.a + d23.a
+	print(d13.a)
+	print(d12.a + d23.a)
         
         
 	a,r = q1.to_axis_roll()
-	print a, r
-	print Quaternion.from_axis_roll(a, r).to_euler()
+	print(a, r)
+	print(Quaternion.from_axis_roll(a, r).to_euler())
 	
 	

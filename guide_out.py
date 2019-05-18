@@ -29,7 +29,7 @@ class GuideOut(threading.Thread):
 			if self.cmd is None or self.cmd.poll() is not None:
 				restart = self.cmd is not None
 				if restart:
-					print "guide_out_rt exited with %d\n" % (self.cmd.poll()),
+					print("guide_out_rt exited with %d\n" % (self.cmd.poll()))
 				if self.terminating:
 					return
 				self.cmd = subprocess.Popen([self.bin_name], close_fds=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, bufsize=1 )
@@ -47,10 +47,11 @@ class GuideOut(threading.Thread):
 			try:
 				if self.cmd is None:
 					time.sleep(0.3)
-				self.cmd.stdin.write("%d %d\n" % (d, int(t * 1000000)))
+				self.cmd.stdin.write(("%d %d\n" % (d, int(t * 1000000))).encode())
+				self.cmd.stdin.flush()
 				break
 			except:
-				print "Error: " +  sys.exc_info().__str__()
+				print("Error guide_out.py: " +  sys.exc_info().__str__())
 				time.sleep(0.1)
 
 	def terminate(self):
@@ -90,13 +91,13 @@ if __name__ == "__main__":
 	while True:
 		g.out(0, 0)
 		time.sleep(5)
-		print "0x5s", g.recent_avg(5)
+		print("0x5s", g.recent_avg(5))
 		g.out(1, 0)
-		print "0x5s1x0", g.recent_avg(5)
+		print("0x5s1x0", g.recent_avg(5))
 		time.sleep(5)
-		print "1x5s", g.recent_avg(5)
+		print("1x5s", g.recent_avg(5))
 		g.out(-1, 1)
 		time.sleep(5)
-		print "-1x1s,0x4s", g.recent_avg(5)
+		print("-1x1s,0x4s", g.recent_avg(5))
 		
 #usb.close()

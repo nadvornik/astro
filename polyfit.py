@@ -28,4 +28,4 @@ if __name__ == '__main__':
 	x = [ 1.0, 2.0, 3.0]
 	y = [ 1.0, 1.0, 1.0]
 	r = np.array([ 2.0, 3.0, 4.0])
-	print polyfit2d(x, y, r, 2)
+	print(polyfit2d(x, y, r, 2))

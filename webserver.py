@@ -12,7 +12,7 @@ import sys
 from cmd import cmdQueue
 import subprocess
 from stacktraces import stacktraces
-import exceptions
+#import exceptions
 import logging
 
 log = logging.getLogger()
@@ -39,17 +39,17 @@ class MjpegBuf:
 			self.seq += 1
 
 	def serve(self, handler, seq):
-	        t0 = time.time()
+		t0 = time.time()
 		with self.condition:
 			while self.buf is None or seq == self.seq + 1:
 				if time.time() > t0 + 80:
 					log.info("req timeout")
-					raise exceptions.EOFError()
+					raise EOFError()
 				self.condition.wait(30)
 			if not self.encoded:
 				ret, file_data = cv2.imencode('.jpg', self.buf)
-                                self.buf = file_data.tobytes()
-                                del file_data
+				self.buf = file_data.tobytes()
+				del file_data
 				self.encoded = True
 				
 			buf = self.buf
@@ -138,7 +138,7 @@ class Handler(BaseHTTPRequestHandler):
 				self.send_response(200)
 				self.send_header('Content-type','application/json')
 				self.end_headers()
-				self.wfile.write(status.to_json())
+				self.wfile.write(status.to_json().encode())
 			else:
 				self.send_response(404)
 				self.end_headers()
@@ -146,7 +146,7 @@ class Handler(BaseHTTPRequestHandler):
 			return
 		elif ext == '.html' or ext == '.js' or  ext == '.css':
 			try:
-				f = open(base)
+				f = open(base, "rb")
 			except:
 				self.send_response(404)
 				self.end_headers()
@@ -167,11 +167,11 @@ class Handler(BaseHTTPRequestHandler):
 		self.end_headers()
 
 	def do_POST(self):
-		ctype, pdict = cgi.parse_header(self.headers.getheader('content-type'))
+		ctype, pdict = cgi.parse_header(self.headers.get('content-type'))
 		if ctype == 'multipart/form-data':
 			postvars = cgi.parse_multipart(self.rfile, pdict)
 		elif ctype == 'application/x-www-form-urlencoded':
-			length = int(self.headers.getheader('content-length'))
+			length = int(self.headers.get('content-length'))
 			postvars = cgi.parse_qs(self.rfile.read(length), keep_blank_values=1)
 		else:
 			postvars = {}
@@ -181,11 +181,11 @@ class Handler(BaseHTTPRequestHandler):
 			self.send_response(200)
 			self.send_header('Content-type','text/text')
 			self.end_headers()
-			self.wfile.write("ok")
+			self.wfile.write(b"ok")
 			
-			cmd = postvars['cmd'][0]
+			cmd = postvars[b'cmd'][0].decode()
 			try:
-				tgt = postvars['tgt'][0]
+				tgt = postvars[b'tgt'][0].decode()
 			except:
 				tgt = None
 			if cmd == 'exit' or cmd == 'shutdowm' or cmd == 'stacktrace':

@@ -10,5 +10,5 @@ def stacktraces():
             if line:
                 code.append("  %s" % (line.strip()))
 
-    print "\n".join(code)
+    print("\n".join(code))
 

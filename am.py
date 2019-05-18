@@ -6,7 +6,7 @@ import sys
 import subprocess
 import signal
 
-import pyfits
+from astropy.io import fits
 from astrometry.util.util import Tan, anwcs_new_tan
 from astrometry.util.fits import fits_table
 from astrometry.blind.plotstuff import *
@@ -55,8 +55,8 @@ class Engine(threading.Thread):
 					self.queue.put(self) # back to free engines queue
 				
 			line = self.cmd.stdout.readline()
-			#log.write(line)
-			if "seconds on this field" in line:
+			#log.error(line)
+			if b"seconds on this field" in line:
 				log.info("%s", line)
 				#log.write(">>>\n")
 				self.ready = True
@@ -68,7 +68,8 @@ class Engine(threading.Thread):
 		self.ready = False
 		while True:
 			try:
-				self.cmd.stdin.write(axy + "\n")
+				self.cmd.stdin.write((axy + "\n").encode())
+				self.cmd.stdin.flush()
 				break
 			except:
 				log.exception('Unexpected error')
@@ -126,12 +127,12 @@ class Solver(threading.Thread):
 	
 	def run(self):
 		tmp_dir = tempfile.mkdtemp()
-		tbhdu = pyfits.BinTableHDU.from_columns([
-			pyfits.Column(name='X', format='E', array=self.sources_list[:, 1]),
-			pyfits.Column(name='Y', format='E', array=self.sources_list[:, 0]),
-			pyfits.Column(name='FLUX', format='E', array=self.sources_list[:, 2])
+		tbhdu = fits.BinTableHDU.from_columns([
+			fits.Column(name='X', format='E', array=self.sources_list[:, 1]),
+			fits.Column(name='Y', format='E', array=self.sources_list[:, 0]),
+			fits.Column(name='FLUX', format='E', array=self.sources_list[:, 2])
 			])
-		prihdr = pyfits.Header()
+		prihdr = fits.Header()
 		prihdr['IMAGEW'] = self.field_w
 		prihdr['IMAGEH'] = self.field_h
 		
@@ -167,8 +168,8 @@ class Solver(threading.Thread):
 			prihdr['ANODDSSL'] = 1e8
 		
 		
-		prihdu = pyfits.PrimaryHDU(header=prihdr)
-		thdulist = pyfits.HDUList([prihdu, tbhdu])
+		prihdu = fits.PrimaryHDU(header=prihdr)
+		thdulist = fits.HDUList([prihdu, tbhdu])
 	
 		if self.radius is not None and self.radius > 0 and self.radius < 5:
 			conf_list = ['conf-all']
@@ -186,7 +187,7 @@ class Solver(threading.Thread):
 				thdulist[0].header['ANCORR'] = "%s/field_%s.corr" % (tmp_dir, conf)
 
 			axy = "%s/field_%s.axy" % (tmp_dir, conf)
-			thdulist.writeto(axy, clobber=True)
+			thdulist.writeto(axy, overwrite=True)
 
 			engine = engines.get(conf)
 			engine.solve(axy)
@@ -219,7 +220,7 @@ class Solver(threading.Thread):
 		self.ra, self.dec = self.wcs.radec_center()
 		self.field_deg = self.field_w * self.wcs.pixel_scale() / 3600
 		
-		ind = pyfits.open(solved + '.rdls')
+		ind = fits.open(solved + '.rdls')
 		tbdata = ind[1].data
 		self.ind_sources = []
 		self.ind_radec = []
@@ -233,7 +234,7 @@ class Solver(threading.Thread):
 		if self.field_corr is not None:
 			for conf in conf_list:
 				if os.path.exists("%s/field_%s.wcs" % (tmp_dir, conf)):
-					corr = pyfits.open("%s/field_%s.corr" % (tmp_dir, conf))
+					corr = fits.open("%s/field_%s.corr" % (tmp_dir, conf))
 					for l in corr[1].data:
 						self.field_corr.append((l['field_x'], l['field_y'], l['index_x'], l['index_y']))
 		
@@ -393,8 +394,8 @@ class Plotter:
 		if scale > 1:
 			plot.color = 'blue'
 			plot.polygon([(tx, ty), (tx + tw, ty), (tx + tw, ty + th), (tx, ty + th)])
-            		plot.close_path()
-            		plot.stroke()
+			plot.close_path()
+			plot.stroke()
 
 		plot_image = np.array(plot.get_image_as_numpy()[:, :, 0:3], copy=True)
 		del plot
@@ -442,6 +443,5 @@ if __name__ == "__main__":
 	
 	plotter=Plotter(solver.wcs)
 	plot = plotter.plot(img, scale = 5)
-	print plot.shape
 	cv2.imshow("plot", plot)
 	cv2.waitKey(0)

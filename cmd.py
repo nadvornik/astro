@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-import Queue
+import queue
 import logging
 
 log = logging.getLogger()
@@ -11,7 +11,7 @@ class CmdQueue:
 		self.dict = {}
 	
 	def register(self, tid):
-		self.dict[tid] = Queue.Queue()
+		self.dict[tid] = queue.Queue()
 		log.info("register %s", tid)
 	
 	def get(self, tid, timeout = None):
@@ -20,7 +20,7 @@ class CmdQueue:
 			cmd = q.get(block=True, timeout= timeout)
 			log.info("%s:%s", tid, cmd)
 			return cmd
-		except Queue.Empty:
+		except queue.Empty:
 			return None
 			
 	def put(self, entry, target = None):
