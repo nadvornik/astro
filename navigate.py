@@ -31,6 +31,7 @@ from camera_gphoto import *
 
 from guide_out import GuideOut
 
+import queue
 import random
 #from line_profiler import LineProfiler
 
@@ -49,6 +50,10 @@ from quat import Quaternion
 from star_detector import *
 from bahtinov import Bahtinov
 from smooth import smooth
+
+import indi_python.indi_base as indi
+from indi_python.indi_loop import IndiLoop
+
 
 import logging
 from functools import reduce
@@ -81,6 +86,52 @@ class Status:
 			return d[k]
 			
 		return reduce(get_or_create, p, self.status)
+
+
+class IndiDriver(IndiLoop):
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+		self.queues = {}
+		self.setQueue = queue.Queue()
+		self.timeout = 0.2
+	
+	
+	def loop1(self):
+		super().loop1()
+		
+		try:
+			prop = self.setQueue.get(block=False)
+			self.sendDriver(prop.setMessage())
+		except queue.Empty:
+			pass
+		
+	def register(self, device):
+		self.queues[device] = queue.Queue()
+		log.info("register %s", device)
+	
+	def get(self, device, block=True, timeout=None):
+		q = self.queues[device]
+		try:
+			pd = q.get(block=block, timeout=timeout)
+			log.info("%s:%s", device, pd[1].getAttr('name'))
+			return pd
+		except queue.Empty:
+			return (None, None)
+			
+	def handleNewValue(self, msg, prop):
+		device = prop.getAttr('device')
+
+		if device in self.queues:
+			self.queues[device].put((msg, prop))
+			prop.setAttr('state', 'Busy')
+			self.enqueueSetMessage(prop)
+		else:
+			prop.newFromEtree(msg)
+			prop.setAttr('state', 'Ok')
+			self.enqueueSetMessage(prop)
+
+	def enqueueSetMessage(self, prop):
+		self.setQueue.put(prop)
 
 
 def normalize(img):
@@ -370,8 +421,81 @@ def format_coords(ra, dec):
 
 
 class Navigator:
-	def __init__(self, status, dark, mount, tid, polar_tid = None, full_res = None):
+	def __init__(self, driver, device, status, dark, mount, tid, polar_tid = None, full_res = None):
 		self.status = status
+		
+		self.driver = driver
+		self.device = device
+		driver.defineProperties("""
+		<INDIDriver>
+			<defSwitchVector device="{0}" name="dispmode" label="Display mode" group="Main Control" state="Idle" perm="rw" rule="OneOfMany">
+				<defSwitch name="normal" label="normal">On</defSwitch>
+				<defSwitch name="zoom-2" label="zoom-2">Off</defSwitch>
+				<defSwitch name="zoom-3" label="zoom-3">Off</defSwitch>
+				<defSwitch name="zoom-4" label="zoom-4">Off</defSwitch>
+				<defSwitch name="zoom-8" label="zoom-8">Off</defSwitch>
+				<defSwitch name="zoom-16" label="zoom16">Off</defSwitch>
+				<defSwitch name="zoom-deg50" label="zoom-deg50">Off</defSwitch>
+				<defSwitch name="zoom-deg100" label="zoom-deg100">Off</defSwitch>
+				<defSwitch name="zoom-deg180" label="zoom-deg180">Off</defSwitch>
+				<defSwitch name="orig" label="orig">Off</defSwitch>
+				<defSwitch name="df-cor" label="df-cor">Off</defSwitch>
+				<defSwitch name="match" label="match">Off</defSwitch>
+			</defSwitchVector>
+
+			<defSwitchVector device="{0}" name="full_dispmode" label="FullRes Display mode" group="FullRes" state="Idle" perm="rw" rule="OneOfMany">
+				<defSwitch name="normal" label="normal">On</defSwitch>
+				<defSwitch name="zoom-2" label="zoom-2">Off</defSwitch>
+				<defSwitch name="zoom-3" label="zoom-3">Off</defSwitch>
+				<defSwitch name="zoom-4" label="zoom-4">Off</defSwitch>
+				<defSwitch name="zoom-8" label="zoom-8">Off</defSwitch>
+				<defSwitch name="zoom-16" label="zoom16">Off</defSwitch>
+				<defSwitch name="zoom-deg50" label="zoom-deg50">Off</defSwitch>
+				<defSwitch name="zoom-deg100" label="zoom-deg100">Off</defSwitch>
+				<defSwitch name="zoom-deg180" label="zoom-deg180">Off</defSwitch>
+				<defSwitch name="orig" label="orig">Off</defSwitch>
+				<defSwitch name="df-cor" label="df-cor">Off</defSwitch>
+				<defSwitch name="match" label="match">Off</defSwitch>
+			</defSwitchVector>
+
+			<defNumberVector device="{0}" name="solver_time" label="solver_time" group="Main Control" state="Idle" perm="ro">
+				<defNumber name="i_solver" label="i_solver" format="%5.0f" min="0" max="0" step="0">0</defNumber>
+				<defNumber name="i_solved" label="i_solved" format="%5.0f" min="0" max="0" step="0">0</defNumber>
+				<defNumber name="t_solver" label="t_solver" format="%4.1f" min="0" max="0" step="0">0</defNumber>
+				<defNumber name="t_solved" label="t_solved" format="%4.1f" min="0" max="0" step="0">0</defNumber>
+			</defNumberVector>
+
+			<defTextVector device="{0}" name="fileld_corr" label="Field correction file" group="Main Control" state="Idle" perm="rw">
+				<defText name="file" label="file"></defText>
+			</defTextVector>
+
+			<defNumberVector device="{0}" name="filed_corr_limit" label="Field correction limit" group="Main Control" state="Idle" perm="rw">
+				<defNumber name="limit" label="limit" format="%5.0f" min="0" max="0" step="0">10</defNumber>
+			</defNumberVector>
+
+			<defNumberVector device="{0}" name="coord" label="Coord" group="Main Control" state="Idle" perm="rw">
+				<defNumber name="RA" label="RA" format="%4.2f" min="0" max="0" step="0">0</defNumber>
+				<defNumber name="DEC" label="Dec" format="%4.2f" min="0" max="0" step="0">0</defNumber>
+			</defNumberVector>
+
+			<defNumberVector device="{0}" name="field" label="Field" group="Main Control" state="Idle" perm="ro">
+				<defNumber name="current" label="Current" format="%4.2f" min="0" max="0" step="0">0</defNumber>
+				<defNumber name="radius" label="Radius" format="%4.2f" min="0" max="0" step="0">0</defNumber>
+				<defNumber name="max_radius" label="Max Radius" format="%4.2f" min="0" max="0" step="0">100</defNumber>
+			</defNumberVector>
+
+			<defSwitchVector device="{0}" name="commands" label="Commands" group="Main Control" state="Idle" perm="rw" rule="AtMostOne">
+				<defSwitch name="reset" label="reset">Off</defSwitch>
+				<defSwitch name="retry" label="retry">Off</defSwitch>
+				<defSwitch name="darkframe" label="dark">Off</defSwitch>
+				<defSwitch name="hotpixels" label="hotpixels">Off</defSwitch>
+			</defSwitchVector>
+
+		</INDIDriver>
+		""".format(device))
+
+		self.props = driver[device]
+		
 		self.dark = dark
 		self.stack = Stack()
 		self.solvedlock = threading.Lock()
@@ -379,7 +503,7 @@ class Navigator:
 		self.full_res_solver = None
 		self.full_res_lock = threading.Lock()
 		self.solver_off = np.array([0.0, 0.0])
-		self.status.setdefault("dispmode", 'disp-normal')
+		self.status.setdefault("dispmode", 'normal')
 		self.status.setdefault("full_dispmode", 'full-disp-normal')
 		self.status.setdefault("field_corr_limit", 10)
 		self.status.setdefault("field_corr", None)
@@ -520,7 +644,7 @@ class Navigator:
 		if self.field_corr is not None:
 			im_sub = cv2.remap(im_sub, self.field_corr, None, cv2.INTER_LINEAR)
 
-		M = self.stack.add(im_sub, show_match=(self.status['dispmode'] == 'disp-match'))
+		M = self.stack.add(im_sub, show_match=(self.status['dispmode'] == 'match'))
 		filtered = self.stack.get()
 		
 		self.solver_off = np.insert(self.solver_off, 2, 1.0).dot(M).A1
@@ -556,6 +680,15 @@ class Navigator:
 					if self.mount.polar.mode == 'solve':
 						self.mount.polar.set_pos_tan(self.wcs, self.status['t_solver'], self.tid)
 				
+					self.props['solver_time']['i_solved'].setValue(self.status['i_solved'])
+					self.props['solver_time']['t_solved'].setValue(self.status['t_solved'])
+					self.props['coord'].setValue((self.status['ra'] / 15.0, self.status['dec']))
+					self.props['field']['current'].setValue(self.status['field_deg'])
+					self.props['field']['radius'].setValue(self.status['radius'])
+					self.driver.enqueueSetMessage(self.props['solver_time'])
+					self.driver.enqueueSetMessage(self.props['coord'])
+					self.driver.enqueueSetMessage(self.props['field'])
+					
 				if self.polar_tid is not None:
 					self.mount.polar.solve()
 				if save_conf:
@@ -569,6 +702,8 @@ class Navigator:
 			else:
 				if self.status['radius'] > 0 and self.status['radius'] * 2 + 15 < self.status['max_radius']:
 					self.status['radius'] = self.status['radius'] * 2 + 15
+					self.props['field']['radius'].setValue(self.status['radius'])
+					self.driver.enqueueSetMessage(self.props['field'])
 				else:
 					if self.tid == 'guider':
 						self.status['ra'], self.status['dec'], self.status['max_radius'] = self.mount.get_oag_pos()
@@ -576,10 +711,16 @@ class Navigator:
 						self.status['ra'], self.status['dec'] = self.mount.polar.zenith()
 					self.status['radius'] = self.status['max_radius']
 					self.wcs = None
+					self.props['coord'].setValue((self.status['ra'] / 15.0, self.status['dec']))
+					self.props['field']['current'].setValue(self.status['field_deg'])
+					self.props['field']['radius'].setValue(self.status['radius'])
+					self.props['field']['max_radius'].setValue(self.status['max_radius'])
+					self.driver.enqueueSetMessage(self.props['coord'])
+					self.driver.enqueueSetMessage(self.props['field'])
 			self.solver = None
 			self.solved_im = None
 
-		if self.solver is None and i > 20 and self.status['dispmode'] != 'disp-orig' and self.status['dispmode'] != 'disp-df-cor':
+		if self.solver is None and i > 20 and self.status['dispmode'] != 'orig' and self.status['dispmode'] != 'df-cor':
 			xy = self.stack.get_xy()
 			#log.info "len", len(xy)
 			if len(xy) > 8:
@@ -590,6 +731,9 @@ class Navigator:
 				#self.solver = Solver(sources_img = filtered, field_w = im.shape[1], field_h = im.shape[0], ra = self.status['ra'], dec = self.status['dec'], field_deg = self.status['field_deg'])
 				self.solver.start()
 				self.solver_off = np.array([0.0, 0.0])
+				self.props['solver_time']['i_solver'].setValue(self.status['i_solver'])
+				self.props['solver_time']['t_solver'].setValue(self.status['t_solver'])
+				self.driver.enqueueSetMessage(self.props['solver_time'])
 		if self.mount.polar.mode == 'solve' and self.polar_tid is not None:
 			polar_plot = self.mount.polar.plot2()
 			p_status = "#%d %s solv#%d r:%.1f fps:%.1f" % (i, self.mount.polar.mode, i - self.status['i_solver'], self.status['radius'], fps)
@@ -604,7 +748,7 @@ class Navigator:
 				ui.imshow(self.polar_tid, polar_plot)
 			
 		status = "#%d %s %s  solv#%d r:%.1f fps:%.1f hp:%d" % (i, self.status['dispmode'], self.mount.polar.mode, i - self.status['i_solver'], self.status['radius'], fps, n_hotpixels)
-		if (self.status['dispmode'] == 'disp-orig'):
+		if (self.status['dispmode'] == 'orig'):
 			disp = normalize(im)
 
 			try:
@@ -615,7 +759,7 @@ class Navigator:
 
 			cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
 			ui.imshow(self.tid, disp)
-		elif (self.status['dispmode'] == 'disp-df-cor'):
+		elif (self.status['dispmode'] == 'df-cor'):
 			disp = normalize(im_sub)
 			
 			try:
@@ -626,7 +770,7 @@ class Navigator:
 
 			cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
 			ui.imshow(self.tid, disp)
-		elif (self.status['dispmode'] == 'disp-normal'):
+		elif (self.status['dispmode'] == 'normal'):
 			disp = normalize(filtered)
 			for p in self.stack.get_xy():
 				cv2.circle(disp, (int(p[1] + 0.5), int(p[0] + 0.5)), 13, (255), 1)
@@ -649,9 +793,9 @@ class Navigator:
 			else:
 				cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
 				ui.imshow(self.tid, disp)
-		elif (self.status['dispmode'].startswith('disp-zoom-')):
+		elif (self.status['dispmode'].startswith('zoom-')):
 			if self.plotter is not None:
-				zoom = self.status['dispmode'][len('disp-zoom-'):]
+				zoom = self.status['dispmode'][len('zoom-'):]
 				extra_lines = []
 				if self.tid == 'navigator':
 					extra_lines = self.mount.get_guider_plot()
@@ -663,7 +807,7 @@ class Navigator:
 				cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
 				ui.imshow(self.tid, disp)
 				
-		elif (self.status['dispmode'] == 'disp-match'):
+		elif (self.status['dispmode'] == 'match'):
 			disp = self.stack.match
 			cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
 			ui.imshow(self.tid, disp)
@@ -671,7 +815,67 @@ class Navigator:
 
 
 		self.prev_t = t
+	
+	def handleNewProp(self, msg, prop):
+		name = prop.getAttr('name')
+		if name == 'dispmode':
+			self.status['dispmode'] = prop.getActiveSwitch()
+			prop.setAttr('state', 'Ok')
+			
+		elif name == 'commands':
+			if prop['reset'] == True:
+				prop['reset'].setValue(False)
+				if self.solver is not None:
+					self.solver.terminate(wait=True)
+				self.status['field_deg'] = None
+				self.solver = None
+				self.plotter = None
+				if self.tid == 'guider':
+					self.status['ra'], self.status['dec'], self.status['max_radius'] = self.mount.get_oag_pos()
+				else:
+					self.status['ra'], self.status['dec'] = self.mount.polar.zenith()
+				self.status['radius'] = self.status['max_radius']
+				self.field_corr = None
+				self.field_corr_limit = 10
+				self.props['coord'].setValue((self.status['ra'] / 15.0, self.status['dec']))
+				self.props['field']['current'].setValue(self.status['field_deg'])
+				self.props['field']['radius'].setValue(self.status['radius'])
+				self.props['field']['max_radius'].setValue(self.status['max_radius'])
+				self.driver.enqueueSetMessage(self.props['coord'])
+				self.driver.enqueueSetMessage(self.props['field'])
+				prop.setAttr('state', 'Ok')
+
+			if prop['retry'] == True:
+				prop['retry'].setValue(False)
+
+				if self.solver is not None:
+					self.solver.terminate(wait=False)
+				if self.full_res_solver is not None:
+                        	        self.full_res_solver.terminate(wait=False)
+				if self.tid == 'guider':
+					self.status['ra'], self.status['dec'], self.status['max_radius'] = self.mount.get_oag_pos()
+				else:
+					self.status['ra'], self.status['dec'] = self.mount.polar.zenith()
+				self.status['radius'] = self.status['max_radius']
+				prop.setAttr('state', 'Ok')
+
+
+			if prop['darkframe'] == True:
+				prop['darkframe'].setValue(False)
+				self.dark.add(self.im)
+				prop.setAttr('state', 'Ok')
+
+			if prop['hotpixels'] == True:
+				prop['hotpixels'].setValue(False)
+				self.hotpix_find()
+				self.hotpix_update()
+				if len(self.hotpixels) > 1000:
+					self.hotpix_cnt = None
+				prop.setAttr('state', 'Ok')
+
 		
+		
+	
 	def cmd(self, cmd):
 		if cmd == 'solver-reset':
 			if self.solver is not None:
@@ -708,7 +912,7 @@ class Navigator:
 				self.hotpix_cnt = None
 		
 		if cmd.startswith('disp-'):
-			self.status['dispmode'] = cmd
+			self.status['dispmode'] = cmd[len('disp-'):]
 
 		if cmd.startswith('full-disp-'):
 			self.status['full_dispmode'] = cmd
@@ -1042,24 +1246,31 @@ def fit_line(xylist, sigma = 2):
 	return m, c
 
 class GuiderAlg(object):
-	def __init__(self, go, t_delay, pixpersec, pixpersec_neg, status, parity = 1):
+	def __init__(self, go, status):
 		self.go = go
-		self.pixpersec = pixpersec
-		self.pixpersec_neg = pixpersec_neg
-		self.parity = parity
 		self.status = status
 		self.status.setdefault('min_move', 0.1)
 		self.status.setdefault('aggressivness', 0.5)
-		self.status['t_delay'] = t_delay
+		self.status['t_delay'] = 0.5
 		self.status['last_move'] = 0
 		self.corr = 0
 		self.status['restart'] = False
+		self.parity = 0
+
+	def set_params(self, pixpersec, pixpersec_neg, parity = 1):
+		self.pixpersec = pixpersec
+		self.pixpersec_neg = pixpersec_neg
+		self.parity = parity
+        	
 
 	
 	def get_corr_delay(self, t_proc):
 		return self.go.recent_avg(self.status['t_delay'] + t_proc, self.pixpersec, -self.pixpersec_neg)
 	
 	def proc(self, err, err2, t0):
+		if self.parity == 0:
+			return
+
 		corr = self.get_corr(err, err2, t0)
 		self.corr = corr
 		
@@ -1074,11 +1285,49 @@ class GuiderAlg(object):
 			self.corr = 0
 
 class GuiderAlgDec(GuiderAlg):
-	def __init__(self, go, t_delay, pixpersec, pixpersec_neg, status, parity = 1):
-		super(GuiderAlgDec, self).__init__(go, t_delay, pixpersec, pixpersec_neg, status, parity)
+	def __init__(self, driver, device, go, status):
+		super(GuiderAlgDec, self).__init__(go, status)
 		self.status.setdefault('rev_move', 2.0)
 		self.status.setdefault('smooth_c', 0.1)
 		self.corr_acc = 0.0
+
+		self.driver = driver
+		self.device = device
+		driver.defineProperties("""
+		<INDIDriver>
+
+			<defNumberVector device="{0}" name="guider_dec" label="Guider Dec" group="Guider" state="Idle" perm="rw">
+				<defNumber name="aggressivness" label="aggressivness" format="%1.1f" min="0" max="1.5" step="0.1">0.5</defNumber>
+				<defNumber name="min_move" label="min_move" format="%1.1f" min="0" max="5" step="0.1">0.1</defNumber>
+				<defNumber name="rev_move" label="rev_move" format="%1.1f" min="0" max="5" step="0.1">2.0</defNumber>
+				<defNumber name="t_delay" label="t_delay" format="%1.1f" min="0" max="10" step="0.1">0.5</defNumber>
+				<defNumber name="smooth" label="smooth" format="%1.2f" min="0.01" max="1" step="0.01">0.1</defNumber>
+			</defNumberVector>
+
+			<defNumberVector device="{0}" name="guider_dec_move" label="Guider Dec Output" group="Guider" state="Idle" perm="ro">
+				<defNumber name="current" label="move" format="%2.1f" min="0" max="0" step="0">0</defNumber>
+			</defNumberVector>
+
+			<defSwitchVector device="{0}" name="guider_dec_commands" label="Commands" group="Guider" state="Idle" perm="rw" rule="AtMostOne">
+				<defSwitch name="reset" label="reset">Off</defSwitch>
+			</defSwitchVector>
+
+		</INDIDriver>
+		""".format(device))
+
+		self.props = driver[device]
+		
+	def handleNewProp(self, msg, prop):
+		name = prop.getAttr('name')
+		if name == 'guider_dec':
+			self.status['aggressivness'], self.status['min_move'], self.status['rev_move'], self.status['t_delay'], self.status['smooth_c'] = prop.to_array()
+			prop.setAttr('state', 'Ok')
+			
+		elif name == 'guider_dec_commands':
+			if prop['reset'] == True:
+				prop['reset'].setValue(False)
+				prop.setAttr('state', 'Ok')
+
 
 	def get_corr(self, err, err2, t0):
 		corr1 = err * self.parity + self.get_corr_delay(time.time() - t0) 
@@ -1116,11 +1365,47 @@ class GuiderAlgDec(GuiderAlg):
 		return corr
 
 class GuiderAlgRa(GuiderAlg):
-	def __init__(self, go, t_delay, pixpersec, pixpersec_neg, status, parity = 1):
-		super(GuiderAlgRa, self).__init__(go, t_delay, pixpersec, pixpersec_neg, status, parity)
+	def __init__(self, driver, device, go, status):
+		super(GuiderAlgRa, self).__init__(go, status)
 		self.status.setdefault('smooth_c', 0.1)
 		self.smooth_var2 = 1.0
 		self.corr_acc = 0.0
+
+		self.driver = driver
+		self.device = device
+		driver.defineProperties("""
+		<INDIDriver>
+
+			<defNumberVector device="{0}" name="guider_ra" label="Guider RA" group="Guider" state="Idle" perm="rw">
+				<defNumber name="aggressivness" label="aggressivness" format="%1.1f" min="0" max="1.5" step="0.1">0.5</defNumber>
+				<defNumber name="min_move" label="min_move" format="%1.1f" min="0" max="5" step="0.1">0.1</defNumber>
+				<defNumber name="t_delay" label="t_delay" format="%1.1f" min="0" max="10" step="0.1">0.5</defNumber>
+				<defNumber name="smooth" label="smooth" format="%1.2f" min="0.01" max="1" step="0.01">0.1</defNumber>
+			</defNumberVector>
+
+			<defNumberVector device="{0}" name="guider_ra_move" label="Guider RA Output" group="Guider" state="Idle" perm="ro">
+				<defNumber name="current" label="move" format="%2.1f" min="0" max="0" step="0">0</defNumber>
+			</defNumberVector>
+
+			<defSwitchVector device="{0}" name="guider_ra_commands" label="Guider RA Commands" group="Guider" state="Idle" perm="rw" rule="AtMostOne">
+				<defSwitch name="reset" label="reset">Off</defSwitch>
+			</defSwitchVector>
+
+		</INDIDriver>
+		""".format(device))
+		self.props = driver[device]
+
+	def handleNewProp(self, msg, prop):
+		name = prop.getAttr('name')
+		if name == 'guider_ra':
+			self.status['aggressivness'], self.status['min_move'], self.status['t_delay'], self.status['smooth_c'] = prop.to_array()
+			prop.setAttr('state', 'Ok')
+			
+		elif name == 'guider_ra_commands':
+			if prop['reset'] == True:
+				prop['reset'].setValue(False)
+				prop.setAttr('state', 'Ok')
+
 
 	def get_corr(self, err, err2, t0):
 		corr = err * self.parity + self.get_corr_delay(time.time() - t0)
@@ -1142,11 +1427,58 @@ class GuiderAlgRa(GuiderAlg):
 
 
 class Guider:
-	def __init__(self, status, mount, dark, tid, full_res = None):
+	def __init__(self, driver, device, status, mount, dark, tid, full_res = None):
 		self.status = status
+
+		self.driver = driver
+		self.device = device
+		driver.defineProperties("""
+		<INDIDriver>
+			<defSwitchVector device="{0}" name="guider_phase" label="Phase" group="Guider" state="Idle" perm="ro" rule="OneOfMany">
+				<defSwitch name="inactive">On</defSwitch>
+				<defSwitch name="start">Off</defSwitch>
+				<defSwitch name="move">Off</defSwitch>
+				<defSwitch name="back">Off</defSwitch>
+				<defSwitch name="move_dec">Off</defSwitch>
+				<defSwitch name="track">Off</defSwitch>
+				<defSwitch name="close">Off</defSwitch>
+			</defSwitchVector>
+
+			<defSwitchVector device="{0}" name="expose" label="Expose" group="Guider" state="Idle" perm="rw" rule="OneOfMany">
+				<defSwitch name="stop">On</defSwitch>
+				<defSwitch name="guided">Off</defSwitch>
+				<defSwitch name="guided2">Off</defSwitch>
+				<defSwitch name="free">Off</defSwitch>
+			</defSwitchVector>
+
+
+			<defNumberVector device="{0}" name="callibration" label="callibration" group="Guider" state="Idle" perm="rw">
+				<defNumber name="pixpersec_plus"  format="%2.2f" min="0" max="0" step="0">0</defNumber>
+				<defNumber name="pixpersec_minus" format="%2.2f" min="0" max="0" step="0">0</defNumber>
+				<defNumber name="pixpersec_dec"  format="%2.2f" min="0" max="0" step="0">0</defNumber>
+				<defNumber name="orientation" format="%4.1f" min="0" max="0" step="0">0</defNumber>
+			</defNumberVector>
+
+			<defNumberVector device="{0}" name="offset" label="Offset" group="Guider" state="Idle" perm="ro">
+				<defNumber name="RA" label="RA" format="%4.2f" min="0" max="0" step="0">0</defNumber>
+				<defNumber name="DEC" label="Dec" format="%4.2f" min="0" max="0" step="0">0</defNumber>
+			</defNumberVector>
+
+		</INDIDriver>
+		""".format(device))
+
+		self.props = driver[device]
+
+
+
+
 		self.status.setdefault('ra_alg', {})
 		self.status.setdefault('dec_alg', {})
+
 		self.mount = mount
+
+		self.alg_ra = GuiderAlgRa(driver, device, self.mount.go_ra, self.status['ra_alg'])
+		self.alg_dec = GuiderAlgDec(driver, device, self.mount.go_dec, self.status['dec_alg'])
 		
 		self.dark = dark
 		self.tid = tid
@@ -1177,7 +1509,7 @@ class Guider:
 		self.prev_t = 0
 
 	def reset(self):
-		self.status['mode'] = 'start'
+		self.changePhase('start')
 		self.status['t_delay'] = None
 		self.status['t_delay1'] = None
 		self.status['t_delay2'] = None
@@ -1231,6 +1563,22 @@ class Guider:
 			pass
 		
 
+	def handleNewProp(self, msg, prop):
+		name = prop.getAttr('name')
+		if name == 'expose':
+			self.status['seq'] = "seq-" + prop.getActiveSwitch()
+			prop.setAttr('state', 'Ok')
+		else:
+			self.alg_ra.handleNewProp(msg, prop)
+			self.alg_dec.handleNewProp(msg, prop)
+
+
+	def changePhase(self, mode):
+		self.status['mode'] = mode
+		self.props['guider_phase'].enforceRule(mode, True)
+		self.driver.enqueueSetMessage(self.props['guider_phase'])
+
+		
 	def cmd(self, cmd):
 		if cmd == "stop":
 			self.mount.go_ra.out(0)
@@ -1437,8 +1785,7 @@ class Guider:
 		if self.status['mode'] == 'close':
 			pt0, pt, match = centroid_list(im_sub, self.pt0, self.off)
 			if len(match) == 0:
-				self.status['mode'] = 'track'
-		
+				self.changePhase('track')		
 		
 		if self.status['mode'] != 'close':
 			bg = cv2.blur(im_sub, (30, 30))
@@ -1462,7 +1809,7 @@ class Guider:
 			self.cnt = 0
 			self.dist = 1.0
 			self.mount.go_ra.out(1)
-			self.status['mode'] = 'move'
+			self.changePhase('move')
 			self.t0 = time.time()
 			self.resp0 = []
 			self.i0 = i
@@ -1542,7 +1889,7 @@ class Guider:
 					self.pt0base = self.pt0
 				
 					self.cnt = 0
-					self.status['mode'] = 'back'
+					self.changePhase('back')
 				
 					self.mount.go_ra.out(-1, self.dist / self.status['pixpersec'])
 					cmdQueue.put('interrupt')
@@ -1602,9 +1949,9 @@ class Guider:
 					
 					if self.mount.go_dec is not None:
 						self.mount.go_dec.out(1, self.status['t_delay'] * 2 + 12)
-						self.status['mode'] = 'move_dec'
+						self.changePhase('move_dec')
 					else:
-						self.status['mode'] = 'track'
+						self.changePhase('track')
 						self.status['pixpersec_dec'] = None
 						self.mount.set_guider_calib(np.angle(self.ref_off, deg=True), 0, self.status['pixpersec'], self.status['pixpersec_neg'], 0, 0)
 						self.alg_ra = GuiderAlgRa(self.mount.go_ra, self.status['t_delay'], self.status['pixpersec'], self.status['pixpersec_neg'], self.status['ra_alg'])
@@ -1651,14 +1998,14 @@ class Guider:
 
 						log.info("move_dec test2 %f %f", self.status['pixpersec_dec'], m)
 
-					self.status['mode'] = 'track'
+					self.changePhase('track')
 					cmdQueue.put('interrupt')
 					self.mount.set_guider_calib(np.angle(self.ref_off, deg=True), self.parity, self.status['pixpersec'], self.status['pixpersec_neg'], self.status['pixpersec_dec'], self.status['pixpersec_dec'])
-					self.alg_ra = GuiderAlgRa(self.mount.go_ra, self.status['t_delay'], self.status['pixpersec'], self.status['pixpersec_neg'], self.status['ra_alg'])
+					self.alg_ra.set_params(self.status['pixpersec'], self.status['pixpersec_neg'])
 					if self.status['pixpersec_dec'] is not None:
-						self.alg_dec = GuiderAlgDec(self.mount.go_dec, self.status['t_delay'], self.status['pixpersec_dec'], self.status['pixpersec_dec'], self.status['dec_alg'], parity = self.parity)
+						self.alg_dec.set_params(self.status['pixpersec_dec'], self.status['pixpersec_dec'], parity = self.parity)
 					else:
-						self.alg_dec = None
+						self.alg_dec.set_params(0, 0, 0)
 						
 
 				for p in pt:
@@ -1684,6 +2031,9 @@ class Guider:
 				self.resp0.append((t - self.t0, err.real, err.imag))
 				t_proc = time.time() - t
 
+				self.props["offset"]["RA"].setValue(err.real)
+				self.props["offset"]["DEC"].setValue(err.imag)
+				self.driver.enqueueSetMessage(self.props["offset"])
 
 				self.alg_ra.proc(err.real, err.imag, t)
 
@@ -1720,7 +2070,7 @@ class Guider:
 				log.info("capture %d %d %d", self.capture_init, self.capture_in_progress, self.capture_proc_in_progress)
 				
 				if ok:
-					self.status['mode'] = 'close'
+					self.changePhase('close')
 				
 				for p in pt:
 					cv2.circle(disp, (int(p[1] + 0.5), int(p[0] + 0.5)), 10, (255), 1)
@@ -1745,15 +2095,59 @@ class Guider:
 		self.prev_t = t
 
 class Focuser:
-	def __init__(self, tid, status, dark = None, full_res = None):
+	def __init__(self, driver, device, tid, status, dark = None, full_res = None):
 		self.status = status
+
+		self.driver = driver
+		self.device = device
+		driver.defineProperties("""
+		<INDIDriver>
+			<defSwitchVector device="{0}" name="focuser_phase" label="Phase" group="Focuser" state="Idle" perm="ro" rule="OneOfMany">
+				<defSwitch name="wait">On</defSwitch>
+				<defSwitch name="start">Off</defSwitch>
+				<defSwitch name="fast_search_start">Off</defSwitch>
+				<defSwitch name="get_hfr_start">Off</defSwitch>
+				<defSwitch name="get_hfr">Off</defSwitch>
+				<defSwitch name="dark">Off</defSwitch>
+				<defSwitch name="fast_search">Off</defSwitch>
+				<defSwitch name="search">Off</defSwitch>
+				<defSwitch name="prep_record_v">Off</defSwitch>
+				<defSwitch name="record_v">Off</defSwitch>
+				<defSwitch name="focus_v">Off</defSwitch>
+				<defSwitch name="focus_v2">Off</defSwitch>
+				<defSwitch name="ba_start">Off</defSwitch>
+				<defSwitch name="ba_init">Off</defSwitch>
+				<defSwitch name="ba_run">Off</defSwitch>
+			</defSwitchVector>
+
+			<defSwitchVector device="{0}" name="focus_control" label="Conrtol" group="Focuser" state="Idle" perm="rw" rule="AtMostOne">
+				<defSwitch name="Full AF">Off</defSwitch>
+				<defSwitch name="Fast AF">Off</defSwitch>
+				<defSwitch name="Bahtinov">Off</defSwitch>
+				<defSwitch name="Stop">Off</defSwitch>
+			</defSwitchVector>
+
+
+			<defNumberVector device="{0}" name="focuser_callibration" label="Focuser Callibration" group="Focuser" state="Idle" perm="ro">
+				<defNumber name="hyst"  format="%2.2f" min="0" max="0" step="0">0</defNumber>
+				<defNumber name="m1" format="%2.2f" min="0" max="0" step="0">0</defNumber>
+				<defNumber name="m2"  format="%2.2f" min="0" max="0" step="0">0</defNumber>
+			</defNumberVector>
+
+			<defNumberVector device="{0}" name="focus" label="focus" group="Focuser" state="Idle" perm="ro">
+				<defNumber name="HFR" format="%2.1f" min="0" max="0" step="0">0</defNumber>
+				<defNumber name="Bahtinov" format="%2.1f" min="0" max="0" step="0">0</defNumber>
+			</defNumberVector>
+
+		</INDIDriver>
+		""".format(device))
+
+		self.props = driver[device]
+
+
 		self.stack = Stack(ratio=0.3)
-		if dark is None:
-			self.dark = Median(3)
-		else:
-			self.dark = dark
 		self.tid = tid
-		self.dispmode = 'disp-orig'
+		self.dispmode = 'orig'
 		self.status['phase'] = 'wait'
 		self.phase_wait = 0
 		self.hfr = Focuser.hfr_size
@@ -1766,6 +2160,7 @@ class Focuser:
 		self.ba_pos = 0.0
 		self.ba_step = 0
 		self.ba_dir = 0
+		self.reset(dark)
 
 	hfr_size = 30
 
@@ -1831,23 +2226,55 @@ class Focuser:
 		return hyst, v_curve2_s
 	
 
+	def handleNewProp(self, msg, prop):
+		name = prop.getAttr('name')
+		if name == 'focus_control':
+			if prop['Full AF'] == True:
+				self.changePhase('seek')
+				prop['Full AF'].setValue(False)
+			elif prop['Fast AF'] == True:
+				self.changePhase('fast_search_start')
+				prop['Fast AF'].setValue(False)
+			elif prop['Bahtinov'] == True:
+				self.changePhase('ba_start')
+				prop['Bahtinov'].setValue(False)
+			elif prop['Stop'] == True:
+				self.changePhase('wait')
+				prop['Stop'].setValue(False)
+			
+			prop.setAttr('state', 'Ok')
+
+		elif name == 'dispmode':
+			self.dispmode = prop.getActiveSwitch()
+
+
+	def changePhase(self, mode):
+		self.status['phase'] = mode
+		self.props['focuser_phase'].enforceRule(mode, True)
+		self.driver.enqueueSetMessage(self.props['focuser_phase'])
+
 	def cmd(self, cmd):
 		if cmd == 'dark':
 			self.dark.add(self.im)
 		if cmd.startswith('disp-'):
-			self.dispmode = cmd
+			self.dispmode = cmd[len('disp-'):]
 		if cmd == 'af':
-			self.status['phase'] = 'seek'
+			self.changePhase('seek')
 		if cmd == 'af_fast':
-			self.status['phase'] = 'fast_search_start'
+			self.changePhase('fast_search_start')
 
 		if cmd == 'stop':
-			self.status['phase'] = 'wait'
+			self.changePhase('wait')
 		if cmd == 'bahtinov':
-			self.status['phase'] = 'ba_start'
+			self.changePhase('ba_start')
 
-	def reset(self):
-		self.status['phase'] = 'wait'
+	def reset(self, dark = None):
+		self.changePhase('wait')
+		self.stack = Stack(ratio=0.3)
+		if dark is None:
+			self.dark = Median(3)
+		else:
+			self.dark = dark
 
 	def get_max_flux(self, im, xy, stddev):
 		ret = []
@@ -2010,24 +2437,24 @@ class Focuser:
 			self.phase_wait -= 1
 		elif self.status['phase'] == 'get_hfr_start':
 			self.phase_wait = 3
-			self.status['phase'] = 'get_hfr'
+			self.changePhase('get_hfr')
 		elif self.status['phase'] == 'get_hfr':
 			self.set_xy_from_stack(self.stack)
 			if self.focus_yx is not None:
 				self.hfr = self.get_hfr(im_sub)
-			self.status['phase'] = 'wait'
+			self.changePhase('wait')
 		elif self.status['phase'] == 'seek': # move near, out of focus
 			self.hfr = self.get_hfr(im_sub)
 			log.info("in-focus hfr %f", self.hfr)
 			if self.hfr < Focuser.hfr_size / 3:
-				self.status['phase'] = 'prep_record_v'
+				self.changePhase('prep_record_v')
 				self.phase_wait = 3
 				self.step(3)
 			else:
 				self.focus_yx = None
 				for i in range (0, 12):
 					self.step(-3)
-				self.status['phase'] = 'dark'
+				self.changePhase('dark')
 				self.phase_wait = 5
 				self.max_flux = 0
 				self.min_hfr = Focuser.hfr_size
@@ -2043,11 +2470,11 @@ class Focuser:
 					self.step(3)
 				self.phase_wait = 5
 				self.search_steps = 0
-				self.status['phase'] = 'search'
+				self.changePhase('search')
 		elif self.status['phase'] == 'search': # step far, record max flux
 			flux, hfr, yx = self.get_max_flux(self.stack_im, self.stack.get_xy(), self.stddev)
 			if flux < self.max_flux * 0.7 or hfr > self.min_hfr * 2 or self.search_steps > 120:
-				self.status['phase'] = 'prep_record_v'
+				self.changePhase('prep_record_v')
 				self.step(-1)
 			else:
 				if flux > self.max_flux:
@@ -2063,7 +2490,7 @@ class Focuser:
 			log.info("max %f %f", flux, self.max_flux)
 		elif self.status['phase'] == 'fast_search_start':
 			self.phase_wait = 3
-			self.status['phase'] = 'fast_search'
+			self.changePhase('fast_search')
 		elif self.status['phase'] == 'fast_search':
 			self.set_xy_from_stack(self.stack)
 			if self.focus_yx is None or len(self.focus_yx) == 0:
@@ -2071,7 +2498,7 @@ class Focuser:
 			else:
 				self.step(3)
 				self.phase_wait = 1
-				self.status['phase'] = 'prep_record_v'
+				self.changePhase('prep_record_v')
 		elif self.status['phase'] == 'prep_record_v': # record v curve
 			self.hfr = self.get_hfr(im_sub)
 			if self.hfr < Focuser.hfr_size / 2:
@@ -2091,7 +2518,7 @@ class Focuser:
 
 				self.hfr = self.get_hfr(im_sub, min_hfr = 5)
 
-				self.status['phase'] = 'record_v'
+				self.changePhase('record_v')
 			self.step(-1)
 		elif self.status['phase'] == 'record_v': # record v curve
 			self.hfr = self.get_hfr(im_sub)
@@ -2116,7 +2543,7 @@ class Focuser:
 				if (self.status['cur_hfr'] > self.status['start_hfr'] or 
 				    self.status['cur_hfr'] > max(8, self.status['min_hfr'] * 3) or
 				    len(self.status['v_curve']) > 2 * self.status['side_len']):
-					self.status['phase'] = 'focus_v'
+					self.changePhase('focus_v')
 					for i in range(0, len(self.status['v_curve']) - 16):
 						start_hfr = np.median(self.status['v_curve'][i:i+15])
 						if start_hfr < self.status['cur_hfr']:
@@ -2130,9 +2557,13 @@ class Focuser:
 					self.status['xmin'], self.status['side_len'], self.status['smooth_size'], self.status['c1'], self.status['m1'], self.status['c2'], self.status['m2'], v_curve_s = Focuser.v_param(self.status['v_curve'])
 					self.status['v_curve_s'] = v_curve_s.tolist()
 
+					self.props["focuser_callibration"]["m1"].setValue(self.status['m1'])
+					self.props["focuser_callibration"]["m2"].setValue(self.status['m2'])
+					self.driver.enqueueSetMessage(self.props["focuser_callibration"])
+
 					self.status['v_curve2'] = []
 					if  self.status['side_len'] < 5:
-						self.status['phase'] = 'wait'
+						self.changePhase('wait')
 
 			self.step(-1)
 		elif self.status['phase'] == 'focus_v': # go back, record first part of second v curve
@@ -2144,7 +2575,11 @@ class Focuser:
 				self.status['remaining_steps'] = round(self.status['xmin'] - len(self.status['v_curve2']) - self.status['hyst'])
 				log.info("remaining %d", self.status['remaining_steps'])
 				if self.status['remaining_steps'] < 5:
-					self.status['phase'] = 'focus_v2'
+					self.changePhase('focus_v2')
+					
+					self.props["focuser_callibration"]["hyst"].setValue(self.status['hyst'])
+					self.driver.enqueueSetMessage(self.props["focuser_callibration"])
+
 					if self.full_res is not None:
 						self.full_res['hyst'] = max(0, int(round(- self.status['hyst'])))
 			self.step(1)
@@ -2160,7 +2595,7 @@ class Focuser:
 				t = time.time()
 				np.save("v_curve1_%d.npy" % t, np.array(self.status['v_curve']))
 				np.save("v_curve2_%d.npy" % t, np.array(self.status['v_curve2']))
-				self.status['phase'] = 'wait'
+				self.changePhase('wait')
 				
 			log.info("hfr %f", self.hfr)
 
@@ -2170,26 +2605,34 @@ class Focuser:
 				if self.ba_dir == 0:
 					self.step(2)
 					self.phase_wait = 3
-					self.status['phase'] = 'ba_init'
+					self.changePhase('ba_init')
 				else:
 					self.ba_int = 0.0
-					self.status['phase'] = 'ba_run'
+					self.changePhase('ba_run')
 			else:
-				self.status['phase'] = 'wait'
+				self.changePhase('wait')
 		elif self.status['phase'] == 'ba_init':
 			if self.bahtinov.update(im_sub):
 				ba_pos = self.bahtinov.result()
+
+				self.props["focus"]["Bahtinov"].setValue(ba_pos)
+				self.driver.enqueueSetMessage(self.props["focus"])
+
 				if ba_pos - self.ba_pos > 0:
 					self.ba_dir = 1
 				else:
 					self.ba_dir = -1
 				self.ba_pos = ba_pos
 				self.ba_int = 0.0
-				self.status['phase'] = 'ba_run'
+				self.changePhase('ba_run')
 			
 		elif self.status['phase'] == 'ba_run':
 			if self.bahtinov.update(im_sub):
 				self.ba_pos = self.bahtinov.result()
+
+				self.props["focus"]["Bahtinov"].setValue(self.ba_pos)
+				self.driver.enqueueSetMessage(self.props["focus"])
+
 				self.ba_int += self.ba_pos * 0.1
 				if np.abs(self.ba_int) > 1.0:
 					if self.ba_pos * self.ba_dir > 0:
@@ -2205,9 +2648,10 @@ class Focuser:
 			if self.focus_yx is not None:
 				self.hfr = self.get_hfr(im_sub)
 			else:
-				self.status['phase'] = 'get_hfr_start'
+				self.changePhase('get_hfr_start')
 			
-			
+		self.props["focus"]["HFR"].setValue(self.hfr)
+		self.driver.enqueueSetMessage(self.props["focus"])
 			
 		if 'ba_' in self.status['phase']:
 			status = "#%d F: %s %s ba:%.2f %.2f fps:%.1f" % (i, self.status['phase'], self.dispmode, self.ba_pos, self.ba_int, fps)
@@ -2215,7 +2659,7 @@ class Focuser:
 			status = "#%d F: %s %s hfr:%.2f fps:%.1f" % (i, self.status['phase'], self.dispmode, self.hfr, fps)
 	
 
-		if (self.dispmode == 'disp-orig'):
+		if (self.dispmode == 'orig'):
 			disp = normalize(im)
 			cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
 			if 'ba_' in self.status['phase']:
@@ -2224,7 +2668,7 @@ class Focuser:
 				for p in self.focus_yx:
 					cv2.circle(disp, (int(p[1] + 0.5), int(p[0] + 0.5)), 20, (255), 1)
 			ui.imshow(self.tid, disp)
-		elif (self.dispmode == 'disp-df-cor'):
+		elif (self.dispmode == 'df-cor'):
 			disp = normalize(im_sub)
 			cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
 			if 'ba_' in self.status['phase']:
@@ -2233,7 +2677,7 @@ class Focuser:
 				for p in self.focus_yx:
 					cv2.circle(disp, (int(p[1] + 0.5), int(p[0] + 0.5)), 20, (255), 1)
 			ui.imshow(self.tid, disp)
-		elif (self.dispmode == 'disp-normal'):
+		elif (self.dispmode == 'normal'):
 			disp = normalize(self.stack_im)
 			if 'ba_' in self.status['phase']:
 				self.bahtinov.plot(disp)
@@ -2242,8 +2686,8 @@ class Focuser:
 				for p in self.focus_yx:
 					cv2.circle(disp, (int(p[1] + 0.5), int(p[0] + 0.5)), 20, (255), 1)
 			ui.imshow(self.tid, disp)
-		elif (self.dispmode.startswith('disp-zoom-')):
-			zoom = int(self.dispmode[len('disp-zoom-'):])
+		elif (self.dispmode.startswith('zoom-')):
+			zoom = int(self.dispmode[len('zoom-'):])
 			rect = np.array(self.stack_im.shape) // zoom
 			shift = np.array(self.stack_im.shape) // 2 - rect // 2
 			disp = self.stack_im[shift[0]:shift[0]+rect[0], shift[1]:shift[1]+rect[1]]
@@ -2503,13 +2947,53 @@ class Mount:
 
 
 class Runner(threading.Thread):
-	def __init__(self, tid, camera, navigator = None, guider = None, zoom_focuser = None, focuser = None, video_tid = None):
+	def __init__(self, driver, device, tid, camera, navigator = None, guider = None, focuser = None, video_tid = None):
 		threading.Thread.__init__(self)
+
+
+		self.driver = driver
+		self.device = device
+		driver.defineProperties("""
+		<INDIDriver>
+			<defSwitchVector device="{0}" name="run_control" label="Control" group="Run Control" state="Idle" perm="rw" rule="AtMostOne">
+				<defSwitch name="exit">Off</defSwitch>
+				<defSwitch name="shutdown">Off</defSwitch>
+				<defSwitch name="save">Off</defSwitch>
+				<defSwitch name="stop">Off</defSwitch>
+			</defSwitchVector>
+
+			<defSwitchVector device="{0}" name="camera_control" label="Camera" group="Run Control" state="Idle" perm="rw" rule="AtMostOne">
+				<defSwitch name="capture">Off</defSwitch>
+				<defSwitch name="test_capture">Off</defSwitch>
+			</defSwitchVector>
+
+		</INDIDriver>
+		""".format(device))
+		
+		prop_str = """
+		<INDIDriver>
+			<defSwitchVector device="{0}" name="run_mode" label="Mode" group="Main Control" state="Idle" perm="rw" rule="AtMostOne">
+		"""
+		if guider:
+			prop_str += '<defSwitch name="guider">Off</defSwitch>'
+		if focuser:
+			prop_str += '<defSwitch name="focuser">Off</defSwitch>'
+			prop_str += '<defSwitch name="zoom_focuser">Off</defSwitch>'
+		
+		prop_str += """
+			</defSwitchVector>
+		</INDIDriver>
+		"""
+		
+		driver.defineProperties(prop_str.format(device))
+		
+		self.props = driver[device]
+		driver.register(device)
+
 		self.tid = tid
 		self.camera = camera
 		self.navigator = navigator
 		self.guider = guider
-		self.zoom_focuser = zoom_focuser
 		self.focuser = focuser
 		self.capture_in_progress = False
 		self.video_tid = video_tid
@@ -2542,9 +3026,61 @@ class Runner(threading.Thread):
 			mode = 'guider'
 
 		process = psutil.Process(os.getpid())
+		
+		
+
+		
 		while True:
+		
 			mem_info = process.memory_info()
 			log.info("mem_used %d %d" % (mem_info.rss,mem_info.vms) )
+
+			while True:
+				msg, prop = self.driver.get(self.device, block=False)
+				if prop is None:
+					break
+				
+				prop.newFromEtree(msg)
+
+				name = prop.getAttr('name')
+			
+				if name == 'run_mode':
+					if self.guider and prop['guider'] == True:
+						prop.setAttr('state', 'Ok')
+						if mode == 'zoom_focuser':
+							self.camera.cmd('z0')
+						self.guider.reset()
+						self.guider.pt0 = self.navigator.get_xy_cor()
+						mode = 'guider'
+
+					elif self.focuser and prop['zoom_focuser'] == True:
+						prop.setAttr('state', 'Ok')
+						self.focuser.reset()
+						self.camera.cmd('z1')
+						mode = 'zoom_focuser'
+					elif self.focuser and prop['focuser'] == True:
+						prop.setAttr('state', 'Ok')
+						if mode == 'zoom_focuser':
+							self.camera.cmd('z0')
+						self.focuser.reset(dark = self.navigator.dark)
+						self.camera.cmd('z0')
+						mode = 'focuser'
+					else:
+						prop.setAttr('state', 'Ok')
+						if mode == 'zoom_focuser':
+							self.camera.cmd('z0')
+						mode = 'navigator'
+
+				else:
+					if self.navigator:
+						self.navigator.handleNewProp(msg, prop)
+					if self.guider:
+						self.guider.handleNewProp(msg, prop)
+					if self.focuser:
+						self.focuser.handleNewProp(msg, prop)
+		
+				self.driver.enqueueSetMessage(prop)
+
 			while True:
 				cmd=cmdQueue.get(self.tid, 0.0001)
 				if cmd is None:
@@ -2573,21 +3109,22 @@ class Runner(threading.Thread):
 					self.guider.pt0 = self.navigator.get_xy_cor()
 					mode = 'guider'
 				elif cmd == 'z1':
-					if self.zoom_focuser is not None:
-						self.zoom_focuser.reset()
+					if self.focuser is not None:
+						self.focuser.reset()
 						self.camera.cmd(cmd)
 						mode = 'zoom_focuser'
 				elif cmd == 'z0':
 					if mode == 'zoom_focuser':
+						self.focuser.reset(dark = self.navigator.dark)
 						self.camera.cmd(cmd)
 						mode = 'navigator'
 					elif mode == 'focuser':
 						mode = 'navigator'
 				elif cmd == 'zcenter':
-					if self.zoom_focuser is not None:
+					if self.focuser is not None:
 						self.camera.cmd(cmd)
 				elif cmd == 'zpos':
-					if self.zoom_focuser is not None:
+					if self.focuser is not None:
 						pts = []
 						try:
 							
@@ -2617,8 +3154,6 @@ class Runner(threading.Thread):
 						self.guider.cmd(cmd)
 					elif mode == 'focuser':
 						self.focuser.cmd(cmd)
-					elif mode == 'zoom_focuser':
-						self.zoom_focuser.cmd(cmd)
 				elif cmd == 'capture' or cmd == 'test-capture':
 					if mode == 'zoom_focuser':
 						self.camera.cmd('z0')
@@ -2653,8 +3188,6 @@ class Runner(threading.Thread):
 			
 					if mode == 'focuser':
 						self.focuser.cmd(cmd)
-					if mode == 'zoom_focuser':
-						self.zoom_focuser.cmd(cmd)
 	
 			im, t = self.camera.capture()
 			log.info("%d %f", i, t)
@@ -2677,10 +3210,8 @@ class Runner(threading.Thread):
 						self.navigator.proc_frame(im, i, t)
 					if mode == 'guider':
 						self.guider.proc_frame(im, i)
-					if mode == 'focuser':
+					if mode == 'focuser' or mode == 'zoom_focuser':
 						self.focuser.proc_frame(im, i)
-					if mode == 'zoom_focuser':
-						self.zoom_focuser.proc_frame(im, i)
 				except:
 					log.exception('proc_frame')
 
@@ -2711,6 +3242,7 @@ class Runner(threading.Thread):
 def main_loop():
 	global status
 
+	driver.loop()
 	cmdQueue.register('main')
 	while True:
 		cmd=cmdQueue.get('main')
@@ -2879,9 +3411,8 @@ def run_gphoto():
 	dark = Median(5)
 	nav = Navigator(status.path(["navigator"]), dark, mount, 'navigator', polar_tid = 'polar')
 	focuser = Focuser('navigator', status.path(["navigator", "focuser"]), dark = dark)
-	zoom_focuser = Focuser('navigator', status.path(["navigator", "focuser"]))
 
-	runner = Runner('navigator', cam, navigator = nav, focuser = focuser, zoom_focuser = zoom_focuser)
+	runner = Runner('navigator', cam, navigator = nav, focuser = focuser)
 	runner.start()
 
 	main_loop()
@@ -3024,6 +3555,11 @@ def run_test_2_kstars():
 	from kstars_camera import Camera_test_kstars, Camera_test_kstars_g
 	global status
 	status = Status("run_test_2.conf")
+ 
+	global driver
+	driver = IndiDriver(driver=True)
+ 
+
 	ui.namedWindow('navigator')
 	ui.namedWindow('guider')
 	ui.namedWindow('polar')
@@ -3041,22 +3577,21 @@ def run_test_2_kstars():
 
 	fo = FocuserOut()
 	cam1 = Camera_test_kstars(status.path(["navigator", "camera"]), go_ra, go_dec, fo)
-	nav1 = Navigator(status.path(["navigator"]), dark1, mount, 'navigator', polar_tid = 'polar', full_res = status.path(["full_res"]))
+	nav1 = Navigator(driver, "Navigator", status.path(["navigator"]), dark1, mount, 'navigator', polar_tid = 'polar', full_res = status.path(["full_res"]))
 
-	nav = Navigator(status.path(["guider", "navigator"]), dark2, mount, 'guider')
+	nav = Navigator(driver, "Guider", status.path(["guider", "navigator"]), dark2, mount, 'guider')
 
-	guider = Guider(status.path(["guider"]), mount, dark2, 'guider', full_res = status.path(["full_res"]))
+	guider = Guider(driver, "Guider", status.path(["guider"]), mount, dark2, 'guider', full_res = status.path(["full_res"]))
 	#cam = Camera_test(status.path(["guider", "navigator", "camera"]))
 	cam = Camera_test_kstars_g(status.path(["guider", "navigator", "camera"]), cam1)
 
 
-	focuser = Focuser('navigator', status.path(["navigator", "focuser"]), dark = dark1)
-	zoom_focuser = Focuser('navigator', status.path(["navigator", "focuser"]), full_res = status.path(["full_res"]))
+	focuser = Focuser(driver, "Navigator", 'navigator', status.path(["navigator", "focuser"]), dark = dark1, full_res = status.path(["full_res"]))
 	
-	runner = Runner('navigator', cam1, navigator = nav1, focuser = focuser, zoom_focuser = zoom_focuser)
+	runner = Runner(driver, "Navigator", 'navigator', cam1, navigator = nav1, focuser = focuser)
 	runner.start()
 	
-	runner2 = Runner('guider', cam, navigator = nav, guider = guider)
+	runner2 = Runner(driver, "Guider", 'guider', cam, navigator = nav, guider = guider)
 	runner2.start()
 	
 	main_loop()
@@ -3083,7 +3618,6 @@ def run_test_2_gphoto():
 	
 	nav1 = Navigator(status.path(["navigator"]), dark1, mount, 'navigator', polar_tid = 'polar', full_res = status.path(["full_res"]))
 	focuser = Focuser('navigator', status.path(["navigator", "focuser"]), dark = dark1)
-	zoom_focuser = Focuser('navigator')
 
 	nav = Navigator(status.path(["guider", "navigator"]), dark2, mount, 'guider')
 
@@ -3097,7 +3631,7 @@ def run_test_2_gphoto():
 
 	go.out(1, 10) # move aside for 10s to collect darkframes
 
-	runner = Runner('navigator', cam1, navigator = nav1, focuser=focuser, zoom_focuser = zoom_focuser)
+	runner = Runner('navigator', cam1, navigator = nav1, focuser=focuser)
 	runner.start()
 	
 	runner2 = Runner('guider', cam, navigator = nav, guider = guider)
@@ -3130,8 +3664,7 @@ def run_2():
 	dark2 = Median(5)
 	
 	nav1 = Navigator(status.path(["navigator"]), dark1, mount, 'navigator', polar_tid = 'polar', full_res = status.path(["full_res"]))
-	focuser = Focuser('navigator', status.path(["navigator", "focuser"]), dark = dark1)
-	zoom_focuser = Focuser('navigator', status.path(["navigator", "focuser"]), full_res = status.path(["full_res"]))
+	focuser = Focuser('navigator', status.path(["navigator", "focuser"]), dark = dark1, full_res = status.path(["full_res"]))
 
 	nav = Navigator(status.path(["guider", "navigator"]), dark2, mount, 'guider')
 
@@ -3145,7 +3678,7 @@ def run_2():
 	
 	go_ra.out(1, 10) # move aside for 10s to collect darkframes
 
-	runner = Runner('navigator', cam1, navigator = nav1, focuser=focuser, zoom_focuser = zoom_focuser)
+	runner = Runner('navigator', cam1, navigator = nav1, focuser=focuser)
 	runner.start()
 	
 	runner2 = Runner('guider', cam, navigator = nav, guider = guider)
@@ -3312,7 +3845,6 @@ def run_test_full_res():
 
 
 	focuser = Focuser('navigator', status.path(["navigator", "focuser"]), dark = dark1)
-	zoom_focuser = Focuser('navigator', status.path(["navigator", "focuser"]))
 	
 #	profiler = LineProfiler()
 #	profiler.add_function(Navigator.proc_full_res)
