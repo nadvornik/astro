@@ -28,6 +28,7 @@ import psutil
 
 from v4l2_camera import *
 from camera_gphoto import *
+from camera_indi import *
 
 from guide_out import GuideOut
 
@@ -89,28 +90,32 @@ class Status:
 
 
 class IndiDriver(IndiLoop):
-	def __init__(self, *args, **kwargs):
-		super().__init__(*args, **kwargs)
-		self.queues = {}
+	def __init__(self):
+		super().__init__(driver=True, client_addr='localhost')
+		self.queues = {'snoop': {}, 'new': {}}
 		self.setQueue = queue.Queue()
 		self.timeout = 0.2
+		self.reply_timeout = 60
+		
+		self.sendClient(indi.getProperties())
 	
 	
 	def loop1(self):
 		super().loop1()
 		
 		try:
-			prop = self.setQueue.get(block=False)
-			self.sendDriver(prop.setMessage())
+			while True:
+				prop = self.setQueue.get(block=False)
+				self.sendDriver(prop.setMessage())
 		except queue.Empty:
 			pass
 		
-	def register(self, device):
-		self.queues[device] = queue.Queue()
+	def register(self, device, msg_type = 'new'):
+		self.queues[msg_type][device] = queue.Queue()
 		log.info("register %s", device)
 	
-	def get(self, device, block=True, timeout=None):
-		q = self.queues[device]
+	def get(self, device, block=True, timeout=None, msg_type = 'new'):
+		q = self.queues[msg_type][device]
 		try:
 			pd = q.get(block=block, timeout=timeout)
 			log.info("%s:%s", device, pd[1].getAttr('name'))
@@ -121,8 +126,8 @@ class IndiDriver(IndiLoop):
 	def handleNewValue(self, msg, prop):
 		device = prop.getAttr('device')
 
-		if device in self.queues:
-			self.queues[device].put((msg, prop))
+		if device in self.queues['new']:
+			self.queues['new'][device].put((msg, prop))
 			prop.setAttr('state', 'Busy')
 			self.enqueueSetMessage(prop)
 		else:
@@ -130,6 +135,14 @@ class IndiDriver(IndiLoop):
 			prop.setAttr('state', 'Ok')
 			self.enqueueSetMessage(prop)
 
+	def handleSnoop(self, msg, prop):
+		device = prop.getAttr('device')
+
+		if prop.itype == 'BLOB':
+			msg = None
+		if device in self.queues['snoop']:
+			self.queues['snoop'][device].put((msg, prop))
+	
 	def enqueueSetMessage(self, prop):
 		self.setQueue.put(prop)
 
@@ -683,7 +696,7 @@ class Navigator:
 					self.props['solver_time']['i_solved'].setValue(self.status['i_solved'])
 					self.props['solver_time']['t_solved'].setValue(self.status['t_solved'])
 					self.props['coord'].setValue((self.status['ra'] / 15.0, self.status['dec']))
-					self.props['field']['current'].setValue(self.status['field_deg'])
+					self.props['field']['current'].setValue(self.status['field_deg'] or 0)
 					self.props['field']['radius'].setValue(self.status['radius'])
 					self.driver.enqueueSetMessage(self.props['solver_time'])
 					self.driver.enqueueSetMessage(self.props['coord'])
@@ -712,7 +725,7 @@ class Navigator:
 					self.status['radius'] = self.status['max_radius']
 					self.wcs = None
 					self.props['coord'].setValue((self.status['ra'] / 15.0, self.status['dec']))
-					self.props['field']['current'].setValue(self.status['field_deg'])
+					self.props['field']['current'].setValue(self.status['field_deg'] or 0)
 					self.props['field']['radius'].setValue(self.status['radius'])
 					self.props['field']['max_radius'].setValue(self.status['max_radius'])
 					self.driver.enqueueSetMessage(self.props['coord'])
@@ -838,7 +851,7 @@ class Navigator:
 				self.field_corr = None
 				self.field_corr_limit = 10
 				self.props['coord'].setValue((self.status['ra'] / 15.0, self.status['dec']))
-				self.props['field']['current'].setValue(self.status['field_deg'])
+				self.props['field']['current'].setValue(self.status['field_deg'] or 0)
 				self.props['field']['radius'].setValue(self.status['radius'])
 				self.props['field']['max_radius'].setValue(self.status['max_radius'])
 				self.driver.enqueueSetMessage(self.props['coord'])
@@ -976,7 +989,7 @@ class Navigator:
 				pass
 		
 	
-	def proc_full_res(self, jpg, name = None):
+	def proc_full_res(self, imgdata, name = None):
 		process = psutil.Process(os.getpid())
 		t = time.time()
 		(temp, hum) = self.mount.temp_sensor.get()
@@ -994,8 +1007,15 @@ class Navigator:
 
 		with self.full_res_lock:
 			try:
-				im_c = cv2.imdecode(np.fromstring(jpg, dtype=np.uint8), -1)
-		
+				if name.endswith('.jpg'):
+					im_c = cv2.imdecode(np.fromstring(jpg, dtype=np.uint8), -1)
+				elif name.endswith('.fits'):
+					hdulist=fits.open(imgdata)
+					im_c = hdulist[0].data
+#			log.error("shape %s", im.shape) #(3, 720, 1280)
+#			im = im[1]
+
+
 				log.info("full_res decoded")
 				#mean, stddev = cv2.meanStdDev(im_c)
 				#im_c[:,:,0] = cv2.subtract(im_c[:,:,0], mean[0])
@@ -1012,9 +1032,12 @@ class Navigator:
 				im_c = cv2.subtract(im_c, bg)
 				del bg
 
-				im = cv2.cvtColor(im_c, cv2.COLOR_RGB2GRAY);
+				if name.endswith('.jpg'):
+					im = cv2.cvtColor(im_c, cv2.COLOR_RGB2GRAY);
+					im = apply_gamma8(im, 2.2)
+				else:
+					im = cv2.add(im_c, 0, dtype=cv2.CV_8UC1)
 		
-				im = apply_gamma8(im, 2.2)
 				log.info("full_res bg")
 				pts = find_max(im, 12, 200)
 		
@@ -2391,8 +2414,9 @@ class Focuser:
 		log.info("hfr_list_00 stddev*4  %f", self.stddev * 4)
 
 		log.info("hfr_list_01 %s", yx)
-		max_flux = np.amax([p[2] for p in yx])
-		yx = [p for p in yx if p[2] > max_flux / 3]
+		if yx:
+			max_flux = np.amax([p[2] for p in yx])
+			yx = [p for p in yx if p[2] > max_flux / 3]
 		log.info("hfr_list_02 %s", yx)
 
 
@@ -2967,6 +2991,10 @@ class Runner(threading.Thread):
 				<defSwitch name="test_capture">Off</defSwitch>
 			</defSwitchVector>
 
+			<defNumberVector device="{0}" name="EXPOSURE" label="Expose" group="Run Control" state="Idle" perm="rw" timeout="60">
+				<defNumber name="EXP_TIME" label="Duration (s)" format="%5.3f" min="0.001" max="3600" step="1">1</defNumber>
+				<defNumber name="TEST_EXP_TIME" label="Test Duration (s)" format="%5.3f" min="0.001" max="3600" step="1">1</defNumber>
+			</defNumberVector>
 		</INDIDriver>
 		""".format(device))
 		
@@ -3071,6 +3099,33 @@ class Runner(threading.Thread):
 							self.camera.cmd('z0')
 						mode = 'navigator'
 
+				elif name == 'camera_control':
+				
+					if prop['capture'] == True or prop['test_capture'] == True:
+						if mode == 'zoom_focuser':
+							self.camera.cmd('z0')
+							mode = 'navigator'
+						try:
+							self.camera.capture_bulb(test=(prop['test_capture'] == True), callback_start = self.capture_start_cb, callback_end = self.capture_end_cb)
+						except AttributeError:
+							pass
+						except:
+							log.exception('Unexpected error')					
+						if self.capture_in_progress:
+							log.info("runner: capture_in_progress not finished")
+							log.info("capture_finished_fix")
+	
+							cmdQueue.put('capture-finished')
+							cmdQueue.put('capture-full-res-done')
+							self.capture_in_progress = False
+						
+						prop['capture'].setValue(False)
+						prop['test_capture'].setValue(False)
+						prop.setAttr('state', 'Ok')
+				elif name == 'EXPOSURE':
+					self.camera.cmd('exp-sec-' + str(prop['EXP_TIME']))
+					self.camera.cmd('test-exp-sec-' + str(prop['TEST_EXP_TIME']))
+					prop.setAttr('state', 'Ok')
 				else:
 					if self.navigator:
 						self.navigator.handleNewProp(msg, prop)
@@ -3228,14 +3283,15 @@ class Runner(threading.Thread):
 		if self.navigator.full_res_solver is not None:
                                 self.navigator.full_res_solver.terminate(wait=False)
 	
-	def capture_end_cb(self, jpg, name):
+	def capture_end_cb(self, img, name):
 		self.capture_in_progress = False
 		log.info("capture_finished_cb")
 		cmdQueue.put('capture-finished')
-		if jpg is not None:
-			ui.imshow_jpg("full_res", jpg)
+		if img is not None:
+			if name.endswith('.jpg'):
+				ui.imshow_jpg("full_res", img)
 			#self.navigator.proc_full_res(jpg, name)
-			threading.Thread(target=self.navigator.proc_full_res, args = [jpg, name] ).start()
+			threading.Thread(target=self.navigator.proc_full_res, args = [img, name] ).start()
 		else:
 			cmdQueue.put('capture-full-res-done')
 
@@ -3557,7 +3613,7 @@ def run_test_2_kstars():
 	status = Status("run_test_2.conf")
  
 	global driver
-	driver = IndiDriver(driver=True)
+	driver = IndiDriver()
  
 
 	ui.namedWindow('navigator')
@@ -3598,6 +3654,34 @@ def run_test_2_kstars():
 	
 	runner.join()
 	runner2.join()
+
+def run_indi():
+	global status
+	status = Status("run_indi.conf")
+
+	global driver
+	driver = IndiDriver()
+
+	ui.namedWindow('navigator')
+	ui.namedWindow('polar')
+	ui.namedWindow('full_res')
+
+	polar = Polar(status.path(["polar"]), ['navigator'])
+	mount = Mount(status.path(["mount"]), polar)
+
+	cam = Camera_indi(driver, "CCD Simulator", status.path(["navigator", "camera"]))
+	#cam = Camera_indi(driver, "V4L2 CCD", status.path(["navigator", "camera"]))
+	#cam = Camera_indi(driver, "ZWO CCD ASI1600MM Pro", status.path(["navigator", "camera"]))
+	dark = Median(5)
+	
+	nav = Navigator(driver, "Navigator", status.path(["navigator"]), dark, mount, 'navigator', polar_tid = 'polar')
+
+	focuser = Focuser(driver, "Navigator", 'navigator', status.path(["navigator", "focuser"]))
+
+	runner = Runner(driver, "Navigator", 'navigator', cam, navigator = nav, focuser = focuser)
+	runner.start()
+	main_loop()
+	runner.join()
 
 def run_test_2_gphoto():
 	global status
@@ -3873,7 +3957,8 @@ if __name__ == "__main__":
 	
 
 	#run_gphoto()
-	run_test_2_kstars()
+	#run_test_2_kstars()
+	run_indi()
 	#run_v4l2()
 	#run_test_2_gphoto()
 	#run_v4l2()
