@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 
 import cv2
 from http.server import HTTPServer, BaseHTTPRequestHandler
@@ -12,8 +12,11 @@ import sys
 from cmd import cmdQueue
 import subprocess
 from stacktraces import stacktraces
+import socket
 #import exceptions
 import logging
+
+from websocket import HTTPWebSocketsMixIn
 
 log = logging.getLogger()
 
@@ -88,10 +91,11 @@ class MjpegList:
 
 
 
-class Handler(BaseHTTPRequestHandler):
+class Handler(BaseHTTPRequestHandler, HTTPWebSocketsMixIn):
 
 	wbufsize = 1024 * 1024
 	timeout = 120
+	protocol_version = 'HTTP/1.1'
 
 	def do_GET(self):
 		s_path = self.path.split('?')
@@ -102,9 +106,11 @@ class Handler(BaseHTTPRequestHandler):
 		
 		base = os.path.basename(path)
 		name, ext = os.path.splitext(base)
+		log.error(path)
 		if self.path == '/':
 			self.send_response(301)
 			self.send_header('Location', 'index.html')
+			self.send_header('Connection', 'close')
 			self.end_headers()
 			return
 		elif ext == '.jpg':
@@ -117,6 +123,7 @@ class Handler(BaseHTTPRequestHandler):
 			mjpeg = mjpeglist.get(name)
 			if mjpeg is None:
 				self.send_response(404)
+				self.send_header('Connection', 'close')
 				self.end_headers()
 				return
 			
@@ -126,6 +133,7 @@ class Handler(BaseHTTPRequestHandler):
 		elif base == 'log.html':
 			self.send_response(200)
 			self.send_header('Content-type','text/html')
+			self.send_header('Connection', 'close')
 			self.end_headers()
 			self.wfile.write("<html><head><title>Log</title></head>")
 			self.wfile.write("<body><pre>")
@@ -137,34 +145,73 @@ class Handler(BaseHTTPRequestHandler):
 			if status is not None:
 				self.send_response(200)
 				self.send_header('Content-type','application/json')
+				c = status.to_json().encode()
+				self.send_header('Content-length', str(len(c)))
 				self.end_headers()
-				self.wfile.write(status.to_json().encode())
+				self.wfile.write(c)
 			else:
 				self.send_response(404)
+				self.send_header('Connection', 'close')
 				self.end_headers()
 				return
 			return
-		elif ext == '.html' or ext == '.js' or  ext == '.css':
+		elif ext == '.html' or ext == '.js' or  ext == '.css' or ext == '.map':
 			try:
-				f = open(base, "rb")
+				log.error("ui/build/" + path)
+				f = open("ui/build/" + path, "rb")
 			except:
 				self.send_response(404)
+				self.send_header('Connection', 'close')
 				self.end_headers()
 				return
 			c = f.read()
 			f.close()
 			self.send_response(200)
+			self.send_header('Content-length', str(len(c)))
 			if ext == '.html':
 				self.send_header('Content-type','text/html; charset=utf-8')
 			elif ext == '.js':
 				self.send_header('Content-type','application/javascript')
 			elif ext == '.css':
 				self.send_header('Content-type','text/css')
+			elif ext == '.map':
+				self.send_header('Content-type','application/json')
 			self.end_headers()
 			self.wfile.write(c)
 			return
+		elif path == '/websocket':
+			if self.headers.get("Upgrade", None) == "websocket":
+				try:
+					self.indi_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+					self.indi_socket.connect(("localhost", 7624))
+				except:
+					log.exception("Websocket INDI connect failed")
+					self.send_response(500)
+					self.end_headers()
+					return
+
+				self.log_message("handshake")
+				self.handshake()
+				self.log_message("websocket started1")
+				threading.Thread(target=self.websocket_writer).start()
+				self.log_message("websocket started2")
+				self.read_messages()
+				return
+
 		self.send_response(404)
+		self.send_header('Connection', 'close')
 		self.end_headers()
+
+	def websocket_writer(self):
+		try:
+			while True:
+				msg = self.indi_socket.recv(1000000)
+				self.send_message(msg)
+		except:
+			log.exception("websocket_writer closed")
+
+	def on_ws_message(self, message):
+		self.indi_socket.send(message)
 
 	def do_POST(self):
 		ctype, pdict = cgi.parse_header(self.headers.get('content-type'))
@@ -180,6 +227,7 @@ class Handler(BaseHTTPRequestHandler):
 		if base == 'button':
 			self.send_response(200)
 			self.send_header('Content-type','text/text')
+			self.send_header('Connection', 'close')
 			self.end_headers()
 			self.wfile.write(b"ok")
 			
@@ -232,8 +280,8 @@ if __name__ == '__main__':
 
 	i = 0
 	while True:
-		pil_image = Image.open("testimg2_" + str(i % 5 * 4 + 3) + ".tif")
-		mjpeglist.update('capture', pil_image)
+#		pil_image = Image.open("testimg2_" + str(i % 5 * 4 + 3) + ".tif")
+#		mjpeglist.update('capture', pil_image)
 		time.sleep(10)
 
 		i += 1
