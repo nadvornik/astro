@@ -1,0 +1,109 @@
+
+#INDI {
+  display: inline-block;
+}
+
+.INDIdevice {
+  margin: 15px;
+}
+
+.INDIgroup {
+  display: grid;
+  grid-template-columns:  1fr repeat(4, 1fr);
+  grid-column-gap: 10px;
+  grid-row-gap: 15px;
+}
+
+.INDIgroup_name {
+  grid-column-start: 1;
+}
+
+.INDIvector {
+  display: contents;
+}
+
+.INDIvector_name {
+  grid-column-start: 1;
+}
+
+.INDIvector_item {
+}
+
+
+.INDIvector_item:nth-child(4n+2) {
+  grid-column-start: 2;
+}
+
+.INDIvector_editable {
+  display: contents;
+}
+
+.INDIvector_desc {
+  grid-column-start: 2;
+}
+
+.INDIvector_item_new_value_err {
+  border: 1px solid red;
+}
+
+.INDIvector_item_button {
+  border-width: 3px;
+}
+
+.INDIvector_item_button_pressed {
+  border-style: inset;
+}
+
+.INDIvector_item_button_released {
+  border-style: outset;
+}
+
+.INDIlight {
+  height: 20px;
+  width: 20px;
+  margin-right: 5px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.INDIlight_Ok {
+  background-color: green;
+}
+
+.INDIlight_Alert {
+  background-color: red;
+}
+
+.INDIlight_Busy {
+  background-color: yellow;
+}
+
+.INDIlight_Idle {
+  background-color: gray;
+}
+
+.TELESCOPE_MOTION_NS .INDIvector_name {
+  grid-area: 2 / 1;
+}
+
+.TELESCOPE_MOTION_WE .INDIvector_name {
+  grid-area: 3 / 1 / span 2 / span 1;
+}
+
+
+.TELESCOPE_MOTION_NS .MOTION_NORTH {
+  grid-area: 2 / 3;
+}
+
+.TELESCOPE_MOTION_NS .MOTION_SOUTH {
+  grid-area: 4 / 3;
+}
+
+.TELESCOPE_MOTION_WE .MOTION_WEST {
+  grid-area: 3 / 2;
+}
+
+.TELESCOPE_MOTION_WE .MOTION_EAST {
+  grid-area: 3 / 4;
+}
+
