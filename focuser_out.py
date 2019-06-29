@@ -25,8 +25,9 @@ class FocuserOut:
 		self.pos += m
 		if self.rt_cmd is not None:
 			try:
-				self.rt_cmd.stdin.write("%d\n" % (m))
-				line = self.rt_cmd.stdout.readline()
+				self.rt_cmd.stdin.write(("%d\n" % (m)).encode())
+				self.rt_cmd.stdin.flush()
+				line = self.rt_cmd.stdout.readline().decode()
 				self.pos = int(line)
 			except:
 				log.exception('Unexpected error')			

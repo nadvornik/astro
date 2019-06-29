@@ -197,6 +197,8 @@ class Camera_indi:
 
 		self.driver.sendClientMessageWait(self.device, "CCD_VIDEO_FORMAT", {'ASI_IMG_RAW8': 'Off', 'ASI_IMG_RAW16': 'On'})
 
+		self.driver.sendClientMessageWait(self.device, "CCD_FRAME_RESET", {'RESET': 'On'})
+
 
 		self.driver.sendClientMessageWait(self.device, "CCD_EXPOSURE", {"CCD_EXPOSURE_VALUE": self.status['exp-sec']})
 		self.status['exp_in_progress'] = True

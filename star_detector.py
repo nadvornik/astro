@@ -94,7 +94,7 @@ def centroid_list(im, pt0, off):
 	pt = []
 	match = []
 
-	centroid_size = 10
+	centroid_size = 15
 	
 	for i, (y, x, v) in enumerate(pt0):
 		x = int(x + off[1] + 0.5)
@@ -112,14 +112,14 @@ def centroid_list(im, pt0, off):
 		
 		xs, ys = sym_center(cm)
 		#print "xs, ys", xs, ys
-		if abs(xs) > 5:
+		if abs(xs) > 7:
 			continue
-		if abs(ys) > 5:
+		if abs(ys) > 7:
 			continue
 			
 		#print "centroid", v, cm[centroid_size + ys, centroid_size + xs], mean, stddev
 		
-		cm = cv2.GaussianBlur(cm, (9, 9), 0)
+		cm = cv2.GaussianBlur(cm, (7, 7), 0)
 		mean, stddev = cv2.meanStdDev(cm)
 		if cm[int(centroid_size + ys + 0.5), int(centroid_size + xs + 0.5)] < mean + stddev * 3:
 			continue

@@ -2128,6 +2128,7 @@ class Focuser:
 			<defSwitchVector device="{0}" name="focuser_phase" label="Phase" group="Focuser" state="Idle" perm="ro" rule="OneOfMany">
 				<defSwitch name="wait">On</defSwitch>
 				<defSwitch name="start">Off</defSwitch>
+				<defSwitch name="seek">Off</defSwitch>
 				<defSwitch name="fast_search_start">Off</defSwitch>
 				<defSwitch name="get_hfr_start">Off</defSwitch>
 				<defSwitch name="get_hfr">Off</defSwitch>
@@ -3668,10 +3669,11 @@ def run_indi():
 
 	polar = Polar(status.path(["polar"]), ['navigator'])
 	mount = Mount(status.path(["mount"]), polar)
+	fo = FocuserOut()
 
-	cam = Camera_indi(driver, "CCD Simulator", status.path(["navigator", "camera"]))
-	#cam = Camera_indi(driver, "V4L2 CCD", status.path(["navigator", "camera"]))
-	#cam = Camera_indi(driver, "ZWO CCD ASI1600MM Pro", status.path(["navigator", "camera"]))
+	#cam = Camera_indi(driver, "CCD Simulator", status.path(["navigator", "camera"]), focuser=fo)
+	#cam = Camera_indi(driver, "V4L2 CCD", status.path(["navigator", "camera"]), focuser=fo)
+	cam = Camera_indi(driver, "ZWO CCD ASI1600MM Pro", status.path(["navigator", "camera"]), focuser=fo)
 	dark = Median(5)
 	
 	nav = Navigator(driver, "Navigator", status.path(["navigator"]), dark, mount, 'navigator', polar_tid = 'polar')
@@ -3770,6 +3772,54 @@ def run_2():
 	
 	main_loop()
 	
+	runner.join()
+	runner2.join()
+
+def run_2_indi():
+	global status
+	status = Status("run_indi.conf")
+
+	global driver
+	driver = IndiDriver()
+
+	ui.namedWindow('navigator')
+	ui.namedWindow('guider')
+	ui.namedWindow('polar')
+	ui.namedWindow('full_res')
+
+	polar = Polar(status.path(["polar"]), ['navigator', 'guider', 'full-res'])
+
+	go_ra = GuideOut("./guide_out_ra")
+	go_dec = GuideOut("./guide_out_dec")
+
+	mount = Mount(status.path(["mount"]), polar, go_ra, go_dec)
+
+	cam2 = Camera(status.path(["guider", "navigator", "camera"]))
+	cam2.prepare(1280, 960)
+
+	fo = FocuserOut()
+
+
+	#cam = Camera_indi(driver, "CCD Simulator", status.path(["navigator", "camera"]), focuser=fo)
+	#cam = Camera_indi(driver, "V4L2 CCD", status.path(["navigator", "camera"]), focuser=fo)
+	cam = Camera_indi(driver, "ZWO CCD ASI1600MM Pro", status.path(["navigator", "camera"]), focuser=fo)
+	dark = Median(5)
+	
+	nav = Navigator(driver, "Navigator", status.path(["navigator"]), dark, mount, 'navigator', polar_tid = 'polar')
+
+	focuser = Focuser(driver, "Navigator", 'navigator', status.path(["navigator", "focuser"]))
+
+	runner = Runner(driver, "Navigator", 'navigator', cam, navigator = nav, focuser = focuser)
+	runner.start()
+
+	dark2 = Median(5)
+	nav2 = Navigator(driver, "Guider", status.path(["guider", "navigator"]), dark2, mount, 'guider')
+	guider = Guider(driver, "Guider", status.path(["guider"]), mount, dark2, 'guider', full_res = status.path(["full_res"]))
+
+	runner2 = Runner(driver, "Guider", 'guider', cam2, navigator = nav2, guider = guider)
+	runner2.start()
+
+	main_loop()
 	runner.join()
 	runner2.join()
 
@@ -3958,7 +4008,7 @@ if __name__ == "__main__":
 
 	#run_gphoto()
 	#run_test_2_kstars()
-	run_indi()
+	run_2_indi()
 	#run_v4l2()
 	#run_test_2_gphoto()
 	#run_v4l2()
