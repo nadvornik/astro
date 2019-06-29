@@ -145,8 +145,12 @@ class Camera_indi:
 
 
 		while True:
-			msg, prop = self.driver.get(self.device, block=True, timeout=10, msg_type = 'snoop')
+			msg, prop = self.driver.get(self.device, block=True, timeout=5, msg_type = 'snoop')
 			
+			if prop is None:
+				log.error("wait1 timeout")
+				return None, time.time()
+
 			log.error("wait1")
 			if prop:
 				log.error(prop.getAttr('name'))

@@ -25,6 +25,7 @@ import time
 import threading
 import os
 import psutil
+import signal
 
 from v4l2_camera import *
 from camera_gphoto import *
@@ -143,6 +144,9 @@ class IndiDriver(IndiLoop):
 		if device in self.queues['snoop']:
 			self.queues['snoop'][device].put((msg, prop))
 	
+	def handleEOF(self):
+		cmdQueue.put('exit')
+
 	def enqueueSetMessage(self, prop):
 		self.setQueue.put(prop)
 
@@ -3807,9 +3811,9 @@ def run_2_indi():
 	fo = FocuserOut()
 
 
-	#cam = Camera_indi(driver, "CCD Simulator", status.path(["navigator", "camera"]), focuser=fo)
+	cam = Camera_indi(driver, "CCD Simulator", status.path(["navigator", "camera"]), focuser=fo)
 	#cam = Camera_indi(driver, "V4L2 CCD", status.path(["navigator", "camera"]), focuser=fo)
-	cam = Camera_indi(driver, "ZWO CCD ASI1600MM Pro", status.path(["navigator", "camera"]), focuser=fo)
+	#cam = Camera_indi(driver, "ZWO CCD ASI1600MM Pro", status.path(["navigator", "camera"]), focuser=fo)
 	dark = Median(5)
 	
 	nav = Navigator(driver, "Navigator", status.path(["navigator"]), dark, mount, 'navigator', polar_tid = 'polar')
@@ -4004,6 +4008,9 @@ def run_test_full_res():
 
 if __name__ == "__main__":
 	os.environ["LC_NUMERIC"] = "C"
+	signal.signal(signal.SIGINT, cmdQueue.send_exit)
+	signal.signal(signal.SIGTERM, cmdQueue.send_exit)
+	
 	#mystderr = os.fdopen(os.dup(sys.stderr.fileno()), 'w', 0)
 	#devnull = open(os.devnull,"w")
 	#os.dup2(devnull.fileno(), sys.stdout.fileno())

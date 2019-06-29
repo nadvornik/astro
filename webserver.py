@@ -263,7 +263,7 @@ class ServerThread(threading.Thread):
 		self.server.serve_forever()
 
 	def shutdown(self):
-		time.sleep(10)
+		time.sleep(3)
 		self.server.shutdown()
 		
 mjpeglist = MjpegList()

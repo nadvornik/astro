@@ -30,6 +30,9 @@ class CmdQueue:
 		else:
 			if target in self.dict:
 				self.dict[target].put(entry)
-			
+
+	def send_exit(self, signum, frame):
+		log.info("signal %s", signum)
+		self.put('exit')
 cmdQueue = CmdQueue()
 
