@@ -45,10 +45,14 @@ class MjpegBuf:
 		t0 = time.time()
 		with self.condition:
 			while self.buf is None or seq == self.seq + 1:
-				if time.time() > t0 + 80:
+				if time.time() > t0 + 25:
+					handler.send_response(501)
+					handler.send_header('Connection', 'close')
+					handler.end_headers()
 					log.info("req timeout")
-					raise EOFError()
-				self.condition.wait(30)
+					return
+#					raise EOFError()
+				self.condition.wait(10)
 			if not self.encoded:
 				ret, file_data = cv2.imencode('.jpg', self.buf)
 				self.buf = file_data.tobytes()
@@ -59,6 +63,7 @@ class MjpegBuf:
 			seq = self.seq
 				
 		l = len(buf)
+		handler.send_response(200)
 		handler.send_header('Content-type','image/jpeg')
 		handler.send_header('Content-length',str(l))
 		handler.send_header('X-seq',str(seq))
@@ -127,7 +132,6 @@ class Handler(BaseHTTPRequestHandler, HTTPWebSocketsMixIn):
 				self.end_headers()
 				return
 			
-			self.send_response(200)
 			mjpeg.serve(self, seq)
 			return
 		elif base == 'log.html':
@@ -206,6 +210,9 @@ class Handler(BaseHTTPRequestHandler, HTTPWebSocketsMixIn):
 		try:
 			while True:
 				msg = self.indi_socket.recv(1000000)
+				if len(msg) == 0:
+					log.error("ws indiserver received 0")
+					break
 				self.send_message(msg)
 		except:
 			log.exception("websocket_writer closed")
