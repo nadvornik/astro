@@ -345,7 +345,6 @@ export default class INDI extends React.Component {
     this.reader.on('tag:delProperty', (data) => this.delProperty(data));
     this.reader.on('tag:message', (data) => this.message(data));
 
-    this.reader.parse("<stream>");
 
     this.startWS()
   }
@@ -381,6 +380,9 @@ export default class INDI extends React.Component {
       }
     }.bind(this);
     this.webSocket.onopen = function (event) {
+      this.reader.reset();
+      this.reader.parse("<stream>");
+
       this.webSocket.send('<getProperties version="1.7"/>' + this.wsqueue);
       this.wsqueue = '';
     }.bind(this);
