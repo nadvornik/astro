@@ -236,7 +236,7 @@ class Handler(BaseHTTPRequestHandler, HTTPWebSocketsMixIn):
 				tgt = postvars[b'tgt'][0].decode()
 			except:
 				tgt = None
-			if cmd == 'exit' or cmd == 'shutdowm' or cmd == 'stacktrace':
+			if cmd == 'exit' or cmd == 'shutdown' or cmd == 'stacktrace':
 				stacktraces()
 			cmdQueue.put(cmd, target = tgt)
 			return

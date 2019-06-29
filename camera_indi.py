@@ -65,7 +65,7 @@ class Camera_indi:
 			})
 			self.driver.sendClientMessageWait(self.device, "CCD_VIDEO_STREAM", {"STREAM_ON": "On"})
 			im, t = self.capture()
-			while im.shape[0] != self.status['zoom_shape'][0] or im.shape[1] != self.status['zoom_shape'][1]:
+			while im is not None and (im.shape[0] != self.status['zoom_shape'][0] or im.shape[1] != self.status['zoom_shape'][1]):
 				log.info("zoom shape %s %s", im.shape, self.status['zoom_shape'])
 				im, t = self.capture()
 			
@@ -175,7 +175,8 @@ class Camera_indi:
 				return self.capture_()
 			except:
 				log.exception("capture")
-				time.sleep(2)
+				time.sleep(1)
+				return None, time.time()
 
 	def capture_bulb(self, test = False, callback_start = None, callback_end = None):
 		while self.driver[self.device]["CCD_VIDEO_STREAM"]["STREAM_ON"] == True:

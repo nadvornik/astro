@@ -1,6 +1,9 @@
 import sys
 import traceback
 
+import logging
+log = logging.getLogger()
+
 def stacktraces():
     code = []
     for threadId, stack in sys._current_frames().items():
@@ -10,5 +13,5 @@ def stacktraces():
             if line:
                 code.append("  %s" % (line.strip()))
 
-    print("\n".join(code))
+    log.error("\n".join(code))
 

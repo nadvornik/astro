@@ -2764,7 +2764,7 @@ class Mount:
 		self.guider_tan = None
 		self.status['temp_sensor'] = {}
 		self.temp_sensor = TempSensor(self.status['temp_sensor'])
-		self.ext_trigger = ExtTrigger()
+		#self.ext_trigger = ExtTrigger()
 		
 		
 	def tan_to_euler(self, tan, off=(0,0)):
@@ -3246,6 +3246,10 @@ class Runner(threading.Thread):
 						self.focuser.cmd(cmd)
 	
 			im, t = self.camera.capture()
+			
+			if im is None:
+				continue
+			
 			log.info("%d %f", i, t)
 			if self.video_tid is not None:
 				log.info("%s %s", im.shape, im.dtype)
@@ -3299,10 +3303,13 @@ class Runner(threading.Thread):
 def main_loop():
 	global status
 
-	driver.loop()
 	cmdQueue.register('main')
 	while True:
-		cmd=cmdQueue.get('main')
+		driver.loop1()
+		cmd=cmdQueue.get('main', timeout=0.01)
+		if cmd is None:
+			continue
+		
 		if cmd == 'exit' or cmd == 'shutdown':
 			stacktraces()
 
