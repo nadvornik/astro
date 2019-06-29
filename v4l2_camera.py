@@ -62,8 +62,8 @@ class Camera:
 		self.vd = None
 		self.mm = []
 		self.focuser = focuser
-		self.status.setdefault('width', 640)
-		self.status.setdefault('height', 480)
+		self.status.setdefault('width', 1280)
+		self.status.setdefault('height', 960)
 		self.status.setdefault('format', V4L2_PIX_FMT_SBGGR16)
 		self.status['capture_idx'] = 0
 		self.status['capture'] = False
@@ -155,13 +155,14 @@ class Camera:
 
 
 	def prepare(self, width = None, height = None, format = None, decode = True):
+		if self.vd is not None:
+			log.error("already initialized, run shutdown first")
+			return True
+
 		if width == None:
 			width = self.status['width']
 		if height == None:
-			width = self.status['height']
-
-		if height == None:
-			width = self.status['height']
+			height = self.status['height']
 
 		if format == None:
 			format = self.status['format']

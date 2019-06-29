@@ -184,7 +184,7 @@ class Camera_indi:
 
 	def capture_bulb(self, test = False, callback_start = None, callback_end = None):
 		while self.driver[self.device]["CCD_VIDEO_STREAM"]["STREAM_ON"] == True:
-			self.driver.sendClientMessageWait(self.device, "CCD_VIDEO_STREAM", {"STREAM_ON": "Off", "STREAM_OFF": "On"})
+			self.driver.sendClientMessageWait(self.device, "CCD_VIDEO_STREAM", {"STREAM_ON": "Off"})
 			time.sleep(0.1)
 
 		while True: # empty queue
@@ -200,7 +200,7 @@ class Camera_indi:
 		self.driver.sendClient(indi.enableBLOB(self.device, "CCD1"))
 		self.driver.sendClientMessageWait(self.device, "CCD_BINNING", {'HOR_BIN': 1, 'VER_BIN': 1})
 
-		self.driver.sendClientMessageWait(self.device, "CCD_VIDEO_FORMAT", {'ASI_IMG_RAW8': 'Off', 'ASI_IMG_RAW16': 'On'})
+		self.driver.sendClientMessageWait(self.device, "CCD_VIDEO_FORMAT", {'ASI_IMG_RAW16': 'On'})
 
 		self.driver.sendClientMessageWait(self.device, "CCD_FRAME_RESET", {'RESET': 'On'})
 
@@ -250,7 +250,7 @@ class Camera_indi:
 
 
 	def shutdown(self):
-		pass
+		self.driver.sendClientMessageWait(self.device, "CCD_VIDEO_STREAM", {"STREAM_ON": "Off"})
 
 
 

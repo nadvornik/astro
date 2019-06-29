@@ -2984,11 +2984,9 @@ class Runner(threading.Thread):
 		self.device = device
 		driver.defineProperties("""
 		<INDIDriver>
-			<defSwitchVector device="{0}" name="run_control" label="Control" group="Run Control" state="Idle" perm="rw" rule="AtMostOne">
-				<defSwitch name="exit">Off</defSwitch>
-				<defSwitch name="shutdown">Off</defSwitch>
-				<defSwitch name="save">Off</defSwitch>
-				<defSwitch name="stop">Off</defSwitch>
+			<defSwitchVector device="{0}" name="camera_run" label="Camera" group="Run Control" state="Idle" perm="rw" rule="OneOfMany">
+				<defSwitch name="run">Off</defSwitch>
+				<defSwitch name="pause">On</defSwitch>
 			</defSwitchVector>
 
 			<defSwitchVector device="{0}" name="camera_control" label="Camera" group="Run Control" state="Idle" perm="rw" rule="AtMostOne">
@@ -3000,6 +2998,14 @@ class Runner(threading.Thread):
 				<defNumber name="EXP_TIME" label="Duration (s)" format="%5.3f" min="0.001" max="3600" step="1">1</defNumber>
 				<defNumber name="TEST_EXP_TIME" label="Test Duration (s)" format="%5.3f" min="0.001" max="3600" step="1">1</defNumber>
 			</defNumberVector>
+
+			<defSwitchVector device="{0}" name="run_control" label="Control" group="Run Control" state="Idle" perm="rw" rule="AtMostOne">
+				<defSwitch name="exit">Off</defSwitch>
+				<defSwitch name="shutdown">Off</defSwitch>
+				<defSwitch name="save">Off</defSwitch>
+				<defSwitch name="stop">Off</defSwitch>
+			</defSwitchVector>
+
 		</INDIDriver>
 		""".format(device))
 		
@@ -3031,6 +3037,7 @@ class Runner(threading.Thread):
 		self.capture_in_progress = False
 		self.video_tid = video_tid
 		self.video_capture = False
+		self.camera_run = False
 		
 		
 	def run(self):
@@ -3076,8 +3083,27 @@ class Runner(threading.Thread):
 				prop.newFromEtree(msg)
 
 				name = prop.getAttr('name')
+
+				if name == 'camera_run':
+					if prop['pause'] == True:
+						if self.camera_run:
+							try:
+								self.camera.shutdown()
+							except:
+								log.exception("camera shutdown")
+						self.camera_run = False
+						prop.setAttr('state', 'Ok')
+					elif prop['run'] == True:
+						if not self.camera_run:
+							try:
+								self.camera.prepare()
+							except:
+								log.exception("camera shutdown")
+						self.camera_run = True
+						prop.setAttr('state', 'Ok')
+
 			
-				if name == 'run_mode':
+				elif name == 'run_mode':
 					if self.guider and prop['guider'] == True:
 						prop.setAttr('state', 'Ok')
 						if mode == 'zoom_focuser':
@@ -3107,26 +3133,32 @@ class Runner(threading.Thread):
 				elif name == 'camera_control':
 				
 					if prop['capture'] == True or prop['test_capture'] == True:
-						if mode == 'zoom_focuser':
-							self.camera.cmd('z0')
-							mode = 'navigator'
-						try:
-							self.camera.capture_bulb(test=(prop['test_capture'] == True), callback_start = self.capture_start_cb, callback_end = self.capture_end_cb)
-						except AttributeError:
-							pass
-						except:
-							log.exception('Unexpected error')					
-						if self.capture_in_progress:
-							log.info("runner: capture_in_progress not finished")
-							log.info("capture_finished_fix")
+						if self.camera_run:
+							if mode == 'zoom_focuser':
+								self.camera.cmd('z0')
+								mode = 'navigator'
+							try:
+								self.camera.capture_bulb(test=(prop['test_capture'] == True), callback_start = self.capture_start_cb, callback_end = self.capture_end_cb)
+							except AttributeError:
+								pass
+							except:
+								log.exception('Unexpected error')					
+							if self.capture_in_progress:
+								log.info("runner: capture_in_progress not finished")
+								log.info("capture_finished_fix")
 	
-							cmdQueue.put('capture-finished')
-							cmdQueue.put('capture-full-res-done')
-							self.capture_in_progress = False
+								cmdQueue.put('capture-finished')
+								cmdQueue.put('capture-full-res-done')
+								self.capture_in_progress = False
 						
-						prop['capture'].setValue(False)
-						prop['test_capture'].setValue(False)
-						prop.setAttr('state', 'Ok')
+							prop['capture'].setValue(False)
+							prop['test_capture'].setValue(False)
+							prop.setAttr('state', 'Ok')
+						else:
+							prop['capture'].setValue(False)
+							prop['test_capture'].setValue(False)
+							prop.setAttr('state', 'Failed')
+							self.driver.message("Camera is paused", self.device)
 				elif name == 'EXPOSURE':
 					self.camera.cmd('exp-sec-' + str(prop['EXP_TIME']))
 					self.camera.cmd('test-exp-sec-' + str(prop['TEST_EXP_TIME']))
@@ -3248,7 +3280,11 @@ class Runner(threading.Thread):
 			
 					if mode == 'focuser':
 						self.focuser.cmd(cmd)
-	
+			
+			if not self.camera_run:
+				time.sleep(1)
+				continue
+			
 			im, t = self.camera.capture()
 			
 			if im is None:
@@ -3788,7 +3824,7 @@ def run_2():
 
 def run_2_indi():
 	global status
-	status = Status("run_indi.conf")
+	status = Status("run_2_indi.conf")
 
 	global driver
 	driver = IndiDriver()
