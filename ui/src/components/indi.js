@@ -346,6 +346,7 @@ export default class INDI extends React.Component {
     this.startWS = this.startWS.bind(this);
 
     this.wsqueue = '';
+    this.reconnect = false;
   }
 
   componentDidMount() {
@@ -362,7 +363,8 @@ export default class INDI extends React.Component {
     this.reader.on('tag:message', (data) => this.message(data));
 
 
-    this.startWS()
+    this.reconnect = true;
+    this.startWS();
   }
   
   startWS() {
@@ -410,11 +412,14 @@ export default class INDI extends React.Component {
     this.webSocket.onclose = function (event) {
       this.webSocket = undefined;
       console.log("WEBSOCKET", event);
-      setTimeout(this.startWS, 2000);
+      if (this.reconnect) {
+        setTimeout(this.startWS, 2000);
+      }
     }.bind(this);
   }
 
   componentWillUnmount() {
+    this.reconnect = false;
     if (this.webSocket !== undefined) this.webSocket.close();
   }
   
