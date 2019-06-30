@@ -124,7 +124,10 @@ class IndiDriver(IndiLoop):
 		except queue.Empty:
 			return (None, None)
 			
-	def handleNewValue(self, msg, prop):
+	def handleNewValue(self, msg, prop, from_client_socket=False):
+		if from_client_socket:
+			return
+
 		device = prop.getAttr('device')
 
 		if device in self.queues['new']:
