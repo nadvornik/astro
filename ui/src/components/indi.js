@@ -180,7 +180,15 @@ class INDIproperty extends React.Component {
 
   constructor(props) {
     super(props);
-    this.state = {raw: {}, parsed: {}}; //Object.values(this.props.elements).map(e => ({e.name: ''}));
+    this.state = {
+      raw: {}, 
+      parsed: {}
+    };
+    /*
+    Object.values(this.props.elements).forEach(e => {
+      this.state.raw[e.name] = (this.props.type === "NumberVector") ? format_num(e.value, e.format) : e.value;
+      this.state.parsed[e.name] = e.value;
+    }); */
     this.handleChange = this.handleChange.bind(this);
   }
 
@@ -273,25 +281,33 @@ function INDIgroup(props) {
   );
 }
 
-function INDIdevice(props) {
-  return (
-    <div className='INDIdevice'>
-      <Tabs>
-        <TabList>
-          {Object.keys(props.groups).map(group =>
-            <Tab>{group}</Tab>
-          )}
-        </TabList>
+class INDIdevice extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = {
+      tabIndex: 0 
+    };
+  }
+  render() {
+    return (
+      <div className='INDIdevice'>
+        <Tabs selectedIndex={this.state.tabIndex} onSelect={tabIndex => this.setState({ tabIndex })}>
+          <TabList>
+            {Object.keys(this.props.groups).map(group =>
+              <Tab key={group}>{group}</Tab>
+            )}
+          </TabList>
           
-        <h2>{props.name}</h2>
-        {Object.keys(props.groups).map(group => 
-          <TabPanel>
-            <INDIgroup vec={props.groups[group]} actionSetProp={props.actionSetProp} key={group} name={group}/>
-          </TabPanel>
-        )}
-      </Tabs>
-    </div>
-  );
+          <h2>{this.props.name}</h2>
+          {Object.keys(this.props.groups).map(group => 
+            <TabPanel key={group}>
+              <INDIgroup vec={this.props.groups[group]} actionSetProp={this.props.actionSetProp} key={group} name={group}/>
+            </TabPanel>
+          )}
+        </Tabs>
+      </div>
+    );
+  }
 }
 
 function INDIMessages(props) {
@@ -581,14 +597,14 @@ export default class INDI extends React.Component {
     
     return (
       <div id='INDI'>
-        <Tabs selectedIndex={this.state.tabIndex} onSelect={tabIndex => this.setState({ tabIndex })}>
+        <Tabs forceRenderTabPanel selectedIndex={this.state.tabIndex} onSelect={tabIndex => this.setState({ tabIndex })}>
           <TabList>
             {Object.keys(devices).map(dev =>
-              <Tab>{dev}</Tab>
+              <Tab key={dev}>{dev}</Tab>
             )}
           </TabList>
           {Object.keys(devices).map(dev =>
-            <TabPanel>
+            <TabPanel key={dev}>
               <INDIdevice groups={devices[dev]} actionSetProp={this.actionSetProp} key={dev} name={dev} />
             </TabPanel>
           )}
