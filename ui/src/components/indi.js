@@ -98,30 +98,28 @@ function format_num(v, format) {
 }
 
 function parse_num(s) {
-  var comp = s.split(':')
-  if (comp.length > 3) return ''
+  var comp = s.match(/^ *(-?\d+(\.\d+)?) *((hr)|h|(deg)|º|:)? *(\d+(\.\d+)?)? *((min)|m|'|:)? *(\d+(\.\d+)?)? *((sec)|s|"|:)? *$/);
+  if (comp == null) return '';
+  
   var mul = 1.0;
   var res = 0;
 
-  if (!(comp[0].match(/^-?\d+(\.\d+)?$/))) return '';
-  var num = parseFloat(comp[0]);
+  var num = parseFloat(comp[1]);
   res += mul * num;
   if (num < 0)
     mul = -mul;
   mul /= 60.0;
 
-  if (comp.length > 1) {
-    if (!(comp[1].match(/^\d+(\.\d+)?$/))) return '';
-    num = parseFloat(comp[1]);
-    if (num >=60.0) return '';
+  if (comp[6] !== undefined) {
+    num = parseFloat(comp[6]);
+    if (num >= 60.0) return '';
     res += mul * num;
     mul /= 60.0;
   }
   
-  if (comp.length > 2) {
-    if (!(comp[2].match(/^\d+(\.\d+)?$/))) return '';
-    num = parseFloat(comp[2]);
-    if (num >=60.0) return '';
+  if (comp[10]) {
+    num = parseFloat(comp[10]);
+    if (num >= 60.0) return '';
     res += mul * num;
   }
 
@@ -184,11 +182,11 @@ class INDIproperty extends React.Component {
       raw: {}, 
       parsed: {}
     };
-    /*
+    
     Object.values(this.props.elements).forEach(e => {
       this.state.raw[e.name] = (this.props.type === "NumberVector") ? format_num(e.value, e.format) : e.value;
       this.state.parsed[e.name] = e.value;
-    }); */
+    });
     this.handleChange = this.handleChange.bind(this);
   }
 
@@ -470,6 +468,10 @@ export default class INDI extends React.Component {
   setSwitchVector(e) {
       //console.log(e.children);
       var entry = {...e.attributes}
+      if (this.state.entries[entry.device][entry.name] === undefined) {
+        console.log("Undefined entry", e);
+        return;
+      }
       var elements = {};
       e.children.forEach(v => (elements[v.attributes.name] = {$merge: {...v.attributes, value: v.children.length ? v.children[0].value.trim() : 'Off' }}));
       this.setState(prevState => (
@@ -480,6 +482,10 @@ export default class INDI extends React.Component {
   setNumberVector(e) {
       //console.log(e.children);
       var entry = {...e.attributes}
+      if (this.state.entries[entry.device][entry.name] === undefined) {
+        console.log("Undefined entry", e);
+        return;
+      }
       var elements = {};
       e.children.forEach(v => (elements[v.attributes.name] = {$merge: {...v.attributes, value: v.children.length ? v.children[0].value.trim() : '0' }}));
       this.setState(prevState => (
@@ -490,6 +496,10 @@ export default class INDI extends React.Component {
   setTextVector(e) {
       //console.log(e.children);
       var entry = {...e.attributes}
+      if (this.state.entries[entry.device][entry.name] === undefined) {
+        console.log("Undefined entry", e);
+        return;
+      }
       var elements = {};
       e.children.forEach(v => (elements[v.attributes.name] = {$merge: {...v.attributes, value: v.children.length ? v.children[0].value.trim() : '' }}));
       this.setState(prevState => (
@@ -500,6 +510,10 @@ export default class INDI extends React.Component {
   setLightVector(e) {
       //console.log(e.children);
       var entry = {...e.attributes}
+      if (this.state.entries[entry.device][entry.name] === undefined) {
+        console.log("Undefined entry", e);
+        return;
+      }
       var elements = {};
       e.children.forEach(v => (elements[v.attributes.name] = {$merge: {...v.attributes, value: v.children.length ? v.children[0].value.trim() : 'Idle' }}));
       this.setState(prevState => (
