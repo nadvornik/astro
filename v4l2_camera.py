@@ -336,9 +336,11 @@ class Camera:
 				fcntl.ioctl(self.vd, VIDIOC_STREAMOFF, type)
 			except:
 				log.exception('Unexpected error')		
+		del self.buffers
 		for mm in self.mm:
 			mm.close()
 		self.mm = []
+		self.buffers = []
 		if self.vd is not None:
 			log.info("v4l close fd %s", self.vd)
 			os.close(self.vd)
