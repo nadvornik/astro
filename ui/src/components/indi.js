@@ -376,11 +376,14 @@ export default class INDI extends React.Component {
     } else {
       uri = "ws:";
     }
-    uri += "//" + loc.host + '/';
+    if (loc.hostname === '127.0.0.1')
+      uri += "//" + loc.host + '/';
+    else
+      uri += "//" + loc.hostname + ':8081/';
     uri += 'websocket';
 
     console.log(uri);
-    this.webSocket = new WebSocket(uri);
+    this.webSocket = new WebSocket(uri, ['binary', 'base64']);
     this.webSocket.onmessage = function (event) {
       if (event.data instanceof Blob) {
         var textreader = new FileReader();
@@ -430,6 +433,7 @@ export default class INDI extends React.Component {
       this.setState(prevState => (
           update(prevState, {entries: { $auto: {[entry.device]: { $auto: {[entry.name]: { $set: entry }}}}}})
       ));
+      this.message(e);
   }
 
   defTextVector(e) {
@@ -441,6 +445,7 @@ export default class INDI extends React.Component {
       this.setState(prevState => (
           update(prevState, {entries: { $auto: {[entry.device]: { $auto: {[entry.name]: { $set: entry }}}}}})
       ));
+      this.message(e);
   }
 
   defNumberVector(e) {
@@ -452,6 +457,7 @@ export default class INDI extends React.Component {
       this.setState(prevState => (
           update(prevState, {entries: { $auto: {[entry.device]: { $auto: {[entry.name]: { $set: entry }}}}}})
       ));
+      this.message(e);
   }
 
   defLightVector(e) {
@@ -463,6 +469,7 @@ export default class INDI extends React.Component {
       this.setState(prevState => (
           update(prevState, {entries: { $auto: {[entry.device]: { $auto: {[entry.name]: { $set: entry }}}}}})
       ));
+      this.message(e);
   }
 
   setSwitchVector(e) {
@@ -477,6 +484,7 @@ export default class INDI extends React.Component {
       this.setState(prevState => (
           update(prevState, {entries: {[entry.device]: {[entry.name]: {$merge: entry, elements: elements }}}})
       ));
+      this.message(e);
   }
 
   setNumberVector(e) {
@@ -491,6 +499,7 @@ export default class INDI extends React.Component {
       this.setState(prevState => (
           update(prevState, {entries: {[entry.device]: {[entry.name]: {$merge: entry, elements: elements }}}})
       ));
+      this.message(e);
   }
 
   setTextVector(e) {
@@ -505,6 +514,7 @@ export default class INDI extends React.Component {
       this.setState(prevState => (
           update(prevState, {entries: {[entry.device]: {[entry.name]: {$merge: entry, elements: elements }}}})
       ));
+      this.message(e);
   }
 
   setLightVector(e) {
@@ -519,6 +529,7 @@ export default class INDI extends React.Component {
       this.setState(prevState => (
           update(prevState, {entries: {[entry.device]: {[entry.name]: {$merge: entry, elements: elements }}}})
       ));
+      this.message(e);
   }
 
   delProperty(e) {
@@ -532,11 +543,13 @@ export default class INDI extends React.Component {
           update(prevState, {entries: {$unset: [e.attributes.device]}})
         ));
       }
+      this.message(e);
   }
 
   message(e) {
-    console.log(e);
-    this.setState({messages: [...this.state.messages.slice(-50), `${e.attributes.timestamp} ${e.attributes.device}: ${e.attributes.message}`]});
+    if (!e.attributes.message) return;
+//    this.setState(prevState => ({messages: [...prevState.messages.slice(-50), `${e.attributes.timestamp} ${e.attributes.device}: ${e.attributes.message}`]}));
+    this.setState(prevState => ({messages: [`${e.attributes.timestamp} ${e.attributes.device}: ${e.attributes.message}`, ...prevState.messages.slice(0, 50)]}));
   }
 
   actionSetProp(device, name, changes) {
