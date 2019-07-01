@@ -7,6 +7,10 @@
   margin: 15px;
 }
 
+.INDIMessages {
+  margin: 15px;
+}
+
 .INDIgroup {
   display: grid;
   grid-template-columns:  1fr repeat(4, 1fr);

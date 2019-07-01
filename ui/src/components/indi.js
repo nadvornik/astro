@@ -98,7 +98,7 @@ function format_num(v, format) {
 }
 
 function parse_num(s) {
-  var comp = s.match(/^ *(-?\d+(\.\d+)?) *((hr)|h|(deg)|º|:)? *(\d+(\.\d+)?)? *((min)|m|'|:)? *(\d+(\.\d+)?)? *((sec)|s|"|:)? *$/);
+  var comp = s.match(/^ *(-?\d+(\.\d+)?) *((hr)|h|(deg)|º|:)? *(\d+(\.\d+)?)? *((min)|m|'|:)? *(\d+(\.\d+)?)? *((sec)|s|"|:)? *$/); //'
   if (comp == null) return '';
   
   var mul = 1.0;
@@ -314,7 +314,7 @@ function INDIMessages(props) {
       <h2>Messages</h2>
       <div>
         {Object.values(props.messages).map((e, index) => (
-          <div key={index}>{e}</div>
+          <div className='INDIMessage' key={index}>{e}</div>
         ))}
       </div>
     </div>
