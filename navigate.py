@@ -3014,7 +3014,7 @@ class Runner(threading.Thread):
 		
 		prop_str = """
 		<INDIDriver>
-			<defSwitchVector device="{0}" name="run_mode" label="Mode" group="Main Control" state="Idle" perm="rw" rule="AtMostOne">
+			<defSwitchVector device="{0}" name="run_mode" label="Mode" group="Run Control" state="Idle" perm="rw" rule="AtMostOne">
 		"""
 		if guider:
 			prop_str += '<defSwitch name="guider">Off</defSwitch>'
@@ -3028,6 +3028,28 @@ class Runner(threading.Thread):
 		"""
 		
 		driver.defineProperties(prop_str.format(device))
+		
+		if focuser:
+			driver.defineProperties("""
+			<INDIDriver>
+				<defSwitchVector device="{0}" name="focus_plus" label="Focus" group="Run Control" state="Idle" perm="rw" rule="AtMostOne">
+					<defSwitch name="f+3">Off</defSwitch>
+					<defSwitch name="f+2">Off</defSwitch>
+					<defSwitch name="f+1">Off</defSwitch>
+				</defSwitchVector>
+
+				<defSwitchVector device="{0}" name="focus_minus" label="Focus" group="Run Control" state="Idle" perm="rw" rule="AtMostOne">
+					<defSwitch name="f-3">Off</defSwitch>
+					<defSwitch name="f-2">Off</defSwitch>
+					<defSwitch name="f-1">Off</defSwitch>
+				</defSwitchVector>
+
+				<defNumberVector device="{0}" name="focus_pos" label="Focus" group="Run Control" state="Idle" perm="ro" timeout="60">
+					<defNumber name="pos" label="Pos" format="%5.0f">0</defNumber>
+				</defNumberVector>
+			</INDIDriver>
+			""".format(device))
+
 		
 		self.props = driver[device]
 		driver.register(device)
@@ -3166,6 +3188,12 @@ class Runner(threading.Thread):
 					self.camera.cmd('exp-sec-' + str(prop['EXP_TIME']))
 					self.camera.cmd('test-exp-sec-' + str(prop['TEST_EXP_TIME']))
 					prop.setAttr('state', 'Ok')
+				elif name == 'focus_plus' or name == 'focus_minus':
+					cmd = prop.getActiveSwitch()
+					cmdQueue.put(cmd)
+					prop.setAttr('state', 'Ok')
+					prop[cmd].setValue(False)
+
 				else:
 					if self.navigator:
 						self.navigator.handleNewProp(msg, prop)
@@ -3283,6 +3311,14 @@ class Runner(threading.Thread):
 			
 					if mode == 'focuser':
 						self.focuser.cmd(cmd)
+			
+			try:
+				if self.props["focus_pos"]["pos"] != self.camera.focuser.pos:
+					self.props["focus_pos"]["pos"].setValue(self.camera.focuser.pos)
+					self.props["focus_pos"].setAttr('state', 'Ok')
+					self.driver.enqueueSetMessage(self.props["focus_pos"])
+			except:
+				pass
 			
 			if not self.camera_run:
 				time.sleep(1)
