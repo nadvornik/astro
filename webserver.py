@@ -45,8 +45,8 @@ class MjpegBuf:
 		t0 = time.time()
 		with self.condition:
 			while self.buf is None or seq == self.seq + 1:
-				if time.time() > t0 + 25:
-					handler.send_response(501)
+				if self.buf is None or time.time() > t0 + 25:
+					handler.send_response(503)
 					handler.send_header('Connection', 'close')
 					handler.end_headers()
 					log.info("req timeout")
