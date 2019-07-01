@@ -103,11 +103,7 @@ class Camera_indi:
 				pass
 
 
-	def capture_(self):
-
-		if self.driver[self.device]["CONNECTION"]["CONNECT"] == False:
-			self.driver.sendClientMessageWait(self.device, "CONNECTION", {"CONNECT": "On"})
-		
+	def check_stream(self):
 		if self.driver[self.device]["CCD_VIDEO_STREAM"]["STREAM_ON"] == False:
 			while True: # empty queue
 				msg, prop = self.driver.get(self.device, block=False, msg_type = 'snoop')
@@ -118,7 +114,7 @@ class Camera_indi:
 			self.max_height = self.driver[self.device]["CCD_INFO"]["CCD_MAX_Y"].native()
 			
 
-			self.driver.sendClientMessageWait(self.device, "CCD_VIDEO_FORMAT", {'ASI_IMG_RAW8': 'On', 'ASI_IMG_RAW16': 'Off'})
+			self.driver.sendClientMessageWait(self.device, "CCD_VIDEO_FORMAT", {'ASI_IMG_RAW8': 'On'})
 			
 #			self.driver.sendClientMessageWait(self.device, "CCD_COLOR_SPACE", {"CCD_COLOR_RGB": "On"})
 			self.driver.sendClientMessageWait(self.device, "Stack", {"Mean": "On"})
@@ -136,15 +132,14 @@ class Camera_indi:
 			self.driver.sendClientMessageWait(self.device, "CCD_VIDEO_STREAM", {"STREAM_ON": "On"})
 			self.driver.sendClient(indi.enableBLOB(self.device, "CCD1"))
 
+	def capture_(self):
 
-#			while True: # empty queue
-#				log.info("waiting")
-#				time.sleep(1)
-#				if self.driver[self.device]["CCD_VIDEO_STREAM"]["STREAM_ON"] == True:
-#					break
-
+		if self.driver[self.device]["CONNECTION"]["CONNECT"] == False:
+			self.driver.sendClientMessageWait(self.device, "CONNECTION", {"CONNECT": "On"})
+		
 
 		while True:
+			self.check_stream()
 			msg, prop = self.driver.get(self.device, block=True, timeout=5, msg_type = 'snoop')
 			
 			if prop is None:
@@ -193,8 +188,8 @@ class Camera_indi:
 			if prop is None:
 				break
 
-		self.driver.sendClientMessageWait(self.device, "Stack", {"Mean": "On"})
-		self.driver.sendClientMessageWait(self.device, "CCD_COLOR_SPACE", {"CCD_COLOR_RGB": "On"})
+		#self.driver.sendClientMessageWait(self.device, "Stack", {"Mean": "On"})
+		#self.driver.sendClientMessageWait(self.device, "CCD_COLOR_SPACE", {"CCD_COLOR_RGB": "On"})
 		
 		
 		self.driver.sendClient(indi.enableBLOB(self.device, "CCD1"))
@@ -251,6 +246,13 @@ class Camera_indi:
 
 	def shutdown(self):
 		self.driver.sendClientMessageWait(self.device, "CCD_VIDEO_STREAM", {"STREAM_ON": "Off"})
+		
+		self.driver.sendClientMessageWait(self.device, "CCD_BINNING", {'HOR_BIN': 1, 'VER_BIN': 1})
+
+		self.driver.sendClientMessageWait(self.device, "CCD_VIDEO_FORMAT", {'ASI_IMG_RAW16': 'On'})
+
+		self.driver.sendClientMessageWait(self.device, "CCD_FRAME_RESET", {'RESET': 'On'})
+
 
 
 
