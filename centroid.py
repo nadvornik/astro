@@ -126,6 +126,25 @@ def gaussian2d(c, my, mx, sig, mag, shift):
 	r2 = (x - mx) ** 2 + (y - my) ** 2
 	return (np.exp(-r2 / (2 * sig * sig)) * mag + shift)
 
+def getRectSubPix(im, size, p, patchType=cv2.CV_32FC1):
+	y = int(p[1])
+	x = int(p[0])
+	
+	y0 = max(0, y - size[1] - 1)
+	x0 = max(0, x - size[0] - 1)
+
+	y1 = min(im.shape[0], y + size[1] + 2)
+	x1 = min(im.shape[1], x + size[0] + 2)
+	
+	#print("shape", im.shape)
+	#print(size, p, x, y, y0, y1, x0, x1)
+	
+	imr = np.array(im[y0:y1, x0:x1], dtype = np.float32)
+	#print(imr)
+	r = cv2.getRectSubPix(imr, size, (p[0] - x0, p[1] - y0), patchType=cv2.CV_32FC1)
+	#print(r)
+	return r
+
 #def get_fwhm(a):
 #	x0 = np.arange(a.shape[1])
 #	y0 = np.arange(a.shape[0])

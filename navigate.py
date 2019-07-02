@@ -46,7 +46,7 @@ import json
 from focuser_out import FocuserOut
 from temp_sensor import TempSensor
 from ext_trigger import ExtTrigger
-from centroid import centroid, sym_center, hfr, fit_ellipse
+from centroid import centroid, sym_center, hfr, fit_ellipse, getRectSubPix
 from polyfit import *
 from quat import Quaternion
 from star_detector import *
@@ -260,7 +260,7 @@ def get_hfr_field(im, pts, hfr_size = 20, sub_bg = False):
 			if hf < 0.9:
 				continue
 			
-			if hf > hfr_size * 0.5:
+			if hf > hfr_size * 0.7:
 				continue
 
 			hfr_list.append((y, x, hf) )
@@ -410,6 +410,10 @@ def plot_bg(*args, **kwargs):
 
 def apply_gamma8(img, gamma):
 	lut = np.fromiter( ( (x / 255.0)**gamma * 255.0 for x in range(256)), dtype=np.uint8 )
+	return np.take(lut, img)
+
+def apply_gamma16_to8(img, gamma):
+	lut = np.fromiter( ( (x / 65535.0)**gamma * 255.0 for x in range(65535)), dtype=np.uint8 )
 	return np.take(lut, img)
 
 def format_coords(ra, dec):
@@ -997,31 +1001,36 @@ class Navigator:
 		
 	
 	def proc_full_res(self, imgdata, name = None):
-		process = psutil.Process(os.getpid())
-		t = time.time()
-		(temp, hum) = self.mount.temp_sensor.get()
-
-		if (self.status['full_dispmode'] == 'full-disp-orig'):
-			if self.full_res is not None:
-				self.full_res['full_hfr'].append(0)
-				self.full_res['full_name'].append(name)
-				self.full_res['full_temp'].append(temp)
-				self.full_res['full_hum'].append(hum)
-				self.full_res['full_ts'] = t
-			cmdQueue.put('capture-full-res-done')
-			return
-				
-
 		with self.full_res_lock:
+			process = psutil.Process(os.getpid())
+			t = time.time()
+			(temp, hum) = self.mount.temp_sensor.get()
+
+			hdulist = None
+			
 			try:
-				if name.endswith('.jpg'):
-					im_c = cv2.imdecode(np.fromstring(jpg, dtype=np.uint8), -1)
-				elif name.endswith('.fits'):
+				if name.endswith('.fits'):
 					hdulist=fits.open(imgdata)
 					im_c = hdulist[0].data
+					
+					ui.imshow('full_res', apply_gamma16_to8(im_c, 0.6))
 #			log.error("shape %s", im.shape) #(3, 720, 1280)
 #			im = im[1]
 
+				if (self.status['full_dispmode'] == 'full-disp-orig'):
+					if self.full_res is not None:
+						self.full_res['full_hfr'].append(0)
+						self.full_res['full_name'].append(name)
+						self.full_res['full_temp'].append(temp)
+						self.full_res['full_hum'].append(hum)
+						self.full_res['full_ts'] = t
+					cmdQueue.put('capture-full-res-done')
+					if hdulist is not None:
+						hdulist.close()
+					return
+
+				if name.endswith('.jpg'):
+					im_c = cv2.imdecode(np.fromstring(jpg, dtype=np.uint8), -1)
 
 				log.info("full_res decoded")
 				#mean, stddev = cv2.meanStdDev(im_c)
@@ -1043,7 +1052,7 @@ class Navigator:
 					im = cv2.cvtColor(im_c, cv2.COLOR_RGB2GRAY);
 					im = apply_gamma8(im, 2.2)
 				else:
-					im = cv2.add(im_c, 0, dtype=cv2.CV_8UC1)
+					im = im_c #cv2.add(im_c, 0, dtype=cv2.CV_8UC1)
 		
 				log.info("full_res bg")
 				pts = find_max(im, 12, 200)
@@ -1060,6 +1069,8 @@ class Navigator:
 					self.full_res['full_hum'].append(hum)
 					self.full_res['full_ts'] = t
 				cmdQueue.put('capture-full-res-done')
+				if hdulist is not None:
+					hdulist.close()
 				return
 
 			if len(pts) < 1:
@@ -1071,6 +1082,8 @@ class Navigator:
 					self.full_res['full_hum'].append(hum)
 					self.full_res['full_ts'] = t
 				cmdQueue.put('capture-full-res-done')
+				if hdulist is not None:
+					hdulist.close()
 				return
 		
 			try:
@@ -1079,13 +1092,13 @@ class Navigator:
 				pts_v_thr = pts_v_min + (pts_v_max - pts_v_min) * 0.8
 			
 				pts_no_over = pts[(pts[:, 2] <= pts_v_thr)]
-				log.info("pts min %f max %f thr %f", pts_v_min, pts_v_max, pts_v_thr)
+				log.info("pts min %f max %f thr %f len %d %d", pts_v_min, pts_v_max, pts_v_thr, len(pts), len(pts_no_over))
 		
 				hfr_list = get_hfr_field(im, pts_no_over, sub_bg = True)
 				log.info("full_res get hfr")
 				hfr_list = filter_hfr_list(hfr_list)
 		
-				full_hfr = np.mean(hfr_list[:,2])
+				full_hfr = np.mean(np.array(hfr_list)[:,2])
 			
 				if self.full_res is not None:
 					self.full_res['full_hfr'].append(full_hfr)
@@ -1094,18 +1107,20 @@ class Navigator:
 					self.full_res['full_hum'].append(hum)
 					self.full_res['full_ts'] = t
 		
-				log.info("full_res filter hfr")
+				log.info("full_res filter hfr %f", full_hfr)
 
 				ell_list = []
 				for p in hfr_list:
 					patch_size = int(p[2] * 4 + 2)
-					a = cv2.getRectSubPix(im, (patch_size, patch_size), (p[1] - 0.5, p[0] - 0.5), patchType=cv2.CV_32FC1)
+					a = getRectSubPix(im, (patch_size, patch_size), (p[1] - 0.5, p[0] - 0.5), patchType=cv2.CV_32FC1)
 					ell_list.append(fit_ellipse(a))
 				
 				del im
 			except:
 				log.exception('full_res hfr')
 				cmdQueue.put('capture-full-res-done')
+				if hdulist is not None:
+					hdulist.close()
 				return
 
 			log.info("full_res ell")
@@ -1114,6 +1129,8 @@ class Navigator:
 			if len(pts) < 7:
 				log.info("full_res no sources detected")
 				cmdQueue.put('capture-full-res-done')
+				if hdulist is not None:
+					hdulist.close()
 				return
 
 			try:
@@ -1160,6 +1177,8 @@ class Navigator:
 		
 				if (self.status['full_dispmode'] == 'full-disp-hfr'):
 					cmdQueue.put('capture-full-res-done')
+					if hdulist is not None:
+						hdulist.close()
 					return
 				solver.join()
 				if solver.solved:
@@ -1195,6 +1214,8 @@ class Navigator:
 			except:
 				log.exception('full_res solver')
 			cmdQueue.put('capture-full-res-done')
+			if hdulist is not None:
+				hdulist.close()
 	
 	def get_xy_cor(self):
 		xy = self.stack.get_xy()
@@ -4038,6 +4059,10 @@ def run_test_full_res():
 	from kstars_camera import Camera_test_kstars, Camera_test_kstars_g
 	global status
 	status = Status("run_test_2.conf")
+
+	global driver
+	driver = IndiDriver()
+
 	ui.namedWindow('navigator')
 	ui.namedWindow('guider')
 	ui.namedWindow('polar')
@@ -4055,27 +4080,24 @@ def run_test_full_res():
 
 	fo = FocuserOut()
 	cam1 = Camera_test_kstars(status.path(["navigator", "camera"]), go_ra, go_dec, fo)
-	nav1 = Navigator(status.path(["navigator"]), dark1, mount, 'navigator', polar_tid = 'polar', full_res = status.path(["full_res"]))
+	nav1 = Navigator(driver, "Navigator", status.path(["navigator"]), dark1, mount, 'navigator', polar_tid = 'polar', full_res = status.path(["full_res"]))
 
-	nav = Navigator(status.path(["guider", "navigator"]), dark2, mount, 'guider')
+	nav = Navigator(driver, "Guider", status.path(["guider", "navigator"]), dark2, mount, 'guider')
 
-	guider = Guider(status.path(["guider"]), mount, dark2, 'guider', full_res = status.path(["full_res"]))
+	guider = Guider(driver, "Guider", status.path(["guider"]), mount, dark2, 'guider', full_res = status.path(["full_res"]))
 	#cam = Camera_test(status.path(["guider", "navigator", "camera"]))
 	cam = Camera_test_kstars_g(status.path(["guider", "navigator", "camera"]), cam1)
 
 
-	focuser = Focuser('navigator', status.path(["navigator", "focuser"]), dark = dark1)
+	focuser = Focuser(driver, "Navigator", 'navigator', status.path(["navigator", "focuser"]), dark = dark1)
 	
 #	profiler = LineProfiler()
 #	profiler.add_function(Navigator.proc_full_res)
 #	profiler.enable_by_count()
 		
-	for i in range(5733, 5880):
-		tmpFile = io.BytesIO()
-		pil_image = Image.open('../af7/IMG_%d.JPG' % i)
-		pil_image.save(tmpFile,'JPEG')
-		file_data = tmpFile.getvalue()
-		nav1.proc_full_res(file_data)
+	for i in range(0,10000):
+		fn = "../data/IMAGE_%03d.fits" % (i % 17);
+		nav1.proc_full_res(fn, fn)
 		time.sleep(1)
 	
 #	profiler.print_stats()
