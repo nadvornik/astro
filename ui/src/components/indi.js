@@ -40,7 +40,7 @@ function format_num(v, format) {
   if (re_res === null) return v;
   var [match, pad, len, prec, f] = re_res
 
-  if (pad === '') pad = ' ';
+//  if (pad === '') pad = ' ';
 
   v = parseFloat(v);
   var sign = '';
@@ -620,7 +620,8 @@ export default class INDI extends React.Component {
 
   render() {
     var devices = {};
-    Object.values(this.state.entries).forEach(dev => Object.values(dev).forEach(e => {
+    Object.keys(this.state.entries).map(dev => Object.keys(this.state.entries[dev]).map(name => {
+      var e = this.state.entries[dev][name]
       if (!(e.device in devices)) devices[e.device] = {};
       if (!(e.group in devices[e.device])) devices[e.device][e.group] = {};
       devices[e.device][e.group][e.name] = e;

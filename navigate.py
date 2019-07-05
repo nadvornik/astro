@@ -2556,7 +2556,7 @@ class Focuser:
 				self.changePhase('search')
 		elif self.status['phase'] == 'search': # step far, record max flux
 			flux, hfr, yx = self.get_max_flux(self.stack_im, self.stack.get_xy(), self.stddev)
-			if flux < self.max_flux * 0.7 or hfr > self.min_hfr * 2 or self.search_steps > 120:
+			if hfr is not None and (flux < self.max_flux * 0.7 or hfr > self.min_hfr * 2) or self.search_steps > 120:
 				self.changePhase('prep_record_v')
 				self.step(-1)
 			else:
