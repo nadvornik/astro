@@ -54,7 +54,8 @@ class MjpegBuf:
 #					raise EOFError()
 				self.condition.wait(10)
 			if not self.encoded:
-				ret, file_data = cv2.imencode('.jpg', self.buf)
+				encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 80]
+				ret, file_data = cv2.imencode('.jpg', self.buf, encode_param)
 				self.buf = file_data.tobytes()
 				del file_data
 				self.encoded = True
