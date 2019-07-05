@@ -159,6 +159,24 @@ def normalize(img):
 	return cv2.normalize(img, dst, alpha = 0, beta = 255, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_8UC1)
 	
 
+def cv2_dtype(dtype):
+	if dtype == np.uint8:
+		return cv2.CV_8UC1
+	else:
+		return cv2.CV_16UC1
+	
+
+def subtract_bg(im, scale):
+	bg = cv2.resize(im, ((im.shape[1] + scale - 1) // scale, (im.shape[0] + scale - 1) // scale), interpolation=cv2.INTER_AREA)
+	bg = cv2.erode(bg, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5,5)))
+	bg = cv2.blur(bg, (20,20))
+	bg = cv2.blur(bg, (20,20))
+	bg = cv2.blur(bg, (20,20))
+	bg = cv2.resize(bg, (im.shape[1], im.shape[0]), interpolation=cv2.INTER_AREA)
+	bg = cv2.subtract(bg, 1)
+	im = cv2.subtract(im, bg)
+	return im
+
 class Median:
 	def __init__(self, n):
 		self.n = n
@@ -200,6 +218,25 @@ class Median:
 		self._add(res)
 		#ui.imshow("dark", normalize(inv_mask))
 
+	def _add_mean(self, im, pts=None):
+		if im.dtype == np.uint8:
+			cv2_dtype = cv2.CV_8SC1
+		else:
+			cv2_dtype = cv2.CV_16SC1
+	
+		mean, stddev = cv2.meanStdDev(im)
+		im = cv2.subtract(im, mean, dtype=cv2_dtype)
+		
+		im = np.clip(im, -3 * stddev, 3 * stddev)
+		
+		mean, stddev = cv2.meanStdDev(im)
+		im = cv2.subtract(im, mean, dtype=cv2_dtype)
+		if pts is None:
+			self._add(im)
+		else:
+			self._add_masked(im, pts)
+		
+
 	def add(self, *args, **kwargs):
 		if self.bg_thread is not None:
 			self.bg_thread.join()
@@ -214,18 +251,26 @@ class Median:
 		self.bg_thread = threading.Thread(target=self._add_masked, args = args, kwargs = kwargs)
 		self.bg_thread.start()
 
+	def add_mean(self, *args, **kwargs):
+		if self.bg_thread is not None:
+			self.bg_thread.join()
+		
+		self.bg_thread = threading.Thread(target=self._add_mean, args = args, kwargs = kwargs)
+		self.bg_thread.start()
+
 		
 	def get(self):
 		if self.bg_thread is not None:
 			self.bg_thread.join()
 			self.bg_thread = None
-			
+		
 		return self.res
 
 	def len(self):
 		if self.bg_thread is not None:
 			self.bg_thread.join()
 			self.bg_thread = None
+
 		return len(self.list)
 
 	def reset(self):
@@ -644,13 +689,11 @@ class Navigator:
 		if t is None:
 			t = time.time()
 		if (self.dark.len() > 2):
-			im_sub = cv2.subtract(im, self.dark.get())
+			im_sub = cv2.subtract(im, self.dark.get(), dtype=cv2_dtype(im))
 		else:
 			im_sub = im
-			
-		bg = cv2.blur(im_sub, (30, 30))
-		bg = cv2.blur(bg, (30, 30))
-		im_sub = cv2.subtract(im_sub, bg)
+		
+		im_sub = subtract_bg(im_sub, 10)
 
 		n_hotpixels = 0
 		if self.hotpixels is not None:
@@ -659,7 +702,7 @@ class Navigator:
 				cv2.circle(im_sub, (int(p[1] + 0.5), int(p[0] + 0.5)), 1, (0), -1)
 
 		if i < 6:
-			self.dark.add(im)
+			self.dark.add_mean(im)
 			self.hotpix_find()
 		
 		if i == 6:
@@ -692,7 +735,7 @@ class Navigator:
 					self.wcs = self.solver.wcs
 			
 					if i - self.i_dark > 12:
-						self.dark.add_masked(self.solved_im, self.solver.ind_sources)
+						self.dark.add_mean(self.solved_im, self.solver.ind_sources)
 						self.i_dark = i
 				
 					self.index_sources = self.solver.ind_radec
@@ -886,7 +929,7 @@ class Navigator:
 
 			if prop['darkframe'] == True:
 				prop['darkframe'].setValue(False)
-				self.dark.add(self.im)
+				self.dark.add_mean(self.im)
 				prop.setAttr('state', 'Ok')
 
 			if prop['hotpixels'] == True:
@@ -927,7 +970,7 @@ class Navigator:
 			self.status['radius'] = self.status['max_radius']
 
 		if cmd == 'dark':
-			self.dark.add(self.im)
+			self.dark.add_mean(self.im)
 
 		if cmd == 'hotpixels':
 			self.hotpix_find()
@@ -1037,16 +1080,7 @@ class Navigator:
 				#im_c[:,:,0] = cv2.subtract(im_c[:,:,0], mean[0])
 				#im_c[:,:,1] = cv2.subtract(im_c[:,:,1], mean[1])
 				#im_c[:,:,2] = cv2.subtract(im_c[:,:,2], mean[2])
-				scale= 10
-				bg = cv2.resize(im_c, ((im_c.shape[1] + scale - 1) // scale, (im_c.shape[0] + scale - 1) // scale), interpolation=cv2.INTER_AREA)
-				bg = cv2.erode(bg, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3,3)))
-				log.info("full_res erode")
-				bg = cv2.blur(bg, (20,20))
-				bg = cv2.blur(bg, (20,20))
-				bg = cv2.blur(bg, (20,20))
-				bg = cv2.resize(bg, (im_c.shape[1], im_c.shape[0]), interpolation=cv2.INTER_AREA)
-				im_c = cv2.subtract(im_c, bg)
-				del bg
+				im_c = subtract_bg(im_c, 15)
 
 				if name.endswith('.jpg'):
 					im = cv2.cvtColor(im_c, cv2.COLOR_RGB2GRAY);
@@ -1602,7 +1636,7 @@ class Guider:
 			if (y > h - 1):
 				continue
 			pts.append((x,y))
-		return self.dark.add_masked(im, pts)
+		return self.dark.add_mean(im, pts)
 
 	def update_pt0(self):
 		try:
@@ -1829,7 +1863,7 @@ class Guider:
 			self.mount.go_dec.out(0)
 
 		if (self.dark.len() >= 4):
-			im_sub = cv2.subtract(im, self.dark.get())
+			im_sub = cv2.subtract(im, self.dark.get(), dtype=cv2_dtype(im))
 		else:
 			im_sub = im
 
@@ -1839,9 +1873,7 @@ class Guider:
 				self.changePhase('track')		
 		
 		if self.status['mode'] != 'close':
-			bg = cv2.blur(im_sub, (30, 30))
-			bg = cv2.blur(bg, (30, 30))
-			im_sub = cv2.subtract(im_sub, bg)
+			im_sub = subtract_bg(im_sub, 10)
 
 			pt = find_max(im_sub, 20, n = 30)
 
@@ -1894,7 +1926,7 @@ class Guider:
 
 				if (dist > 20):
 					if i % int(2 + (i - self.i0) / self.dist) == 0:
-						self.dark.add(im)
+						self.dark.add_mean(im)
 					self.resp0.append((t - self.t0, dist, 0))
 				max_move = 30 * (t - self.t0)
 				if self.off_t is not None:
@@ -2307,7 +2339,7 @@ class Focuser:
 
 	def cmd(self, cmd):
 		if cmd == 'dark':
-			self.dark.add(self.im)
+			self.dark.add_mean(self.im)
 		if cmd.startswith('disp-'):
 			self.dispmode = cmd[len('disp-'):]
 		if cmd == 'af':
@@ -2470,18 +2502,16 @@ class Focuser:
 
 		self.im = im
 		
-		im = cv2.medianBlur(im, 3)
+#		im = cv2.medianBlur(im, 3)
 
 		if (self.dark.len() > 0):
 			log.info(im.shape)
 			log.info(self.dark.get().shape)
-			im_sub = cv2.subtract(im, self.dark.get())
+			im_sub = cv2.subtract(im, self.dark.get(), dtype=cv2_dtype(im))
 		else:
 			im_sub = im
 
-		bg = cv2.blur(im_sub, (200, 200))
-		bg = cv2.blur(bg, (200, 200))
-		im_sub = cv2.subtract(im_sub, bg)
+		im_sub = subtract_bg(im_sub, 10)
 
 		self.stack.add_simple(im_sub)
 		self.stack_im = self.stack.get()
@@ -2515,7 +2545,7 @@ class Focuser:
 		elif self.status['phase'] == 'dark': # use current image as darkframes
 			if self.dark_add > 0:
 				self.dark_add -= 1
-				self.dark.add(self.im)
+				self.dark.add_mean(self.im)
 			else:
 				mean, self.stddev = cv2.meanStdDev(self.stack_im)
 				log.info("mean, stddev: %f %f", mean, self.stddev)
@@ -3966,7 +3996,7 @@ def run_calibrate_v4l2_g():
 			im, t = cam.capture()
 			if im.ndim > 2:
 				im = cv2.min(cv2.min(im[:, :, 0], im[:, :, 1]), im[:, :, 2])
-			dark.add(im)
+			dark.add_mean(im)
 			ui.imshow('guider', normalize(im))
 
 		for test in range(0, 100):
@@ -3975,7 +4005,7 @@ def run_calibrate_v4l2_g():
 			if im.ndim > 2:
 				im = cv2.min(cv2.min(im[:, :, 0], im[:, :, 1]), im[:, :, 2])
 
-			im = cv2.subtract(im, dark.get())
+			im = cv2.subtract(im, dark.get(), dtype=cv2_dtype(im))
 			ui.imshow('guider', normalize(im))
 			val = int(np.amax(im))
 			log.info("%f %f, %f, %f", exp, test, out, val)
