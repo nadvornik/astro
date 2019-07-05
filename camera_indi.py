@@ -44,7 +44,28 @@ class Camera_indi:
 
 		self.max_width = 1280
 		self.max_height = 1024
+		
+		self.status['mode'] = 'z0'
 
+	def set_mode(self, mode):
+		if mode == 'z0':
+			self.driver.sendClientMessageWait(self.device, "CCD_BINNING", {'HOR_BIN': self.status['binning'], 'VER_BIN': self.status['binning']})
+			self.driver.sendClientMessageWait(self.device, "CCD_STREAM_FRAME", {
+				'X': 0,
+				'Y': 0,
+				'WIDTH': self.max_width // self.status['binning'],
+				'HEIGHT': self.max_height // self.status['binning']
+			})
+			self.status['mode'] = 'z0'
+		elif mode == 'z1':
+			self.driver.sendClientMessageWait(self.device, "CCD_BINNING", {'HOR_BIN': 1, 'VER_BIN': 1})
+			self.driver.sendClientMessageWait(self.device, "CCD_STREAM_FRAME", {
+				'X': self.status['zoom_pos'][0] * self.status['binning'],
+				'Y': self.status['zoom_pos'][1] * self.status['binning'],
+				'WIDTH': self.status['zoom_shape'][1],
+				'HEIGHT': self.status['zoom_shape'][0]
+			})
+			self.status['mode'] = 'z1'
 	
 	def cmd(self, cmd, x = None, y = None):
 		log.info("camera: %s", cmd)
@@ -56,13 +77,7 @@ class Camera_indi:
 		
 		if cmd == "z1":
 			self.driver.sendClientMessageWait(self.device, "CCD_VIDEO_STREAM", {"STREAM_ON": "Off"})
-			self.driver.sendClientMessageWait(self.device, "CCD_BINNING", {'HOR_BIN': 1, 'VER_BIN': 1})
-			self.driver.sendClientMessageWait(self.device, "CCD_STREAM_FRAME", {
-				'X': self.status['zoom_pos'][0] * self.status['binning'],
-				'Y': self.status['zoom_pos'][1] * self.status['binning'],
-				'WIDTH': self.status['zoom_shape'][1],
-				'HEIGHT': self.status['zoom_shape'][0]
-			})
+			self.set_mode('z1')
 			self.driver.sendClientMessageWait(self.device, "CCD_VIDEO_STREAM", {"STREAM_ON": "On"})
 			im, t = self.capture()
 			while im is not None and (im.shape[0] != self.status['zoom_shape'][0] or im.shape[1] != self.status['zoom_shape'][1]):
@@ -72,14 +87,7 @@ class Camera_indi:
 
 		if cmd == "z0":
 			self.driver.sendClientMessageWait(self.device, "CCD_VIDEO_STREAM", {"STREAM_ON": "Off"})
-			self.driver.sendClientMessageWait(self.device, "CCD_BINNING", {'HOR_BIN': self.status['binning'], 'VER_BIN': self.status['binning']})
-			self.driver.sendClientMessageWait(self.device, "CCD_STREAM_FRAME", {
-				'X': 0,
-				'Y': 0,
-				'WIDTH': self.max_width // self.status['binning'],
-				'HEIGHT': self.max_height // self.status['binning']
-			})
-			
+			self.set_mode('z0')
 			
 			self.driver.sendClientMessageWait(self.device, "CCD_VIDEO_STREAM", {"STREAM_ON": "On"})
 			im, t = self.capture()
@@ -114,23 +122,18 @@ class Camera_indi:
 			self.max_height = self.driver[self.device]["CCD_INFO"]["CCD_MAX_Y"].native()
 			
 
-			self.driver.sendClientMessageWait(self.device, "CCD_VIDEO_FORMAT", {'ASI_IMG_RAW8': 'On'})
+			self.driver.sendClientMessageWait(self.device, "CCD_VIDEO_FORMAT", {'ASI_IMG_RAW16': 'On'})
 			
 #			self.driver.sendClientMessageWait(self.device, "CCD_COLOR_SPACE", {"CCD_COLOR_RGB": "On"})
 			self.driver.sendClientMessageWait(self.device, "Stack", {"Mean": "On"})
 			
 			
 			self.cmd('zcenter')
-			
-			self.driver.sendClientMessageWait(self.device, "CCD_BINNING", {'HOR_BIN': self.status['binning'], 'VER_BIN': self.status['binning']})
-			self.driver.sendClientMessageWait(self.device, "CCD_STREAM_FRAME", {
-				'X': 0,
-				'Y': 0,
-				'WIDTH': self.max_width // self.status['binning'],
-				'HEIGHT': self.max_height // self.status['binning']
-			})
-			self.driver.sendClientMessageWait(self.device, "CCD_VIDEO_STREAM", {"STREAM_ON": "On"})
+
+			self.set_mode(self.status['mode'])
+
 			self.driver.sendClient(indi.enableBLOB(self.device, "CCD1"))
+			self.driver.sendClientMessageWait(self.device, "CCD_VIDEO_STREAM", {"STREAM_ON": "On"})
 
 	def capture_(self):
 
