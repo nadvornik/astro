@@ -546,7 +546,7 @@ class Navigator:
 				<defNumber name="t_solved" label="t_solved" format="%4.1f" min="0" max="0" step="0">0</defNumber>
 			</defNumberVector>
 
-			<defTextVector device="{0}" name="fileld_corr" label="Field correction file" group="Main Control" state="Idle" perm="rw">
+			<defTextVector device="{0}" name="field_corr" label="Field correction file" group="Main Control" state="Idle" perm="rw">
 				<defText name="file" label="file"></defText>
 			</defTextVector>
 
@@ -899,6 +899,9 @@ class Navigator:
 		name = prop.getAttr('name')
 		if name == 'dispmode':
 			self.status['dispmode'] = prop.getActiveSwitch()
+			prop.setAttr('state', 'Ok')
+		elif name == 'field_corr':
+			self.status['field_corr'] = prop['file'].getValue()
 			prop.setAttr('state', 'Ok')
 			
 		elif name == 'commands':
@@ -1367,22 +1370,6 @@ class GuiderAlg(object):
 	def get_corr_delay(self, t_proc):
 		return self.go.recent_avg(self.status['t_delay'] + t_proc, self.pixpersec, -self.pixpersec_neg)
 	
-	def proc(self, err, err2, t0):
-		if self.parity == 0:
-			return
-
-		corr = self.get_corr(err, err2, t0)
-		self.corr = corr
-		
-		if corr > self.status['min_move']:
-			self.go.out(-1, corr / self.pixpersec_neg)
-			self.status['last_move'] = corr
-		elif corr < -self.status['min_move']:
-			self.go.out(1, -corr / self.pixpersec)
-			self.status['last_move'] = corr
-		else:
-			self.go.out(0)
-			self.corr = 0
 
 class GuiderAlgDec(GuiderAlg):
 	def __init__(self, driver, device, go, status):
@@ -1405,10 +1392,11 @@ class GuiderAlgDec(GuiderAlg):
 			</defNumberVector>
 
 			<defNumberVector device="{0}" name="guider_dec_move" label="Guider Dec Output" group="Guider" state="Idle" perm="ro">
-				<defNumber name="current" label="move" format="%2.1f" min="0" max="0" step="0">0</defNumber>
+				<defNumber name="current" label="move" format="%2.3f" min="0" max="0" step="0">0</defNumber>
+				<defNumber name="acc" label="acc" format="%2.3f" min="0" max="0" step="0">0</defNumber>
 			</defNumberVector>
 
-			<defSwitchVector device="{0}" name="guider_dec_commands" label="Commands" group="Guider" state="Idle" perm="rw" rule="AtMostOne">
+			<defSwitchVector device="{0}" name="guider_dec_commands" label="Guider Dec Commands" group="Guider" state="Idle" perm="rw" rule="AtMostOne">
 				<defSwitch name="reset" label="reset">Off</defSwitch>
 			</defSwitchVector>
 
@@ -1464,6 +1452,28 @@ class GuiderAlgDec(GuiderAlg):
 
 		return corr
 
+	def proc(self, err, err2, t0):
+		if self.parity == 0:
+			return
+
+		corr = self.get_corr(err, err2, t0)
+		self.corr = corr
+		
+		if corr > self.status['min_move']:
+			self.go.out(-1, corr / self.pixpersec_neg)
+			self.status['last_move'] = corr
+		elif corr < -self.status['min_move']:
+			self.go.out(1, -corr / self.pixpersec)
+			self.status['last_move'] = corr
+		else:
+			self.go.out(0)
+			self.corr = 0
+
+		self.props["guider_dec_move"]["current"].setValue(self.corr)
+		self.props["guider_dec_move"]["acc"].setValue(self.corr_acc)
+		self.driver.enqueueSetMessage(self.props["guider_dec_move"])
+
+
 class GuiderAlgRa(GuiderAlg):
 	def __init__(self, driver, device, go, status):
 		super(GuiderAlgRa, self).__init__(go, status)
@@ -1480,11 +1490,12 @@ class GuiderAlgRa(GuiderAlg):
 				<defNumber name="aggressivness" label="aggressivness" format="%1.1f" min="0" max="1.5" step="0.1">0.5</defNumber>
 				<defNumber name="min_move" label="min_move" format="%1.1f" min="0" max="5" step="0.1">0.1</defNumber>
 				<defNumber name="t_delay" label="t_delay" format="%1.1f" min="0" max="10" step="0.1">0.5</defNumber>
-				<defNumber name="smooth" label="smooth" format="%1.2f" min="0.01" max="1" step="0.01">0.1</defNumber>
+				<defNumber name="smooth" label="smooth" format="%1.3f" min="0.01" max="1" step="0.01">0.1</defNumber>
 			</defNumberVector>
 
 			<defNumberVector device="{0}" name="guider_ra_move" label="Guider RA Output" group="Guider" state="Idle" perm="ro">
 				<defNumber name="current" label="move" format="%2.1f" min="0" max="0" step="0">0</defNumber>
+				<defNumber name="acc" label="acc" format="%2.3f" min="0" max="0" step="0">0</defNumber>
 			</defNumberVector>
 
 			<defSwitchVector device="{0}" name="guider_ra_commands" label="Guider RA Commands" group="Guider" state="Idle" perm="rw" rule="AtMostOne">
@@ -1524,6 +1535,27 @@ class GuiderAlgRa(GuiderAlg):
 		
 		log.info("ra err %f, err2 %f, err2norm %f, err2agg %f, corr_acc %f, corr %f", err, err2, err2norm, 1.0 / (1.0 + err2norm), self.corr_acc, corr)
 		return corr
+
+	def proc(self, err, err2, t0):
+		if self.parity == 0:
+			return
+
+		corr = self.get_corr(err, err2, t0)
+		self.corr = corr
+		
+		if corr > self.status['min_move']:
+			self.go.out(-1, corr / self.pixpersec_neg)
+			self.status['last_move'] = corr
+		elif corr < -self.status['min_move']:
+			self.go.out(1, -corr / self.pixpersec)
+			self.status['last_move'] = corr
+		else:
+			self.go.out(0)
+			self.corr = 0
+
+		self.props["guider_ra_move"]["current"].setValue(self.corr)
+		self.props["guider_ra_move"]["acc"].setValue(self.corr_acc)
+		self.driver.enqueueSetMessage(self.props["guider_ra_move"])
 
 
 class Guider:
@@ -1667,6 +1699,9 @@ class Guider:
 		name = prop.getAttr('name')
 		if name == 'expose':
 			self.status['seq'] = "seq-" + prop.getActiveSwitch()
+			prop.setAttr('state', 'Ok')
+		elif name == 'callibration':
+			self.status['pixpersec'], self.status['pixpersec_neg'], self.status['pixpersec_dec'], fixme = prop.to_array()
 			prop.setAttr('state', 'Ok')
 		else:
 			self.alg_ra.handleNewProp(msg, prop)
@@ -2052,9 +2087,16 @@ class Guider:
 						self.changePhase('track')
 						self.status['pixpersec_dec'] = None
 						self.mount.set_guider_calib(np.angle(self.ref_off, deg=True), 0, self.status['pixpersec'], self.status['pixpersec_neg'], 0, 0)
-						self.alg_ra = GuiderAlgRa(self.mount.go_ra, self.status['t_delay'], self.status['pixpersec'], self.status['pixpersec_neg'], self.status['ra_alg'])
-						self.alg_dec = None
+						#self.alg_ra = GuiderAlgRa(self.mount.go_ra, self.status['t_delay'], self.status['pixpersec'], self.status['pixpersec_neg'], self.status['ra_alg'])
+						self.alg_ra.set_params(self.status['pixpersec'], self.status['pixpersec_neg'])
+
+						self.alg_dec.set_params(0, 0, 0)
 						cmdQueue.put('interrupt')
+
+					self.props['callibration']['pixpersec_plus'].setValue(self.status['pixpersec'] or 0)
+					self.props['callibration']['pixpersec_minus'].setValue(self.status['pixpersec_neg'] or 0)
+					self.props['callibration']['pixpersec_dec'].setValue(self.status['pixpersec_dec'] or 0)
+					self.driver.enqueueSetMessage(self.props['callibration'])
 
 		elif self.status['mode'] == 'move_dec':
 			pt1m, pt2m, match = match_triangle(self.pt0, pt, 5, 50, self.off)
@@ -2104,7 +2146,12 @@ class Guider:
 						self.alg_dec.set_params(self.status['pixpersec_dec'], self.status['pixpersec_dec'], parity = self.parity)
 					else:
 						self.alg_dec.set_params(0, 0, 0)
-						
+					
+					self.props['callibration']['pixpersec_plus'].setValue(self.status['pixpersec'] or 0)
+					self.props['callibration']['pixpersec_minus'].setValue(self.status['pixpersec_neg'] or 0)
+					self.props['callibration']['pixpersec_dec'].setValue(self.status['pixpersec_dec'] or 0)
+					self.driver.enqueueSetMessage(self.props['callibration'])
+
 
 				for p in pt:
 					cv2.circle(disp, (int(p[1] + 0.5), int(p[0] + 0.5)), 10, (255), 1)
