@@ -203,9 +203,19 @@ class Median:
 	def _add_masked(self, im, pts):
 		if self.res is None:
 			return
-		mask = np.zeros_like(im)
+
+		if im.dtype == np.uint8:
+			cv_dtype = cv2.CV_8UC1
+		elif im.dtype == np.int8:
+			cv_dtype = cv2.CV_8SC1
+		elif im.dtype == np.int16:
+			cv_dtype = cv2.CV_16SC1
+		else: # im.dtype == np.uint16:
+			cv_dtype = cv2.CV_16UC1
+
+		mask = np.zeros_like(im, dtype=np.uint16)
 	
-		white = np.iinfo(im.dtype).max
+		white = np.iinfo(mask.dtype).max
 		for p in pts:
 			cv2.circle(mask, p, 20, (white), -1)
 
@@ -213,7 +223,7 @@ class Median:
 		mask = cv2.blur(mask, (30, 30))
 		inv_mask = cv2.bitwise_not(mask)
 		
-		res = cv2.add(cv2.multiply(im, inv_mask, scale = 1.0 / white), cv2.multiply(self.res, mask, scale = 1.0 / white))
+		res = cv2.add(cv2.multiply(im, inv_mask, scale = 1.0 / white, dtype=cv_dtype), cv2.multiply(self.res, mask, scale = 1.0 / white, dtype=cv_dtype))
 		
 		self._add(res)
 		#ui.imshow("dark", normalize(inv_mask))
