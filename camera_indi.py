@@ -47,6 +47,19 @@ class Camera_indi:
 		
 		self.status['mode'] = 'z0'
 
+
+	def prepare(self):
+		if self.driver[self.device]["CONNECTION"]["CONNECT"] == False:
+			self.driver.sendClientMessageWait(self.device, "CONNECTION", {"CONNECT": "On"})
+			self.driver.waitForProp(self.device, "CONFIG_PROCESS")
+			self.driver.sendClientMessageWait(self.device, "CONFIG_PROCESS", {"CONFIG_LOAD": "On"})
+			
+		self.driver.waitForProp(self.device, "CCD_INFO")
+		self.max_width = self.driver[self.device]["CCD_INFO"]["CCD_MAX_X"].native()
+		self.max_height = self.driver[self.device]["CCD_INFO"]["CCD_MAX_Y"].native()
+		self.cmd('zcenter')
+
+
 	def set_mode(self, mode):
 		if mode == 'z0':
 			self.driver.sendClientMessageWait(self.device, "CCD_BINNING", {'HOR_BIN': self.status['binning'], 'VER_BIN': self.status['binning']})
@@ -118,18 +131,12 @@ class Camera_indi:
 				if prop is None:
 					break
 
-			self.max_width = self.driver[self.device]["CCD_INFO"]["CCD_MAX_X"].native()
-			self.max_height = self.driver[self.device]["CCD_INFO"]["CCD_MAX_Y"].native()
-			
-
 			self.driver.sendClientMessageWait(self.device, "CCD_VIDEO_FORMAT", {'ASI_IMG_RAW16': 'On'})
 			
 #			self.driver.sendClientMessageWait(self.device, "CCD_COLOR_SPACE", {"CCD_COLOR_RGB": "On"})
 			self.driver.sendClientMessageWait(self.device, "Stack", {"Mean": "On"})
 			
 			
-			self.cmd('zcenter')
-
 			self.set_mode(self.status['mode'])
 
 			self.driver.sendClient(indi.enableBLOB(self.device, "CCD1"))
@@ -202,8 +209,12 @@ class Camera_indi:
 
 		self.driver.sendClientMessageWait(self.device, "CCD_FRAME_RESET", {'RESET': 'On'})
 
-
-		self.driver.sendClientMessageWait(self.device, "CCD_EXPOSURE", {"CCD_EXPOSURE_VALUE": self.status['exp-sec']})
+		if test:
+			self.driver.sendClientMessageWait(self.device, "UPLOAD_MODE", {"UPLOAD_CLIENT": 'On'})
+			self.driver.sendClientMessageWait(self.device, "CCD_EXPOSURE", {"CCD_EXPOSURE_VALUE": self.status['test-exp-sec']})
+		else:
+			self.driver.sendClientMessageWait(self.device, "UPLOAD_MODE", {"UPLOAD_LOCAL": 'On'})
+			self.driver.sendClientMessageWait(self.device, "CCD_EXPOSURE", {"CCD_EXPOSURE_VALUE": self.status['exp-sec']})
 		self.status['exp_in_progress'] = True
 
 		if callback_start is not None:
@@ -220,6 +231,9 @@ class Camera_indi:
 				log.error(prop)
 				if prop and prop.getAttr('name') == 'CCD1' and prop['CCD1'].getAttr('format') == '.fits':
 					break
+
+				if prop and prop.getAttr('name') == 'CCD_FILE_PATH' and os.path.isfile(prop['FILE_PATH'].getValue()):
+					break
 					
 				if prop and prop.getAttr('name') == 'CCD_EXPOSURE' and prop.getAttr('state') in ['Alert', 'Idle'] :
 					callback_end(None, None)
@@ -229,19 +243,15 @@ class Camera_indi:
 				if prop and prop.getAttr('name') == 'CCD_EXPOSURE' and prop.getAttr('state') == 'Busy':
 					self.status['cur_time'] = int(self.status['exp-sec'] - prop["CCD_EXPOSURE_VALUE"])
 			
-		
-			blobfile=io.BytesIO(prop['CCD1'].native())
-#			hdulist=fits.open(blobfile)
-#			im = hdulist[0].data
-#			log.error("shape %s", im.shape) #(3, 720, 1280)
-#			im = im[1]
+			if prop.getAttr('name') == 'CCD1':
+				blobfile=io.BytesIO(prop['CCD1'].native())
+				if callback_end is not None:
+					callback_end(blobfile, "img_{}.fits".format(time.time()))
 
-			if callback_end is not None:
-#				im = np.array(im, dtype=np.uint8)
-#				ret, file_data = cv2.imencode('.jpg', im)
-#				file_data = file_data.tobytes()
-			
-				callback_end(blobfile, "img_{}.fits".format(time.time()))
+			if prop.getAttr('name') == 'CCD_FILE_PATH':
+				if callback_end is not None:
+					f = prop['FILE_PATH'].getValue()
+					callback_end(f, f)
 		except:
 			log.exception('Unexpected error')
 		self.status['exp_in_progress'] = False
