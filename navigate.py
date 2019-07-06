@@ -160,7 +160,7 @@ def normalize(img):
 	
 
 def cv2_dtype(dtype):
-	if dtype == np.uint8:
+	if np.issubdtype(np.uint8, dtype):
 		return cv2.CV_8UC1
 	else:
 		return cv2.CV_16UC1
@@ -220,17 +220,17 @@ class Median:
 
 	def _add_mean(self, im, pts=None):
 		if im.dtype == np.uint8:
-			cv2_dtype = cv2.CV_8SC1
+			cv_dtype = cv2.CV_8SC1
 		else:
-			cv2_dtype = cv2.CV_16SC1
+			cv_dtype = cv2.CV_16SC1
 	
 		mean, stddev = cv2.meanStdDev(im)
-		im = cv2.subtract(im, mean, dtype=cv2_dtype)
+		im = cv2.subtract(im, mean, dtype=cv_dtype)
 		
 		im = np.clip(im, -3 * stddev, 3 * stddev)
 		
 		mean, stddev = cv2.meanStdDev(im)
-		im = cv2.subtract(im, mean, dtype=cv2_dtype)
+		im = cv2.subtract(im, mean, dtype=cv_dtype)
 		if pts is None:
 			self._add(im)
 		else:
@@ -426,6 +426,8 @@ class Stack:
 		return (0.0, 0.0)
 
 	def get(self, dtype = None):
+		if self.img is None:
+			return None
 		if dtype == np.uint8:
 			return cv2.divide(self.img, 255, dtype=cv2.CV_8UC1)
 		else:
@@ -689,7 +691,7 @@ class Navigator:
 		if t is None:
 			t = time.time()
 		if (self.dark.len() > 2):
-			im_sub = cv2.subtract(im, self.dark.get(), dtype=cv2_dtype(im))
+			im_sub = cv2.subtract(im, self.dark.get(), dtype=cv2_dtype(im.dtype))
 		else:
 			im_sub = im
 		
@@ -985,7 +987,9 @@ class Navigator:
 			self.status['full_dispmode'] = cmd
 
 		if cmd == 'save':
-			cv2.imwrite(self.tid + str(int(time.time())) + ".tif", self.stack.get())
+			img = self.stack.get()
+			if img is not None:
+				cv2.imwrite(self.tid + str(int(time.time())) + ".tif", img)
 
 		if cmd == 'polar-reset':
 			if self.polar_tid is not None:
@@ -1863,7 +1867,7 @@ class Guider:
 			self.mount.go_dec.out(0)
 
 		if (self.dark.len() >= 4):
-			im_sub = cv2.subtract(im, self.dark.get(), dtype=cv2_dtype(im))
+			im_sub = cv2.subtract(im, self.dark.get(), dtype=cv2_dtype(im.dtype))
 		else:
 			im_sub = im
 
@@ -2507,7 +2511,7 @@ class Focuser:
 		if (self.dark.len() > 0):
 			log.info(im.shape)
 			log.info(self.dark.get().shape)
-			im_sub = cv2.subtract(im, self.dark.get(), dtype=cv2_dtype(im))
+			im_sub = cv2.subtract(im, self.dark.get(), dtype=cv2_dtype(im.dtype))
 		else:
 			im_sub = im
 
@@ -4005,7 +4009,7 @@ def run_calibrate_v4l2_g():
 			if im.ndim > 2:
 				im = cv2.min(cv2.min(im[:, :, 0], im[:, :, 1]), im[:, :, 2])
 
-			im = cv2.subtract(im, dark.get(), dtype=cv2_dtype(im))
+			im = cv2.subtract(im, dark.get(), dtype=cv2_dtype(im.dtype))
 			ui.imshow('guider', normalize(im))
 			val = int(np.amax(im))
 			log.info("%f %f, %f, %f", exp, test, out, val)

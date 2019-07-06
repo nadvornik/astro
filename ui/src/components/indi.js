@@ -620,8 +620,7 @@ export default class INDI extends React.Component {
 
   render() {
     var devices = {};
-    Object.keys(this.state.entries).map(dev => Object.keys(this.state.entries[dev]).map(name => {
-      var e = this.state.entries[dev][name]
+    Object.values(this.state.entries).forEach(dev => Object.values(dev).forEach(e => {
       if (!(e.device in devices)) devices[e.device] = {};
       if (!(e.group in devices[e.device])) devices[e.device][e.group] = {};
       devices[e.device][e.group][e.name] = e;
