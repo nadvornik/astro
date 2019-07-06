@@ -3459,6 +3459,12 @@ def main_loop():
 
 			if cmd == 'shutdown':
 				subprocess.call(['shutdown', '-h', "now"])
+
+			t0 = time.time()
+			while time.time() < t0 + 5:
+				driver.loop1()
+			
+			log.info("INDI loop shutdown")
 			break
 		if cmd == 'save':
 			status.save()
