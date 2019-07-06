@@ -774,9 +774,9 @@ class Navigator:
 					cmdQueue.put('save')
 					
 				log.info("field corr len %d", len(self.field_corr_list))
-#				if len(self.field_corr_list) > self.status['field_corr_limit']:
-#					self.update_field_cor()
-#					self.status['field_corr_limit'] *= 2
+				if len(self.field_corr_list) > self.status['field_corr_limit']:
+					self.update_field_cor()
+					self.status['field_corr_limit'] *= 2
 					
 			else:
 				if self.status['radius'] > 0 and self.status['radius'] * 2 + 15 < self.status['max_radius']:
@@ -1288,7 +1288,8 @@ class Navigator:
 
 		M = pt_translation_rotate(field_corr_list[:, 2:4], field_corr_list[:, 0:2], np.ones((field_corr_list.shape[0])))
 		log.info("%s", M)
-		M2 = cv2.estimateRigidTransform(np.array(field_corr_list[:, 2:4]), np.array(field_corr_list[:, 0:2]), False)
+#		#M2 = cv2.estimateRigidTransform(np.array(field_corr_list[:, 2:4]), np.array(field_corr_list[:, 0:2]), False)
+		M2, inl = cv2.estimateAffinePartial2D(np.array(field_corr_list[:, 2:4]), np.array(field_corr_list[:, 0:2]))
 		M2 = np.matrix(M2.T)
 		log.info("M2")
 		log.info("%s", M2)
