@@ -541,6 +541,7 @@ class Navigator:
 				<defSwitch name="retry" label="retry">Off</defSwitch>
 				<defSwitch name="darkframe" label="dark">Off</defSwitch>
 				<defSwitch name="hotpixels" label="hotpixels">Off</defSwitch>
+				<defSwitch name="sync" label="mount sync">Off</defSwitch>
 			</defSwitchVector>
 
 		</INDIDriver>
@@ -921,6 +922,21 @@ class Navigator:
 				if len(self.hotpixels) > 1000:
 					self.hotpix_cnt = None
 				prop.setAttr('state', 'Ok')
+
+			if prop['sync'] == True:
+
+				try:
+					self.driver.sendClientMessageWait("EQMod Mount", "ON_COORD_SET", {"SYNC": "On"})
+					ra, dec = self.props['coord'].to_array()
+					self.driver.sendClientMessageWait("EQMod Mount", "EQUATORIAL_EOD_COORD", {"RA": ra, "DEC": dec})
+					self.driver.sendClientMessageWait("EQMod Mount", "ON_COORD_SET", {"TRACK": "On"})
+
+					prop['sync'].setValue(False)
+					prop.setAttr('state', 'Ok')
+				except:
+					log.exception('sync')
+					prop['sync'].setValue(False)
+					prop.setAttr('state', 'Alert')
 
 		
 		
@@ -3536,24 +3552,6 @@ def main_loop():
 			camera = status.path(["navigator", "camera"])
 			camera['interrupt'] = True
 		
-		if cmd == 'sync':
-			try:
-				from indi_python.basic_indi_client import BasicIndiClient
-				import indi_python.indi_xml as indiXML
-				client = BasicIndiClient("localhost", 7624, 0.01)
-				client.sendMessage(indiXML.newSwitchVector([indiXML.oneSwitch("On", indi_attr = {"name" : "SYNC"})],
-					indi_attr = {"name" : "ON_COORD_SET", "device" : "EQMod Mount"}))
-				ra = status.path(["navigator"]).get('ra', 0.0) / 15.0
-				dec = status.path(["navigator"]).get('dec', 0.0)
-				client.sendMessage(indiXML.newNumberVector([indiXML.oneNumber(ra, indi_attr = {"name" : "RA"}), indiXML.oneNumber(dec, indi_attr = {"name" : "DEC"})],
-					indi_attr = {"name" : "EQUATORIAL_EOD_COORD", "device" : "EQMod Mount"}))
-				client.sendMessage(indiXML.newSwitchVector([indiXML.oneSwitch("On", indi_attr = {"name" : "TRACK"})],
-					indi_attr = {"name" : "ON_COORD_SET", "device" : "EQMod Mount"}))
-
-				client.close()
-			except:
-				log.exception('sync')
-
 
 	status.save()
 	
