@@ -509,63 +509,34 @@ class Navigator:
 		self.device = device
 		driver.defineProperties("""
 		<INDIDriver>
-			<defSwitchVector device="{0}" name="dispmode" label="Display mode" group="Main Control" state="Idle" perm="rw" rule="OneOfMany">
-				<defSwitch name="normal" label="normal">On</defSwitch>
-				<defSwitch name="zoom-2" label="zoom-2">Off</defSwitch>
-				<defSwitch name="zoom-3" label="zoom-3">Off</defSwitch>
-				<defSwitch name="zoom-4" label="zoom-4">Off</defSwitch>
-				<defSwitch name="zoom-8" label="zoom-8">Off</defSwitch>
-				<defSwitch name="zoom-16" label="zoom16">Off</defSwitch>
-				<defSwitch name="zoom-deg50" label="zoom-deg50">Off</defSwitch>
-				<defSwitch name="zoom-deg100" label="zoom-deg100">Off</defSwitch>
-				<defSwitch name="zoom-deg180" label="zoom-deg180">Off</defSwitch>
-				<defSwitch name="orig" label="orig">Off</defSwitch>
-				<defSwitch name="df-cor" label="df-cor">Off</defSwitch>
-				<defSwitch name="match" label="match">Off</defSwitch>
-			</defSwitchVector>
 
-			<defSwitchVector device="{0}" name="full_dispmode" label="FullRes Display mode" group="FullRes" state="Idle" perm="rw" rule="OneOfMany">
-				<defSwitch name="normal" label="normal">On</defSwitch>
-				<defSwitch name="zoom-2" label="zoom-2">Off</defSwitch>
-				<defSwitch name="zoom-3" label="zoom-3">Off</defSwitch>
-				<defSwitch name="zoom-4" label="zoom-4">Off</defSwitch>
-				<defSwitch name="zoom-8" label="zoom-8">Off</defSwitch>
-				<defSwitch name="zoom-16" label="zoom16">Off</defSwitch>
-				<defSwitch name="zoom-deg50" label="zoom-deg50">Off</defSwitch>
-				<defSwitch name="zoom-deg100" label="zoom-deg100">Off</defSwitch>
-				<defSwitch name="zoom-deg180" label="zoom-deg180">Off</defSwitch>
-				<defSwitch name="orig" label="orig">Off</defSwitch>
-				<defSwitch name="df-cor" label="df-cor">Off</defSwitch>
-				<defSwitch name="match" label="match">Off</defSwitch>
-			</defSwitchVector>
-
-			<defNumberVector device="{0}" name="solver_time" label="solver_time" group="Main Control" state="Idle" perm="ro">
+			<defNumberVector device="{0}" name="solver_time" label="solver_time" group="Solver Control" state="Idle" perm="ro">
 				<defNumber name="i_solver" label="i_solver" format="%5.0f" min="0" max="0" step="0">0</defNumber>
 				<defNumber name="i_solved" label="i_solved" format="%5.0f" min="0" max="0" step="0">0</defNumber>
 				<defNumber name="t_solver" label="t_solver" format="%4.1f" min="0" max="0" step="0">0</defNumber>
 				<defNumber name="t_solved" label="t_solved" format="%4.1f" min="0" max="0" step="0">0</defNumber>
 			</defNumberVector>
 
-			<defTextVector device="{0}" name="field_corr" label="Field correction file" group="Main Control" state="Idle" perm="rw">
+			<defTextVector device="{0}" name="field_corr" label="Field correction file" group="Solver Control" state="Idle" perm="rw">
 				<defText name="file" label="file"></defText>
 			</defTextVector>
 
-			<defNumberVector device="{0}" name="filed_corr_limit" label="Field correction limit" group="Main Control" state="Idle" perm="rw">
+			<defNumberVector device="{0}" name="filed_corr_limit" label="Field correction limit" group="Solver Control" state="Idle" perm="rw">
 				<defNumber name="limit" label="limit" format="%5.0f" min="0" max="0" step="0">10</defNumber>
 			</defNumberVector>
 
-			<defNumberVector device="{0}" name="coord" label="Coord" group="Main Control" state="Idle" perm="rw">
-				<defNumber name="RA" label="RA" format="%4.2f" min="0" max="0" step="0">0</defNumber>
-				<defNumber name="DEC" label="Dec" format="%4.2f" min="0" max="0" step="0">0</defNumber>
+			<defNumberVector device="{0}" name="coord" label="Coord" group="Solver Control" state="Idle" perm="rw">
+				<defNumber name="RA" label="RA" format="%10.6m" min="0" max="0" step="0">0</defNumber>
+				<defNumber name="DEC" label="Dec" format="%10.6m" min="0" max="0" step="0">0</defNumber>
 			</defNumberVector>
 
-			<defNumberVector device="{0}" name="field" label="Field" group="Main Control" state="Idle" perm="ro">
+			<defNumberVector device="{0}" name="field" label="Field" group="Solver Control" state="Idle" perm="ro">
 				<defNumber name="current" label="Current" format="%4.2f" min="0" max="0" step="0">0</defNumber>
 				<defNumber name="radius" label="Radius" format="%4.2f" min="0" max="0" step="0">0</defNumber>
 				<defNumber name="max_radius" label="Max Radius" format="%4.2f" min="0" max="0" step="0">100</defNumber>
 			</defNumberVector>
 
-			<defSwitchVector device="{0}" name="commands" label="Commands" group="Main Control" state="Idle" perm="rw" rule="AtMostOne">
+			<defSwitchVector device="{0}" name="commands" label="Commands" group="Solver Control" state="Idle" perm="rw" rule="AtMostOne">
 				<defSwitch name="reset" label="reset">Off</defSwitch>
 				<defSwitch name="retry" label="retry">Off</defSwitch>
 				<defSwitch name="darkframe" label="dark">Off</defSwitch>
@@ -584,8 +555,6 @@ class Navigator:
 		self.full_res_solver = None
 		self.full_res_lock = threading.Lock()
 		self.solver_off = np.array([0.0, 0.0])
-		self.status.setdefault("dispmode", 'normal')
-		self.status.setdefault("full_dispmode", 'full-disp-normal')
 		self.status.setdefault("field_corr_limit", 10)
 		self.status.setdefault("field_corr", None)
 		try:
@@ -693,6 +662,7 @@ class Navigator:
 	
 	def proc_frame(self,im, i, t = None):
 		self.i = i
+		dispmode = self.props['dispmode'].getActiveSwitch()
 		if im.ndim > 2:
 			im = cv2.min(cv2.min(im[:, :, 0], im[:, :, 1]), im[:, :, 2])
 
@@ -723,7 +693,7 @@ class Navigator:
 		if self.field_corr is not None:
 			im_sub = cv2.remap(im_sub, self.field_corr, None, cv2.INTER_LINEAR)
 
-		M = self.stack.add(im_sub, show_match=(self.status['dispmode'] == 'match'))
+		M = self.stack.add(im_sub, show_match=(dispmode == 'match'))
 		filtered = self.stack.get()
 		
 		self.solver_off = np.insert(self.solver_off, 2, 1.0).dot(M).A1
@@ -790,16 +760,16 @@ class Navigator:
 						self.status['ra'], self.status['dec'] = self.mount.polar.zenith()
 					self.status['radius'] = self.status['max_radius']
 					self.wcs = None
-					self.props['coord'].setValue((self.status['ra'] / 15.0, self.status['dec']))
+					#self.props['coord'].setValue((self.status['ra'] / 15.0, self.status['dec']))
 					self.props['field']['current'].setValue(self.status['field_deg'] or 0)
 					self.props['field']['radius'].setValue(self.status['radius'])
 					self.props['field']['max_radius'].setValue(self.status['max_radius'])
-					self.driver.enqueueSetMessage(self.props['coord'])
+					#self.driver.enqueueSetMessage(self.props['coord'])
 					self.driver.enqueueSetMessage(self.props['field'])
 			self.solver = None
 			self.solved_im = None
 
-		if self.solver is None and i > 20 and self.status['dispmode'] != 'orig' and self.status['dispmode'] != 'df-cor':
+		if self.solver is None and i > 20 and dispmode != 'orig' and self.status['dispmode'] != 'df-cor':
 			xy = self.stack.get_xy()
 			#log.info "len", len(xy)
 			if len(xy) > 8:
@@ -826,8 +796,8 @@ class Navigator:
 				cv2.putText(polar_plot, p_status, (10, polar_plot.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2)
 				ui.imshow(self.polar_tid, polar_plot)
 			
-		status = "#%d %s %s  solv#%d r:%.1f fps:%.1f hp:%d" % (i, self.status['dispmode'], self.mount.polar.mode, i - self.status['i_solver'], self.status['radius'], fps, n_hotpixels)
-		if (self.status['dispmode'] == 'orig'):
+		status = "#%d %s %s  solv#%d r:%.1f fps:%.1f hp:%d" % (i, dispmode, self.mount.polar.mode, i - self.status['i_solver'], self.status['radius'], fps, n_hotpixels)
+		if (dispmode == 'orig'):
 			disp = normalize(im)
 
 			try:
@@ -838,7 +808,7 @@ class Navigator:
 
 			cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
 			ui.imshow(self.tid, disp)
-		elif (self.status['dispmode'] == 'df-cor'):
+		elif (dispmode == 'df-cor'):
 			disp = normalize(im_sub)
 			
 			try:
@@ -849,7 +819,7 @@ class Navigator:
 
 			cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
 			ui.imshow(self.tid, disp)
-		elif (self.status['dispmode'] == 'normal'):
+		elif (dispmode == 'normal'):
 			disp = normalize(filtered)
 			for p in self.stack.get_xy():
 				cv2.circle(disp, (int(p[1] + 0.5), int(p[0] + 0.5)), 13, (255), 1)
@@ -872,9 +842,9 @@ class Navigator:
 			else:
 				cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
 				ui.imshow(self.tid, disp)
-		elif (self.status['dispmode'].startswith('zoom-')):
+		elif (dispmode.startswith('zoom-')):
 			if self.plotter is not None:
-				zoom = self.status['dispmode'][len('zoom-'):]
+				zoom = dispmode[len('zoom-'):]
 				extra_lines = []
 				if self.tid == 'navigator':
 					extra_lines = self.mount.get_guider_plot()
@@ -886,7 +856,7 @@ class Navigator:
 				cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
 				ui.imshow(self.tid, disp)
 				
-		elif (self.status['dispmode'] == 'match'):
+		elif (dispmode == 'match'):
 			disp = self.stack.match
 			cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
 			ui.imshow(self.tid, disp)
@@ -897,10 +867,7 @@ class Navigator:
 	
 	def handleNewProp(self, msg, prop):
 		name = prop.getAttr('name')
-		if name == 'dispmode':
-			self.status['dispmode'] = prop.getActiveSwitch()
-			prop.setAttr('state', 'Ok')
-		elif name == 'field_corr':
+		if name == 'field_corr':
 			self.status['field_corr'] = prop['file'].getValue()
 			prop.setAttr('state', 'Ok')
 			
@@ -993,11 +960,11 @@ class Navigator:
 			if len(self.hotpixels) > 1000:
 				self.hotpix_cnt = None
 		
-		if cmd.startswith('disp-'):
-			self.status['dispmode'] = cmd[len('disp-'):]
+#		if cmd.startswith('disp-'):
+#			self.status['dispmode'] = cmd[len('disp-'):]
 
-		if cmd.startswith('full-disp-'):
-			self.status['full_dispmode'] = cmd
+#		if cmd.startswith('full-disp-'):
+#			self.status['full_dispmode'] = cmd
 
 		if cmd == 'save':
 			img = self.stack.get()
@@ -1062,6 +1029,7 @@ class Navigator:
 	
 	def proc_full_res(self, imgdata, name = None):
 		with self.full_res_lock:
+			full_dispmode = self.props['full_dispmode'].getActiveSwitch()
 			process = psutil.Process(os.getpid())
 			t = time.time()
 			(temp, hum) = self.mount.temp_sensor.get()
@@ -1077,7 +1045,7 @@ class Navigator:
 #			log.error("shape %s", im.shape) #(3, 720, 1280)
 #			im = im[1]
 
-				if (self.status['full_dispmode'] == 'full-disp-orig'):
+				if (full_dispmode == 'full-disp-orig'):
 					if self.full_res is not None:
 						self.full_res['full_hfr'].append(0)
 						self.full_res['full_name'].append(name)
@@ -1185,7 +1153,7 @@ class Navigator:
 				return
 
 			try:
-				if (self.status['full_dispmode'] != 'full-disp-hfr'):
+				if (full_dispmode != 'full-disp-hfr'):
 					solver = Solver(sources_list = pts, field_w = w, field_h = h, ra = self.status['ra'], dec = self.status['dec'], field_deg = self.status['field_deg'], radius = 100)
 					self.full_res_solver = solver
 					solver.start()
@@ -1226,7 +1194,7 @@ class Navigator:
 
 				ui.imshow('full_res', im_c)
 		
-				if (self.status['full_dispmode'] == 'full-disp-hfr'):
+				if (full_dispmode == 'full-disp-hfr'):
 					cmdQueue.put('capture-full-res-done')
 					if hdulist is not None:
 						hdulist.close()
@@ -1248,8 +1216,8 @@ class Navigator:
 							self.mount.set_pos_tan(self.wcs, t, self.tid)
 
 
-					if (self.status['full_dispmode'].startswith('full-disp-zoom-')):
-						zoom = self.status['full_dispmode'][len('full-disp-zoom-'):]
+					if (full_dispmode.startswith('full-disp-zoom-')):
+						zoom = full_dispmode[len('full-disp-zoom-'):]
 					else:
 						zoom = 1
 			
@@ -2247,6 +2215,13 @@ class Focuser:
 		self.device = device
 		driver.defineProperties("""
 		<INDIDriver>
+			<defSwitchVector device="{0}" name="focus_control" label="Control" group="Focuser" state="Idle" perm="rw" rule="AtMostOne">
+				<defSwitch name="Full AF">Off</defSwitch>
+				<defSwitch name="Fast AF">Off</defSwitch>
+				<defSwitch name="Bahtinov">Off</defSwitch>
+				<defSwitch name="Stop">Off</defSwitch>
+			</defSwitchVector>
+
 			<defSwitchVector device="{0}" name="focuser_phase" label="Phase" group="Focuser" state="Idle" perm="ro" rule="OneOfMany">
 				<defSwitch name="wait">On</defSwitch>
 				<defSwitch name="start">Off</defSwitch>
@@ -2264,13 +2239,6 @@ class Focuser:
 				<defSwitch name="ba_start">Off</defSwitch>
 				<defSwitch name="ba_init">Off</defSwitch>
 				<defSwitch name="ba_run">Off</defSwitch>
-			</defSwitchVector>
-
-			<defSwitchVector device="{0}" name="focus_control" label="Conrtol" group="Focuser" state="Idle" perm="rw" rule="AtMostOne">
-				<defSwitch name="Full AF">Off</defSwitch>
-				<defSwitch name="Fast AF">Off</defSwitch>
-				<defSwitch name="Bahtinov">Off</defSwitch>
-				<defSwitch name="Stop">Off</defSwitch>
 			</defSwitchVector>
 
 
@@ -2293,7 +2261,6 @@ class Focuser:
 
 		self.stack = Stack(ratio=0.3)
 		self.tid = tid
-		self.dispmode = 'orig'
 		self.status['phase'] = 'wait'
 		self.phase_wait = 0
 		self.hfr = Focuser.hfr_size
@@ -2390,9 +2357,6 @@ class Focuser:
 			
 			prop.setAttr('state', 'Ok')
 
-		elif name == 'dispmode':
-			self.dispmode = prop.getActiveSwitch()
-
 
 	def changePhase(self, mode):
 		self.status['phase'] = mode
@@ -2402,8 +2366,6 @@ class Focuser:
 	def cmd(self, cmd):
 		if cmd == 'dark':
 			self.dark.add_mean(self.im)
-		if cmd.startswith('disp-'):
-			self.dispmode = cmd[len('disp-'):]
 		if cmd == 'af':
 			self.changePhase('seek')
 		if cmd == 'af_fast':
@@ -2553,6 +2515,7 @@ class Focuser:
 
 	def proc_frame(self, im, i):
 		t = time.time()
+		dispmode = self.props['dispmode'].getActiveSwitch()
 
 		try:
 			fps = 1.0 / (t - self.prev_t)
@@ -2799,12 +2762,12 @@ class Focuser:
 		self.driver.enqueueSetMessage(self.props["focus"])
 			
 		if 'ba_' in self.status['phase']:
-			status = "#%d F: %s %s ba:%.2f %.2f fps:%.1f" % (i, self.status['phase'], self.dispmode, self.ba_pos, self.ba_int, fps)
+			status = "#%d F: %s %s ba:%.2f %.2f fps:%.1f" % (i, self.status['phase'], dispmode, self.ba_pos, self.ba_int, fps)
 		else:
-			status = "#%d F: %s %s hfr:%.2f fps:%.1f" % (i, self.status['phase'], self.dispmode, self.hfr, fps)
+			status = "#%d F: %s %s hfr:%.2f fps:%.1f" % (i, self.status['phase'], dispmode, self.hfr, fps)
 	
 
-		if (self.dispmode == 'orig'):
+		if (dispmode == 'orig'):
 			disp = normalize(im)
 			cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
 			if 'ba_' in self.status['phase']:
@@ -2813,7 +2776,7 @@ class Focuser:
 				for p in self.focus_yx:
 					cv2.circle(disp, (int(p[1] + 0.5), int(p[0] + 0.5)), 20, (255), 1)
 			ui.imshow(self.tid, disp)
-		elif (self.dispmode == 'df-cor'):
+		elif (dispmode == 'df-cor'):
 			disp = normalize(im_sub)
 			cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
 			if 'ba_' in self.status['phase']:
@@ -2822,7 +2785,7 @@ class Focuser:
 				for p in self.focus_yx:
 					cv2.circle(disp, (int(p[1] + 0.5), int(p[0] + 0.5)), 20, (255), 1)
 			ui.imshow(self.tid, disp)
-		elif (self.dispmode == 'normal'):
+		elif (dispmode == 'normal'):
 			disp = normalize(self.stack_im)
 			if 'ba_' in self.status['phase']:
 				self.bahtinov.plot(disp)
@@ -2831,8 +2794,8 @@ class Focuser:
 				for p in self.focus_yx:
 					cv2.circle(disp, (int(p[1] + 0.5), int(p[0] + 0.5)), 20, (255), 1)
 			ui.imshow(self.tid, disp)
-		elif (self.dispmode.startswith('zoom-')):
-			zoom = int(self.dispmode[len('zoom-'):])
+		elif (dispmode.startswith('zoom-')):
+			zoom = int(dispmode[len('zoom-'):])
 			rect = np.array(self.stack_im.shape) // zoom
 			shift = np.array(self.stack_im.shape) // 2 - rect // 2
 			disp = self.stack_im[shift[0]:shift[0]+rect[0], shift[1]:shift[1]+rect[1]]
@@ -3100,22 +3063,52 @@ class Runner(threading.Thread):
 		self.device = device
 		driver.defineProperties("""
 		<INDIDriver>
-			<defSwitchVector device="{0}" name="camera_run" label="Camera" group="Run Control" state="Idle" perm="rw" rule="OneOfMany">
-				<defSwitch name="run">Off</defSwitch>
-				<defSwitch name="pause">On</defSwitch>
+			<defSwitchVector device="{0}" name="CONNECTION" label="Camera Connection" group="Main Control" state="Idle" perm="rw" rule="OneOfMany">
+				<defSwitch name="CONNECT">Off</defSwitch>
+				<defSwitch name="DISCONNECT">On</defSwitch>
 			</defSwitchVector>
 
-			<defSwitchVector device="{0}" name="camera_control" label="Camera" group="Run Control" state="Idle" perm="rw" rule="AtMostOne">
+			<defSwitchVector device="{0}" name="dispmode" label="Display mode" group="Main Control" state="Idle" perm="rw" rule="OneOfMany">
+				<defSwitch name="normal" label="normal">On</defSwitch>
+				<defSwitch name="zoom-2" label="zoom-2">Off</defSwitch>
+				<defSwitch name="zoom-3" label="zoom-3">Off</defSwitch>
+				<defSwitch name="zoom-4" label="zoom-4">Off</defSwitch>
+				<defSwitch name="zoom-8" label="zoom-8">Off</defSwitch>
+				<defSwitch name="zoom-16" label="zoom16">Off</defSwitch>
+				<defSwitch name="zoom-deg50" label="zoom-deg50">Off</defSwitch>
+				<defSwitch name="zoom-deg100" label="zoom-deg100">Off</defSwitch>
+				<defSwitch name="zoom-deg180" label="zoom-deg180">Off</defSwitch>
+				<defSwitch name="orig" label="orig">Off</defSwitch>
+				<defSwitch name="df-cor" label="df-cor">Off</defSwitch>
+				<defSwitch name="match" label="match">Off</defSwitch>
+			</defSwitchVector>
+
+			<defSwitchVector device="{0}" name="full_dispmode" label="FullRes Display mode" group="FullRes" state="Idle" perm="rw" rule="OneOfMany">
+				<defSwitch name="normal" label="normal">On</defSwitch>
+				<defSwitch name="zoom-2" label="zoom-2">Off</defSwitch>
+				<defSwitch name="zoom-3" label="zoom-3">Off</defSwitch>
+				<defSwitch name="zoom-4" label="zoom-4">Off</defSwitch>
+				<defSwitch name="zoom-8" label="zoom-8">Off</defSwitch>
+				<defSwitch name="zoom-16" label="zoom16">Off</defSwitch>
+				<defSwitch name="zoom-deg50" label="zoom-deg50">Off</defSwitch>
+				<defSwitch name="zoom-deg100" label="zoom-deg100">Off</defSwitch>
+				<defSwitch name="zoom-deg180" label="zoom-deg180">Off</defSwitch>
+				<defSwitch name="orig" label="orig">Off</defSwitch>
+				<defSwitch name="df-cor" label="df-cor">Off</defSwitch>
+				<defSwitch name="match" label="match">Off</defSwitch>
+			</defSwitchVector>
+
+			<defSwitchVector device="{0}" name="camera_control" label="Camera" group="Main Control" state="Idle" perm="rw" rule="AtMostOne">
 				<defSwitch name="capture">Off</defSwitch>
 				<defSwitch name="test_capture">Off</defSwitch>
 			</defSwitchVector>
 
-			<defNumberVector device="{0}" name="EXPOSURE" label="Expose" group="Run Control" state="Idle" perm="rw" timeout="60">
+			<defNumberVector device="{0}" name="EXPOSURE" label="Expose" group="Main Control" state="Idle" perm="rw" timeout="60">
 				<defNumber name="EXP_TIME" label="Duration (s)" format="%5.3f" min="0.001" max="3600" step="1">1</defNumber>
 				<defNumber name="TEST_EXP_TIME" label="Test Duration (s)" format="%5.3f" min="0.001" max="3600" step="1">1</defNumber>
 			</defNumberVector>
 
-			<defSwitchVector device="{0}" name="run_control" label="Control" group="Run Control" state="Idle" perm="rw" rule="AtMostOne">
+			<defSwitchVector device="{0}" name="run_control" label="Control" group="Main Control" state="Idle" perm="rw" rule="AtMostOne">
 				<defSwitch name="exit">Off</defSwitch>
 				<defSwitch name="shutdown">Off</defSwitch>
 				<defSwitch name="save">Off</defSwitch>
@@ -3127,7 +3120,7 @@ class Runner(threading.Thread):
 		
 		prop_str = """
 		<INDIDriver>
-			<defSwitchVector device="{0}" name="run_mode" label="Mode" group="Run Control" state="Idle" perm="rw" rule="AtMostOne">
+			<defSwitchVector device="{0}" name="run_mode" label="Mode" group="Main Control" state="Idle" perm="rw" rule="AtMostOne">
 		"""
 		if guider:
 			prop_str += '<defSwitch name="guider">Off</defSwitch>'
@@ -3145,19 +3138,19 @@ class Runner(threading.Thread):
 		if focuser:
 			driver.defineProperties("""
 			<INDIDriver>
-				<defSwitchVector device="{0}" name="focus_plus" label="Focus" group="Run Control" state="Idle" perm="rw" rule="AtMostOne">
+				<defSwitchVector device="{0}" name="focus_plus" label="Focus" group="Main Control" state="Idle" perm="rw" rule="AtMostOne">
 					<defSwitch name="f+3">Off</defSwitch>
 					<defSwitch name="f+2">Off</defSwitch>
 					<defSwitch name="f+1">Off</defSwitch>
 				</defSwitchVector>
 
-				<defSwitchVector device="{0}" name="focus_minus" label="Focus" group="Run Control" state="Idle" perm="rw" rule="AtMostOne">
+				<defSwitchVector device="{0}" name="focus_minus" label="Focus" group="Main Control" state="Idle" perm="rw" rule="AtMostOne">
 					<defSwitch name="f-3">Off</defSwitch>
 					<defSwitch name="f-2">Off</defSwitch>
 					<defSwitch name="f-1">Off</defSwitch>
 				</defSwitchVector>
 
-				<defNumberVector device="{0}" name="focus_pos" label="Focus" group="Run Control" state="Idle" perm="ro" timeout="60">
+				<defNumberVector device="{0}" name="focus_pos" label="Focus" group="Main Control" state="Idle" perm="ro" timeout="60">
 					<defNumber name="pos" label="Pos" format="%5.0f">0</defNumber>
 				</defNumberVector>
 			</INDIDriver>
@@ -3222,8 +3215,8 @@ class Runner(threading.Thread):
 
 				name = prop.getAttr('name')
 
-				if name == 'camera_run':
-					if prop['pause'] == True:
+				if name == 'CONNECTION':
+					if prop['DISCONNECT'] == True:
 						if self.camera_run:
 							try:
 								self.camera.shutdown()
@@ -3231,7 +3224,7 @@ class Runner(threading.Thread):
 								log.exception("camera shutdown")
 						self.camera_run = False
 						prop.setAttr('state', 'Ok')
-					elif prop['run'] == True:
+					elif prop['CONNECT'] == True:
 						if not self.camera_run:
 							try:
 								self.camera.prepare()
@@ -3240,6 +3233,11 @@ class Runner(threading.Thread):
 						self.camera_run = True
 						prop.setAttr('state', 'Ok')
 
+				elif name == 'dispmode':
+					prop.setAttr('state', 'Ok')
+
+				elif name == 'full_dispmode':
+					prop.setAttr('state', 'Ok')
 			
 				elif name == 'run_mode':
 					if self.guider and prop['guider'] == True:
@@ -3263,6 +3261,9 @@ class Runner(threading.Thread):
 						self.camera.cmd('z0')
 						mode = 'focuser'
 					else:
+						if self.guider is not None:
+							self.guider.cmd('stop')
+
 						prop.setAttr('state', 'Ok')
 						if mode == 'zoom_focuser':
 							self.camera.cmd('z0')
@@ -3275,6 +3276,9 @@ class Runner(threading.Thread):
 							if mode == 'zoom_focuser':
 								self.camera.cmd('z0')
 								mode = 'navigator'
+								self.props['run_mode'].enforceRule(mode, True)
+								self.driver.enqueueSetMessage(self.props['run_mode'])
+
 							try:
 								self.camera.capture_bulb(test=(prop['test_capture'] == True), callback_start = self.capture_start_cb, callback_end = self.capture_end_cb)
 							except AttributeError:
@@ -3338,12 +3342,17 @@ class Runner(threading.Thread):
 					if mode == 'zoom_focuser':
 						self.camera.cmd('z0')
 					mode = 'navigator'
+					self.props['run_mode'].enforceRule(mode, True)
+					self.driver.enqueueSetMessage(self.props['run_mode'])
+
 				elif cmd == 'guider' and self.guider is not None:
 					if mode == 'zoom_focuser':
 						self.camera.cmd('z0')
 					self.guider.reset()
 					self.guider.pt0 = self.navigator.get_xy_cor()
 					mode = 'guider'
+					self.props['run_mode'].enforceRule(mode, True)
+					self.driver.enqueueSetMessage(self.props['run_mode'])
 				elif cmd == 'z1':
 					if self.focuser is not None:
 						self.focuser.reset()
@@ -3356,6 +3365,8 @@ class Runner(threading.Thread):
 						mode = 'navigator'
 					elif mode == 'focuser':
 						mode = 'navigator'
+					self.props['run_mode'].enforceRule(mode, True)
+					self.driver.enqueueSetMessage(self.props['run_mode'])
 				elif cmd == 'zcenter':
 					if self.focuser is not None:
 						self.camera.cmd(cmd)
@@ -3382,6 +3393,8 @@ class Runner(threading.Thread):
 					#if mode == 'navigator':
 					#	self.focuser.set_xy_from_stack(self.navigator.stack)
 					mode = 'focuser'
+					self.props['run_mode'].enforceRule(mode, True)
+					self.driver.enqueueSetMessage(self.props['run_mode'])
 					self.focuser.cmd(cmd)
 				elif cmd == 'dark':
 					if mode == 'navigator':
@@ -3394,6 +3407,8 @@ class Runner(threading.Thread):
 					if mode == 'zoom_focuser':
 						self.camera.cmd('z0')
 						mode = 'navigator'
+						self.props['run_mode'].enforceRule(mode, True)
+						self.driver.enqueueSetMessage(self.props['run_mode'])
 					try:
 						self.camera.capture_bulb(test=(cmd == 'test-capture'), callback_start = self.capture_start_cb, callback_end = self.capture_end_cb)
 					except AttributeError:

@@ -165,6 +165,11 @@ class Camera_indi:
 				break
 		
 		if prop['CCD1'].getAttr('format') == '.stream':
+			while True: # empty queue
+				msg, prop2 = self.driver.get(self.device, block=False, msg_type = 'snoop')
+				log.error(prop2)
+				if prop2 is None:
+					break
 			im = np.ndarray((int(prop['CCD1'].getAttr('size')),), dtype=np.uint8, buffer=prop['CCD1'].native())
 			width = int(self.driver[self.device]["CCD_STREAM_FRAME"]["WIDTH"].getValue())
 			height = int(self.driver[self.device]["CCD_STREAM_FRAME"]["HEIGHT"].getValue())
@@ -176,7 +181,8 @@ class Camera_indi:
 			except:
 				im = im.reshape((-1, width))
 			log.info("shape %s", im.shape)
-		return im, time.time()
+			return im, time.time()
+		return None, time.time()
 
 	def capture(self):
 		while True:
