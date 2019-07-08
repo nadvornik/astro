@@ -123,6 +123,13 @@ class Camera_indi:
 			except:
 				pass
 
+	def set_zoom_pos(self, x, y):
+		self.x = np.clip(x * self.status['binning'] - self.status['zoom_shape'][1] // 2, 0, self.max_width - self.status['zoom_shape'][1])
+		self.y = np.clip(y * self.status['binning'] - self.status['zoom_shape'][0] // 2, 0, self.max_height - self.status['zoom_shape'][0])
+	
+		self.status['zoom_pos'] = [int(v) for v in [ self.x // self.status['binning'], self.y // self.status['binning'], (self.x + self.status['zoom_shape'][1]) // self.status['binning'], (self.y + self.status['zoom_shape'][0]) // self.status['binning']]]
+		return (self.x + self.status['zoom_shape'][1] // 2) // self.status['binning'], (self.y + self.status['zoom_shape'][0] // 2) // self.status['binning']
+
 
 	def check_stream(self):
 		if self.driver[self.device]["CCD_VIDEO_STREAM"]["STREAM_ON"] == False:

@@ -147,7 +147,16 @@ export default class ZoomImage extends React.Component {
     if (x === this.startpos.x && y === this.startpos.y) {
       this.doubleclick_timer = true;
       setTimeout(() => {
-        this.doubleclick_timer = false;
+        if (this.doubleclick_timer) {
+            this.doubleclick_timer = false;
+            const cx = x / this.state.scale;
+            const cy = y / this.state.scale;
+            if (this.props.xyclick)
+                this.props.xyclick(cx, cy);
+        }
+        else {
+            this.doubleclick_timer = false;
+        }
       }, 400);
     }
 

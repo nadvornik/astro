@@ -3169,6 +3169,11 @@ class Runner(threading.Thread):
 				<defNumberVector device="{0}" name="focus_pos" label="Focus" group="Main Control" state="Idle" perm="ro" timeout="60">
 					<defNumber name="pos" label="Pos" format="%5.0f">0</defNumber>
 				</defNumberVector>
+
+				<defNumberVector device="{0}" name="zoom_pos" label="Zoom position" group="Main Control" state="Idle" perm="ro" timeout="60">
+					<defNumber name="X" label="X" format="%5.0f">0</defNumber>
+					<defNumber name="Y" label="Y" format="%5.0f">0</defNumber>
+				</defNumberVector>
 			</INDIDriver>
 			""".format(device))
 
@@ -3327,6 +3332,17 @@ class Runner(threading.Thread):
 					prop.setAttr('state', 'Ok')
 					prop[cmd].setValue(False)
 
+				elif name == 'zoom_pos':
+					try:
+						x, y = prop.to_array()
+						x, y = self.camera.set_zoom_pos(x, y)
+						prop['X'].setValue(x)
+						prop['Y'].setValue(y)
+					
+						prop.setAttr('state', 'Ok')
+					except:
+						log.exception("zoom pos")
+						prop.setAttr('state', 'Alert')
 				else:
 					if self.navigator:
 						self.navigator.handleNewProp(msg, prop)

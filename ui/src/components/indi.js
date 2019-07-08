@@ -553,6 +553,10 @@ export default class INDI extends React.Component {
   }
 
   actionSetProp(device, name, changes) {
+     if (!this.state.entries[device] || !this.state.entries[device][name]) {
+       console.log(`prop ${device} ${name} does not exist`);
+       return false;
+     }
      var vector = this.state.entries[device][name];
      var vectorType = vector.type;
      var oneType = "one" + vectorType.slice(0, -6);
@@ -616,6 +620,7 @@ export default class INDI extends React.Component {
          console.log(error);
          this.wsqueue += xml;
      }
+     return true;
   }
 
   render() {

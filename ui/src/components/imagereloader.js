@@ -1,7 +1,6 @@
 
 
 import React from 'react';
-import ZoomImage from './zoomimage';
 import VisibilitySensor from 'react-visibility-sensor';
 
 export default class ImageReloader extends React.Component {
@@ -41,7 +40,7 @@ export default class ImageReloader extends React.Component {
       })
       .catch( e => {
         this.reloading = false;
-        console.log("error ", e);
+//        console.log("error ", e);
         setTimeout(() => {
           this.reload();
         }, 4000);
@@ -62,7 +61,7 @@ export default class ImageReloader extends React.Component {
   render() {
     return ( 
       <VisibilitySensor onChange={this.onVisibilityChange} partialVisibility={true}>
-        <ZoomImage src={this.state.src} />
+        {React.cloneElement(this.props.children, { src: this.state.src })}
       </VisibilitySensor>
     );
   }
