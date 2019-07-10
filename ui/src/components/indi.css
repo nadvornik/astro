@@ -22,6 +22,10 @@
   grid-column-start: 1;
 }
 
+.INDIextension {
+  grid-column: 1 / -1;
+}
+
 .INDIvector {
   display: contents;
 }

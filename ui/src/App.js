@@ -4,7 +4,7 @@ import './App.css';
 import INDI from './components/indi';
 import ImageReloader from './components/imagereloader';
 import ZoomImage from './components/zoomimage';
-
+import INDIChart from './components/indichart';
 
 class App extends React.Component {
   constructor(props) {
@@ -19,6 +19,14 @@ class App extends React.Component {
   }
 
   render() {
+    const extensions = {
+      "Guider": {
+        "Guider": [
+          <INDIChart/>
+        ]
+      }
+    }
+  
     return (
       <div className="App">
         <div className="Images">
@@ -44,7 +52,7 @@ class App extends React.Component {
           </div>
         </div>
         <div className="INDIwrapper">
-          <INDI wsurl='websocket' ref={this.indi}/>
+          <INDI wsurl='websocket' ref={this.indi} extensions={extensions}/>
         </div>
       </div>
     );

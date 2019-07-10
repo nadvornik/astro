@@ -274,6 +274,7 @@ function INDIgroup(props) {
   return (
     <div className={`INDIgroup ${props.name.replace(/\s+/g, '')}`}>
         <h3 className='INDIgroup_name'>{props.name}</h3>
+        {(props.extensions || []).map((ext, i) => <div className='INDIextension' key={`_ext${i}`}>{React.cloneElement(ext, {registerIndiCb: props.registerIndiCb})}</div>)}
         {Object.keys(props.vec).map(vec => React.createElement(INDIproperty, {...props.vec[vec], actionSetProp: props.actionSetProp, key: vec}, null)) }
     </div>
   );
@@ -299,7 +300,14 @@ class INDIdevice extends React.Component {
           <h2>{this.props.name}</h2>
           {Object.keys(this.props.groups).map(group => 
             <TabPanel key={group}>
-              <INDIgroup vec={this.props.groups[group]} actionSetProp={this.props.actionSetProp} key={group} name={group}/>
+              <INDIgroup
+                vec={this.props.groups[group]}
+                actionSetProp={this.props.actionSetProp}
+                registerIndiCb={this.props.registerIndiCb}
+                key={group}
+                name={group}
+                extensions={(this.props.extensions || {})[group]}
+              />
             </TabPanel>
           )}
         </Tabs>
@@ -330,21 +338,16 @@ export default class INDI extends React.Component {
       messages: [],
       tabIndex: 0 
     };
-    this.actionSetProp = this.actionSetProp.bind(this);
-    this.defSwitchVector = this.defSwitchVector.bind(this);
-    this.defTextVector = this.defTextVector.bind(this);
-    this.defNumberVector = this.defNumberVector.bind(this);
-    this.defLightVector = this.defLightVector.bind(this);
-    this.setSwitchVector = this.setSwitchVector.bind(this);
-    this.setTextVector = this.setTextVector.bind(this);
-    this.setNumberVector = this.setNumberVector.bind(this);
-    this.setLightVector = this.setLightVector.bind(this);
-    this.delProperty = this.delProperty.bind(this);
-    this.message = this.message.bind(this);
-    this.startWS = this.startWS.bind(this);
+    
+    [
+      'actionSetProp', 'defSwitchVector', 'defTextVector', 'defNumberVector', 'defLightVector', 'setSwitchVector',
+      'setTextVector', 'setNumberVector', 'setLightVector', 'delProperty', 'message', 'startWS', 'registerIndiCb'
+    ].forEach(method => this[method] = this[method].bind(this));
 
     this.wsqueue = '';
     this.reconnect = false;
+    
+    this.indi_cb = {};
   }
 
   componentDidMount() {
@@ -434,6 +437,7 @@ export default class INDI extends React.Component {
           update(prevState, {entries: { $auto: {[entry.device]: { $auto: {[entry.name]: { $set: entry }}}}}})
       ));
       this.message(e);
+      this.callIndiCb(entry.device, entry.name);
   }
 
   defTextVector(e) {
@@ -446,6 +450,7 @@ export default class INDI extends React.Component {
           update(prevState, {entries: { $auto: {[entry.device]: { $auto: {[entry.name]: { $set: entry }}}}}})
       ));
       this.message(e);
+      this.callIndiCb(entry.device, entry.name);
   }
 
   defNumberVector(e) {
@@ -458,6 +463,7 @@ export default class INDI extends React.Component {
           update(prevState, {entries: { $auto: {[entry.device]: { $auto: {[entry.name]: { $set: entry }}}}}})
       ));
       this.message(e);
+      this.callIndiCb(entry.device, entry.name);
   }
 
   defLightVector(e) {
@@ -470,6 +476,7 @@ export default class INDI extends React.Component {
           update(prevState, {entries: { $auto: {[entry.device]: { $auto: {[entry.name]: { $set: entry }}}}}})
       ));
       this.message(e);
+      this.callIndiCb(entry.device, entry.name);
   }
 
   setSwitchVector(e) {
@@ -485,6 +492,7 @@ export default class INDI extends React.Component {
           update(prevState, {entries: {[entry.device]: {[entry.name]: {$merge: entry, elements: elements }}}})
       ));
       this.message(e);
+      this.callIndiCb(entry.device, entry.name);
   }
 
   setNumberVector(e) {
@@ -500,6 +508,7 @@ export default class INDI extends React.Component {
           update(prevState, {entries: {[entry.device]: {[entry.name]: {$merge: entry, elements: elements }}}})
       ));
       this.message(e);
+      this.callIndiCb(entry.device, entry.name);
   }
 
   setTextVector(e) {
@@ -515,6 +524,7 @@ export default class INDI extends React.Component {
           update(prevState, {entries: {[entry.device]: {[entry.name]: {$merge: entry, elements: elements }}}})
       ));
       this.message(e);
+      this.callIndiCb(entry.device, entry.name);
   }
 
   setLightVector(e) {
@@ -530,6 +540,7 @@ export default class INDI extends React.Component {
           update(prevState, {entries: {[entry.device]: {[entry.name]: {$merge: entry, elements: elements }}}})
       ));
       this.message(e);
+      this.callIndiCb(entry.device, entry.name);
   }
 
   delProperty(e) {
@@ -623,6 +634,20 @@ export default class INDI extends React.Component {
      return true;
   }
 
+  registerIndiCb(device, name, cb) {
+    this.indi_cb[device] = this.indi_cb[device] || {};
+    this.indi_cb[device][name] = this.indi_cb[device][name] || [];
+    this.indi_cb[device][name].push(cb);
+    
+    if (this.state.entries[device] && this.state.entries[device][name])
+      cb(this.state.entries[device][name]);
+  }
+
+  callIndiCb(device, name) {
+    if (this.indi_cb[device] && this.indi_cb[device][name])
+      this.indi_cb[device][name].forEach(cb => cb(this.state.entries[device][name]));
+  }
+
   render() {
     var devices = {};
     Object.values(this.state.entries).forEach(dev => Object.values(dev).forEach(e => {
@@ -642,7 +667,14 @@ export default class INDI extends React.Component {
           </TabList>
           {Object.keys(devices).map(dev =>
             <TabPanel key={dev}>
-              <INDIdevice groups={devices[dev]} actionSetProp={this.actionSetProp} key={dev} name={dev} />
+              <INDIdevice 
+                groups={devices[dev]} 
+                actionSetProp={this.actionSetProp}
+                registerIndiCb={this.registerIndiCb}
+                key={dev}
+                name={dev}
+                extensions={(this.props.extensions || {})[dev]}
+              />
             </TabPanel>
           )}
         </Tabs>
