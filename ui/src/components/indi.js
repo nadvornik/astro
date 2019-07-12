@@ -222,7 +222,7 @@ class INDIproperty extends React.Component {
         ))}
       </div>
     );
-    if (this.props.type === 'LightVector') return (
+    else if (this.props.type === 'LightVector') return (
       <div className={`INDIvector ${this.props.name}`}>
         <INDIvectorName state={ this.props.state } label={this.props.label || this.props.name}/>
         {Object.values(this.props.elements).map(e => (
@@ -233,7 +233,7 @@ class INDIproperty extends React.Component {
         ))}
       </div>
     );
-    if (this.props.type === 'TextVector') return (
+    else if (this.props.type === 'TextVector') return (
       <div className={`INDIvector ${this.props.name}`}>
         <INDIvectorName state={ this.props.state } label={this.props.label || this.props.name}/>
         {Object.values(this.props.elements).map((e, index) => (
@@ -249,7 +249,7 @@ class INDIproperty extends React.Component {
           ))}
       </div>
     );
-    if (this.props.type === 'NumberVector') {
+    else if (this.props.type === 'NumberVector') {
       return (<div className={`INDIvector ${this.props.name}`}>
         <INDIvectorName state={ this.props.state } label={this.props.label || this.props.name}/>
         {Object.values(this.props.elements).map((e, index) => (
@@ -265,6 +265,9 @@ class INDIproperty extends React.Component {
           ))}
       </div>
       );
+    }
+    else {
+      return <div className={`INDIvector ${this.props.name}`}/>
     }
   }
 }
@@ -340,8 +343,8 @@ export default class INDI extends React.Component {
     };
     
     [
-      'actionSetProp', 'defSwitchVector', 'defTextVector', 'defNumberVector', 'defLightVector', 'setSwitchVector',
-      'setTextVector', 'setNumberVector', 'setLightVector', 'delProperty', 'message', 'startWS', 'registerIndiCb'
+      'actionSetProp', 'defSwitchVector', 'defTextVector', 'defNumberVector', 'defLightVector', 'defBLOBVector', 'setSwitchVector',
+      'setTextVector', 'setNumberVector', 'setLightVector', 'setBLOBVector', 'delProperty', 'message', 'startWS', 'registerIndiCb'
     ].forEach(method => this[method] = this[method].bind(this));
 
     this.wsqueue = '';
@@ -356,10 +359,12 @@ export default class INDI extends React.Component {
     this.reader.on('tag:defTextVector', (data) => this.defTextVector(data));
     this.reader.on('tag:defNumberVector', (data) => this.defNumberVector(data));
     this.reader.on('tag:defLightVector', (data) => this.defLightVector(data));
+    this.reader.on('tag:defBLOBVector', (data) => this.defBLOBVector(data));
     this.reader.on('tag:setSwitchVector', (data) => this.setSwitchVector(data));
     this.reader.on('tag:setNumberVector', (data) => this.setNumberVector(data));
     this.reader.on('tag:setTextVector', (data) => this.setTextVector(data));
     this.reader.on('tag:setLightVector', (data) => this.setLightVector(data));
+    this.reader.on('tag:setBLOBVector', (data) => this.setBLOBVector(data));
     this.reader.on('tag:delProperty', (data) => this.delProperty(data));
     this.reader.on('tag:message', (data) => this.message(data));
 
@@ -405,7 +410,7 @@ export default class INDI extends React.Component {
       this.reader.reset();
       this.reader.parse("<stream>");
 
-      this.webSocket.send('<getProperties version="1.7"/>' + this.wsqueue);
+      this.webSocket.send('<getProperties version="1.7"/><enableBLOB>Also</enableBLOB>' + this.wsqueue);
       this.wsqueue = '';
     }.bind(this);
     this.webSocket.onerror = function (error) {
@@ -479,10 +484,22 @@ export default class INDI extends React.Component {
       this.callIndiCb(entry.device, entry.name);
   }
 
+  defBLOBVector(e) {
+      //console.log(e.children);
+      var entry = {...e.attributes, type: 'BLOBVector'}
+      entry.elements = {}
+      e.children.forEach((v, i) => (entry.elements[v.attributes.name] = {...v.attributes, value: '', i: i }));
+      //alert(JSON.stringify(entry, null, 4));
+      this.setState(prevState => (
+          update(prevState, {entries: { $auto: {[entry.device]: { $auto: {[entry.name]: { $set: entry }}}}}})
+      ));
+      this.message(e);
+  }
+
   setSwitchVector(e) {
       //console.log(e.children);
       var entry = {...e.attributes}
-      if (this.state.entries[entry.device][entry.name] === undefined) {
+      if (this.state.entries[entry.device] === undefined || this.state.entries[entry.device][entry.name] === undefined) {
         console.log("Undefined entry", e);
         return;
       }
@@ -498,7 +515,7 @@ export default class INDI extends React.Component {
   setNumberVector(e) {
       //console.log(e.children);
       var entry = {...e.attributes}
-      if (this.state.entries[entry.device][entry.name] === undefined) {
+      if (this.state.entries[entry.device] === undefined || this.state.entries[entry.device][entry.name] === undefined) {
         console.log("Undefined entry", e);
         return;
       }
@@ -514,7 +531,7 @@ export default class INDI extends React.Component {
   setTextVector(e) {
       //console.log(e.children);
       var entry = {...e.attributes}
-      if (this.state.entries[entry.device][entry.name] === undefined) {
+      if (this.state.entries[entry.device] === undefined || this.state.entries[entry.device][entry.name] === undefined) {
         console.log("Undefined entry", e);
         return;
       }
@@ -530,7 +547,7 @@ export default class INDI extends React.Component {
   setLightVector(e) {
       //console.log(e.children);
       var entry = {...e.attributes}
-      if (this.state.entries[entry.device][entry.name] === undefined) {
+      if (this.state.entries[entry.device] === undefined || this.state.entries[entry.device][entry.name] === undefined) {
         console.log("Undefined entry", e);
         return;
       }
@@ -541,6 +558,23 @@ export default class INDI extends React.Component {
       ));
       this.message(e);
       this.callIndiCb(entry.device, entry.name);
+  }
+
+  setBLOBVector(e) {
+      //console.log(e.children);
+      var entry = {...e.attributes}
+      if (this.state.entries[entry.device] === undefined || this.state.entries[entry.device][entry.name] === undefined) {
+        console.log("Undefined entry", e);
+        return;
+      }
+      var elements = {};
+      e.children.forEach(v => (elements[v.attributes.name] = {$merge: {...v.attributes, value: v.children.length ? atob(v.children[0].value.trim()) : '' }}));
+      this.setState(prevState => (
+          update(prevState, {entries: {[entry.device]: {[entry.name]: {$merge: entry, elements: elements }}}})
+      ));
+      this.message(e);
+      this.callIndiCb(entry.device, entry.name);
+//      console.log("BLOB", this.state.entries[entry.device][entry.name]);
   }
 
   delProperty(e) {

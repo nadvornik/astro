@@ -5,6 +5,7 @@ import INDI from './components/indi';
 import ImageReloader from './components/imagereloader';
 import ZoomImage from './components/zoomimage';
 import INDIChart from './components/indichart';
+import FocusChart from './components/focuschart';
 
 class App extends React.Component {
   constructor(props) {
@@ -23,6 +24,11 @@ class App extends React.Component {
       "Guider": {
         "Guider": [
           <INDIChart/>
+        ]
+      },
+      "Navigator": {
+        "Focuser": [
+          <FocusChart/>
         ]
       }
     }
