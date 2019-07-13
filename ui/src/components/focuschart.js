@@ -1,68 +1,20 @@
 import React from 'react';
 import Chart from "react-apexcharts";
 import update from 'immutability-helper';
+import INDIChart from './indichart';
 
-export default class FocusChart extends React.Component {
-  constructor(props) {
-    super(props);
+export default class FocusChart extends INDIChart {
 
-    this.state = {
-      options: {
-        chart: {
-          type: "line",
-          stacked: false,
-          animations: {
-            enabled: false
-          }
-        },
-        xaxis: {
-          type: "numeric",
-          axisTicks: {
-            show: false
-          }
-        },
-        yaxis: {
-          forceNiceScale: true,
-          decimalsInFloat: 0,
-          tickAmount: 7
-        },
-        stroke: {
-          width: 2,
-          curve: 'straight'
-        },
-        dataLabels: {
-          enabled: false
-        },
-        grid: {
-          show: false
-        },
-        annotations: {
-          xaxis: [
-          ]
-        }
-        
-          
-      },
-      series: [
-      ]
-    };
-    
-    ['addValue'].forEach(method => this[method] = this[method].bind(this));
-    
-    console.log(this.props);
-    if (this.props.registerIndiCb) this.props.registerIndiCb('Navigator', 'focus_data', this.addValue);
+  constructor(props, context) {
+    super(props, context);
+
+    this.enableBLOB(this.props.path);
   }
-
-  addValue(indiprop) {
-    //console.log("add value", indiprop);
-    var focus_data
-    
-    try {
-      focus_data = JSON.parse(indiprop.elements.focus_data.value);
-    } catch (error) {
-      console.log(error);
-      return;
-    }
+  
+  
+  render() {
+    var focus_data = this.getJSONBLOB(this.props.path);
+    if (!focus_data)  return <div/>;
     
     var series = ["v_curve", "v_curve_s"].filter(name => {
       return focus_data[name];
@@ -92,22 +44,16 @@ export default class FocusChart extends React.Component {
       xannotation = [{x:focus_data.xmin}];
 
     }
-//    console.log(series);
 
-    this.setState(prevState => (
-      update(prevState, {
-        options: {annotations: {xaxis: {$set: xannotation  }}},
-        series: {$set: series}
-      })
-    ));
-    
-  }
+    var options = update(this.state, {
+      annotations: {xaxis: {$set: xannotation  }},
+    })
 
-  render() {
+
     return (
       <Chart
-        options={this.state.options}
-        series={this.state.series}
+        options={options}
+        series={series}
         type="line"
         height="300"
       />

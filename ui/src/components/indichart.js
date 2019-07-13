@@ -1,13 +1,13 @@
 import React from 'react';
 import Chart from "react-apexcharts";
-import update from 'immutability-helper';
+import { INDIContext } from './indi';
 
 export default class INDIChart extends React.Component {
-  constructor(props) {
-    super(props);
+  static contextType = INDIContext;
+  constructor(props, context) {
+    super(props, context);
 
     this.state = {
-      options: {
         chart: {
           type: "line",
           stacked: false,
@@ -30,40 +30,62 @@ export default class INDIChart extends React.Component {
           width: 1,
           curve: 'straight'
         },
+        grid: {
+          show: true,
+          strokeDashArray: 5
+        },
         dataLabels: {
           enabled: false
-        }
-          
-      },
-      series: [
-      ]
+        },
+        annotations: {
+        },
+        ...props.options
     };
     
-    ['addValue'].forEach(method => this[method] = this[method].bind(this));
-    
-    console.log(this.props);
-    if (this.props.registerIndiCb) this.props.registerIndiCb('Guider', 'offset', this.addValue);
   }
 
-  addValue(indiprop) {
-    console.log("add value", indiprop);
+  enableBLOB(path) {
+    var [device, property, element] = path.split(":");
+    this.context.indi.enableBLOB(device, property);
+  }
+  
+
+  getProp(path) {
+    var [device, property, element] = path.split(":");
+    if (!this.context.state.entries[device]) return [];
+    return [this.context.state.entries[device][property], element]
+  }
+
+  historyToSeries(indiprop) {
+    var series = Object.values(indiprop.elements).map(e => ({
+      name: e.name, 
+      data: this.context.state.history[indiprop.device][indiprop.name].map(he => (he[e.i]))
+    }));
+    return series;
+  }
+
+  getJSONBLOB(path) {
+    const [indiprop, element] = this.getProp(path);
+    var blob_data
     
-    if (this.state.series.length === 0) {
-      this.setState({series: Object.values(indiprop.elements).map(e => ({name: e.name, data: []}))});
+    try {
+      blob_data = JSON.parse(indiprop.elements[element].value);
+    } catch (error) {
+      console.log(indiprop);
+      console.log(error);
+      return;
     }
-    
-    Object.values(indiprop.elements).forEach((e, i) => {
-      this.setState(prevState => (
-        update(prevState, {series: {[i]: {data: {$push: [e.value]}}}})
-      ))
-    });
+    return blob_data;
   }
 
   render() {
+    var [indiprop, element] = this.getProp(this.props.path);
+    var series = this.historyToSeries(indiprop);
+
     return (
       <Chart
-        options={this.state.options}
-        series={this.state.series}
+        options={this.state}
+        series={series}
         type="line"
         height="300"
       />

@@ -217,7 +217,7 @@ class INDIproperty extends React.Component {
         <INDIvectorName state={ this.props.state } label={this.props.label || this.props.name}/>
         {Object.values(this.props.elements).map(e => (
           <INDIButton vector_name={this.props.name} name={e.name} label={e.label} value={e.value} key={e.name} device={this.props.device}
-             onChange={() => this.props.actionSetProp(this.props.device, this.props.name, {[e.name]: (e.value === 'On'? "Off" : "On")})}
+             onChange={() => this.props.indi.actionSetProp(this.props.device, this.props.name, {[e.name]: (e.value === 'On'? "Off" : "On")})}
           />
         ))}
       </div>
@@ -244,7 +244,7 @@ class INDIproperty extends React.Component {
             onChange={(event) => this.handleChange(e, event.target.value)}
             submit_show={this.props.perm!=='ro' && index === 0}
             submit_disabled={!this.isValid()}
-            onSubmit={() => this.props.actionSetProp(this.props.device, this.props.name, this.state.parsed)}
+            onSubmit={() => this.props.indi.actionSetProp(this.props.device, this.props.name, this.state.parsed)}
           />
           ))}
       </div>
@@ -260,7 +260,7 @@ class INDIproperty extends React.Component {
             onChange={(event) => this.handleChange(e, event.target.value)}
             submit_show={this.props.perm!=='ro' && index === 0}
             submit_disabled={!this.isValid()}
-            onSubmit={() => this.props.actionSetProp(this.props.device, this.props.name, this.state.parsed)}
+            onSubmit={() => this.props.indi.actionSetProp(this.props.device, this.props.name, this.state.parsed)}
           />
           ))}
       </div>
@@ -277,8 +277,8 @@ function INDIgroup(props) {
   return (
     <div className={`INDIgroup ${props.name.replace(/\s+/g, '')}`}>
         <h3 className='INDIgroup_name'>{props.name}</h3>
-        {(props.extensions || []).map((ext, i) => <div className='INDIextension' key={`_ext${i}`}>{React.cloneElement(ext, {registerIndiCb: props.registerIndiCb})}</div>)}
-        {Object.keys(props.vec).map(vec => React.createElement(INDIproperty, {...props.vec[vec], actionSetProp: props.actionSetProp, key: vec}, null)) }
+        {(props.extensions || []).filter(ext => (ext.props.tab === `${props.device}:${props.name}`)).map((ext, i) => <div className='INDIextension' key={`_ext${i}`}>{ext}</div>)}
+        {Object.keys(props.vec).map(vec => React.createElement(INDIproperty, {...props.vec[vec], indi: props.indi, key: vec}, null)) }
     </div>
   );
 }
@@ -305,11 +305,11 @@ class INDIdevice extends React.Component {
             <TabPanel key={group}>
               <INDIgroup
                 vec={this.props.groups[group]}
-                actionSetProp={this.props.actionSetProp}
-                registerIndiCb={this.props.registerIndiCb}
+                indi={this.props.indi}
                 key={group}
                 name={group}
-                extensions={(this.props.extensions || {})[group]}
+                device={this.props.name}
+                extensions={this.props.extensions}
               />
             </TabPanel>
           )}
@@ -332,25 +332,36 @@ function INDIMessages(props) {
   );
 }
 
+export const INDIContext = React.createContext({});
 
-export default class INDI extends React.Component {
+
+export class INDI extends React.Component {
   constructor(props) {
     super(props);
     this.state = {
       entries: {},
       messages: [],
-      tabIndex: 0 
+      history: {}
     };
+    
+    if (this.props.history) {
+      Object.keys(this.props.history).forEach(device => {
+        this.state.history[device] = this.state.history[device] || {};
+        Object.keys(this.props.history[device]).forEach(name => {
+          this.state.history[device][name] = this.state.history[device][name] || [];
+        });
+      });
+    }
     
     [
       'actionSetProp', 'defSwitchVector', 'defTextVector', 'defNumberVector', 'defLightVector', 'defBLOBVector', 'setSwitchVector',
-      'setTextVector', 'setNumberVector', 'setLightVector', 'setBLOBVector', 'delProperty', 'message', 'startWS', 'registerIndiCb'
+      'setTextVector', 'setNumberVector', 'setLightVector', 'setBLOBVector', 'delProperty', 'message', 'startWS'
     ].forEach(method => this[method] = this[method].bind(this));
 
     this.wsqueue = '';
     this.reconnect = false;
+    this.wsauto = new Set(['<getProperties version="1.7"/>'])
     
-    this.indi_cb = {};
   }
 
   componentDidMount() {
@@ -410,7 +421,7 @@ export default class INDI extends React.Component {
       this.reader.reset();
       this.reader.parse("<stream>");
 
-      this.webSocket.send('<getProperties version="1.7"/><enableBLOB>Also</enableBLOB>' + this.wsqueue);
+      this.webSocket.send(Array.from(this.wsauto).join('') + this.wsqueue);
       this.wsqueue = '';
     }.bind(this);
     this.webSocket.onerror = function (error) {
@@ -442,7 +453,7 @@ export default class INDI extends React.Component {
           update(prevState, {entries: { $auto: {[entry.device]: { $auto: {[entry.name]: { $set: entry }}}}}})
       ));
       this.message(e);
-      this.callIndiCb(entry.device, entry.name);
+      this.updateHistory(entry.device, entry.name);
   }
 
   defTextVector(e) {
@@ -455,7 +466,7 @@ export default class INDI extends React.Component {
           update(prevState, {entries: { $auto: {[entry.device]: { $auto: {[entry.name]: { $set: entry }}}}}})
       ));
       this.message(e);
-      this.callIndiCb(entry.device, entry.name);
+      this.updateHistory(entry.device, entry.name);
   }
 
   defNumberVector(e) {
@@ -468,7 +479,7 @@ export default class INDI extends React.Component {
           update(prevState, {entries: { $auto: {[entry.device]: { $auto: {[entry.name]: { $set: entry }}}}}})
       ));
       this.message(e);
-      this.callIndiCb(entry.device, entry.name);
+      this.updateHistory(entry.device, entry.name);
   }
 
   defLightVector(e) {
@@ -481,7 +492,7 @@ export default class INDI extends React.Component {
           update(prevState, {entries: { $auto: {[entry.device]: { $auto: {[entry.name]: { $set: entry }}}}}})
       ));
       this.message(e);
-      this.callIndiCb(entry.device, entry.name);
+      this.updateHistory(entry.device, entry.name);
   }
 
   defBLOBVector(e) {
@@ -509,7 +520,7 @@ export default class INDI extends React.Component {
           update(prevState, {entries: {[entry.device]: {[entry.name]: {$merge: entry, elements: elements }}}})
       ));
       this.message(e);
-      this.callIndiCb(entry.device, entry.name);
+      this.updateHistory(entry.device, entry.name);
   }
 
   setNumberVector(e) {
@@ -525,7 +536,7 @@ export default class INDI extends React.Component {
           update(prevState, {entries: {[entry.device]: {[entry.name]: {$merge: entry, elements: elements }}}})
       ));
       this.message(e);
-      this.callIndiCb(entry.device, entry.name);
+      this.updateHistory(entry.device, entry.name);
   }
 
   setTextVector(e) {
@@ -541,7 +552,7 @@ export default class INDI extends React.Component {
           update(prevState, {entries: {[entry.device]: {[entry.name]: {$merge: entry, elements: elements }}}})
       ));
       this.message(e);
-      this.callIndiCb(entry.device, entry.name);
+      this.updateHistory(entry.device, entry.name);
   }
 
   setLightVector(e) {
@@ -557,7 +568,7 @@ export default class INDI extends React.Component {
           update(prevState, {entries: {[entry.device]: {[entry.name]: {$merge: entry, elements: elements }}}})
       ));
       this.message(e);
-      this.callIndiCb(entry.device, entry.name);
+      this.updateHistory(entry.device, entry.name);
   }
 
   setBLOBVector(e) {
@@ -573,7 +584,7 @@ export default class INDI extends React.Component {
           update(prevState, {entries: {[entry.device]: {[entry.name]: {$merge: entry, elements: elements }}}})
       ));
       this.message(e);
-      this.callIndiCb(entry.device, entry.name);
+      this.updateHistory(entry.device, entry.name);
 //      console.log("BLOB", this.state.entries[entry.device][entry.name]);
   }
 
@@ -668,23 +679,60 @@ export default class INDI extends React.Component {
      return true;
   }
 
-  registerIndiCb(device, name, cb) {
-    this.indi_cb[device] = this.indi_cb[device] || {};
-    this.indi_cb[device][name] = this.indi_cb[device][name] || [];
-    this.indi_cb[device][name].push(cb);
-    
-    if (this.state.entries[device] && this.state.entries[device][name])
-      cb(this.state.entries[device][name]);
+  enableBLOB(device, property) {
+     var xml = `<enableBLOB device="${device}" name="${property}">Also</enableBLOB>`;
+     console.log(xml);
+     this.wsauto.add(xml);
+     
+     try {
+         this.webSocket.send(xml);
+     }
+     catch (error) {
+         console.log(error);
+     }
   }
 
-  callIndiCb(device, name) {
-    if (this.indi_cb[device] && this.indi_cb[device][name])
-      this.indi_cb[device][name].forEach(cb => cb(this.state.entries[device][name]));
+  updateHistory(device, name) {
+    if (!this.props.history ||
+        !this.props.history[device] || !this.props.history[device][name] ||
+        !this.state.history[device] || !this.state.history[device][name]) return;
+
+    this.setState(prevState => {
+      const entry = prevState.entries[device][name];
+      console.log(entry);
+      const hist_entry = [];
+      Object.values(entry.elements).forEach(e => {
+        hist_entry[e.i] = e.value;
+      });
+      hist_entry.push(entry.timestamp);
+
+      return update(prevState, {history: {[device]: {[name]: {$set:  prevState.history[device][name].concat([hist_entry]).slice(-this.props.history[device][name])   }}}})
+    });
+
+  }
+
+  render() {
+    return (
+      <INDIContext.Provider value={ {state:this.state, indi:this} }>
+        {this.props.children}
+      </INDIContext.Provider>
+    );
+  }
+}
+
+export class INDIPanel extends React.Component {
+  static contextType = INDIContext;
+
+  constructor(props) {
+    super(props);
+    this.state = {
+      tabIndex: 0 
+    };
   }
 
   render() {
     var devices = {};
-    Object.values(this.state.entries).forEach(dev => Object.values(dev).forEach(e => {
+    Object.values(this.context.state.entries).forEach(dev => Object.values(dev).forEach(e => {
       if (!(e.device in devices)) devices[e.device] = {};
       if (!(e.group in devices[e.device])) devices[e.device][e.group] = {};
       devices[e.device][e.group][e.name] = e;
@@ -703,18 +751,16 @@ export default class INDI extends React.Component {
             <TabPanel key={dev}>
               <INDIdevice 
                 groups={devices[dev]} 
-                actionSetProp={this.actionSetProp}
-                registerIndiCb={this.registerIndiCb}
+                indi={this.context.indi}
                 key={dev}
                 name={dev}
-                extensions={(this.props.extensions || {})[dev]}
+                extensions={React.Children.toArray(this.props.children)}
               />
             </TabPanel>
           )}
         </Tabs>
-        <INDIMessages messages={this.state.messages}/>
+        <INDIMessages messages={this.context.state.messages}/>
       </div>
     );
   }
 }
-
