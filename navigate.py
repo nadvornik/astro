@@ -770,7 +770,7 @@ class Navigator:
 			self.solver = None
 			self.solved_im = None
 
-		if self.solver is None and i > 20 and dispmode != 'orig' and self.status['dispmode'] != 'df-cor':
+		if self.solver is None and i > 20 and dispmode != 'orig' and dispmode != 'df-cor':
 			xy = self.stack.get_xy()
 			#log.info "len", len(xy)
 			if len(xy) > 8:
