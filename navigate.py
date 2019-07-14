@@ -1399,6 +1399,7 @@ class GuiderAlgDec(GuiderAlg):
 			if prop['reset'] == True:
 				prop['reset'].setValue(False)
 				prop.setAttr('state', 'Ok')
+				self.corr_acc = 0.0
 
 
 	def get_corr(self, err, err2, t0):
@@ -1408,12 +1409,12 @@ class GuiderAlgDec(GuiderAlg):
 		
 		smooth_c = self.status['smooth_c']
 
-		if np.abs(corr1) < self.status['rev_move']:
-			corr_acc = self.corr_acc + corr1 * smooth_c
-			if np.abs(corr_acc) < 3:
-				self.corr_acc = corr_acc
-		else:
-			self.corr_acc = 0
+#		if np.abs(corr1) < self.status['rev_move']:
+		corr_acc = self.corr_acc + corr1 * smooth_c
+		if np.abs(corr_acc) < 3:
+			self.corr_acc = corr_acc
+#		else:
+#			self.corr_acc = 0
 		
 		corr = corr1 + self.corr_acc
 
@@ -1423,13 +1424,13 @@ class GuiderAlgDec(GuiderAlg):
 			self.corr_acc = 0
 			return corr
 			
-		if corr > 0 and self.status['last_move'] < 0 and corr < self.status['rev_move']:
+		if corr > 0 and corr_acc < 0 and corr < self.status['rev_move']:
 			corr = 0
-		elif corr < 0 and self.status['last_move'] > 0 and corr > -self.status['rev_move']:
+		elif corr < 0 and corr_acc > 0 and corr > -self.status['rev_move']:
 			corr = 0
 		
-		if corr * self.status['last_move'] < 0:
-			self.corr_acc = 0
+#		if corr * self.status['last_move'] < 0:
+#			self.corr_acc = 0
 		
 		
 		log.info("dec err %f, corr1 %f, corr_acc %f, corr %f", err, corr1, self.corr_acc, corr)
@@ -1500,6 +1501,7 @@ class GuiderAlgRa(GuiderAlg):
 			if prop['reset'] == True:
 				prop['reset'].setValue(False)
 				prop.setAttr('state', 'Ok')
+				self.corr_acc = 0.0
 
 
 	def get_corr(self, err, err2, t0):
