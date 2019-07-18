@@ -136,13 +136,6 @@ function INDIvectorName(props) {
 }
 
 function INDIButton(props) {
-/*
-  return (
-    <button className={`INDIvector_item INDIvector_item_button ${props.name} ${props.vector_name} ${props.value === 'On' ? 'INDIvector_item_button_pressed' : 'INDIvector_item_button_released'}`} 
-       onClick={props.onClick}
-    >{props.label || props.name}</button>
-  );
-*/
   var id = `id_${props.name}_${props.vector_name}_${props.device}`;
   return (
     <div className={`INDIvector_item INDIvector_item_button ${props.name} ${props.vector_name}`}>
@@ -423,6 +416,7 @@ export class INDI extends React.Component {
 
       this.webSocket.send(Array.from(this.wsauto).join('') + this.wsqueue);
       this.wsqueue = '';
+      this.setState({entries: {}});
     }.bind(this);
     this.webSocket.onerror = function (error) {
       this.webSocket.close();

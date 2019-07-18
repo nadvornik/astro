@@ -54,17 +54,24 @@
   border: 1px solid red;
 }
 
-.INDIvector_item_button {
-  border-width: 3px;
+.INDIvector_item_button input[type=checkbox] + label {
+  padding: 4px 1ex 4px 1ex;
+  width: 90%;
+  display: block;
+  border-radius: 4px;
+  border: 1px solid;
 }
 
-.INDIvector_item_button_pressed {
-  border-style: inset;
+.INDIvector_item_button input {
+  position:absolute;
+  top:-20px;
 }
 
-.INDIvector_item_button_released {
-  border-style: outset;
+.INDIvector_item_button input[type=checkbox]:checked + label {
+  background-color: #008000;
 }
+
+
 
 .INDIlight {
   height: 20px;
