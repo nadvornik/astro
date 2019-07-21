@@ -3143,11 +3143,12 @@ class Runner(threading.Thread):
 			</defSwitchVector>
 
 		</INDIDriver>
-		""".format(device))
+		""".format(device), prepend=True)
 		
 		prop_str = """
 		<INDIDriver>
-			<defSwitchVector device="{0}" name="run_mode" label="Mode" group="Main Control" state="Idle" perm="rw" rule="AtMostOne">
+			<defSwitchVector device="{0}" name="run_mode" label="Mode" group="Main Control" state="Idle" perm="rw" rule="OneOfMany">
+				<defSwitch name="navigator">On</defSwitch>
 		"""
 		if guider:
 			prop_str += '<defSwitch name="guider">Off</defSwitch>'
@@ -3300,6 +3301,7 @@ class Runner(threading.Thread):
 						if mode == 'zoom_focuser':
 							self.camera.cmd('z0')
 						mode = 'navigator'
+						prop.enforceRule(mode, True)
 
 				elif name == 'camera_control':
 				
