@@ -693,7 +693,7 @@ export class INDI extends React.Component {
 
     this.setState(prevState => {
       const entry = prevState.entries[device][name];
-      console.log(entry);
+      //console.log(entry);
       const hist_entry = [];
       Object.values(entry.elements).forEach(e => {
         hist_entry[e.i] = e.value;

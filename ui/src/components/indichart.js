@@ -23,8 +23,8 @@ export default class INDIChart extends React.Component {
         },
         yaxis: {
           forceNiceScale: true,
-          decimalsInFloat: 0,
-          tickAmount: 7
+          decimalsInFloat: 2
+          //tickAmount: 7
         },
         stroke: {
           width: 1,
