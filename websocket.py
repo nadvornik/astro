@@ -143,6 +143,7 @@ class HTTPWebSocketsMixIn():
         self.send_header('Upgrade', 'websocket')
         self.send_header('Connection', 'Upgrade')
         self.send_header('Sec-WebSocket-Accept', digest.decode())
+        self.send_header('Sec-WebSocket-Protocol', 'binary')
         self.end_headers()
         self.wfile.flush()
         self.log_message("headers sent")

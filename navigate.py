@@ -315,7 +315,7 @@ def get_hfr_field(im, pts, hfr_size = 20, sub_bg = False):
 			if hf < 0.9:
 				continue
 			
-			if hf > hfr_size * 0.7:
+			if hf > hfr_size * 0.5:
 				continue
 
 			hfr_list.append((y, x, hf) )
@@ -4231,14 +4231,15 @@ def run_test_full_res():
 
 	focuser = Focuser(driver, "Navigator", 'navigator', status.path(["navigator", "focuser"]), dark = dark1)
 	
+	runner = Runner(driver, "Navigator", 'navigator', cam, navigator = nav, focuser = focuser)
 #	profiler = LineProfiler()
 #	profiler.add_function(Navigator.proc_full_res)
 #	profiler.enable_by_count()
 		
 	for i in range(0,10000):
-		fn = "../data/IMAGE_%03d.fits" % (i % 17);
+		fn = "../data/IMAGE_%03d.fits" % (i % 31);
 		nav1.proc_full_res(fn, fn)
-		time.sleep(1)
+		time.sleep(10)
 	
 #	profiler.print_stats()
 					

@@ -13,7 +13,13 @@ export default class INDIChart extends React.Component {
           stacked: false,
           animations: {
             enabled: false
+          },
+          toolbar: {
+            show: false
           }
+        },
+        tooltip: {
+          enabled: false
         },
         xaxis: {
           type: "numeric",
