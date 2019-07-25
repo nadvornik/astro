@@ -85,7 +85,7 @@ def hfr(a, sub_bg = False):
 	
 	if sub_bg:
 		bg = np.median(a[(mask == 0)])
-		a = cv2.subtract(a, bg, dtype=cv2.CV_32FC1)
+		a = cv2.subtract(a, bg, dtype=cv2.CV_16UC1)
 	
 	s = cv2.sumElems(cv2.multiply(a,  mask, dtype=cv2.CV_32FC1))[0]
 	if s == 0.0:
