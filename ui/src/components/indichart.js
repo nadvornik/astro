@@ -1,6 +1,7 @@
 import React from 'react';
 import Chart from "react-apexcharts";
 import { INDIContext } from './indi';
+import pako from "pako";
 
 export default class INDIChart extends React.Component {
   static contextType = INDIContext;
@@ -75,7 +76,14 @@ export default class INDIChart extends React.Component {
     var blob_data
     
     try {
-      blob_data = JSON.parse(indiprop.elements[element].value);
+      if (indiprop.elements[element].format === '.json') {
+      
+          blob_data = JSON.parse(indiprop.elements[element].value);
+      }
+      else if (indiprop.elements[element].format === '.json.z') {
+          console.log(pako.inflate(indiprop.elements[element].value, { to: 'string' }));
+          blob_data = JSON.parse(pako.inflate(indiprop.elements[element].value, { to: 'string' }));
+      }
     } catch (error) {
       console.log(indiprop);
       console.log(error);

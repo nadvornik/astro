@@ -2834,8 +2834,8 @@ class Focuser:
 			ui.imshow(self.tid, disp)
 		self.prev_t = t
 
-		self.props["focus_data"]["focus_data"].setValue(json.dumps(self.status))
-		self.props["focus_data"]["focus_data"].setAttr("format", ".json")
+		self.props["focus_data"]["focus_data"].setValue(json.dumps(self.status), compress=True)
+		self.props["focus_data"]["focus_data"].setAttr("format", ".json.z")
 		self.props["focus_data"].setAttr("state", "Ok")
 		self.driver.enqueueSetMessage(self.props["focus_data"])
 
