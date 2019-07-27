@@ -5,6 +5,7 @@ import {INDI, INDIPanel} from './components/indi';
 import ImageReloader from './components/imagereloader';
 import ZoomImage from './components/zoomimage';
 import INDIClickImage from './components/indiclickimage';
+import INDIChartContext from './components/indichartcontext';
 import INDIChart from './components/indichart';
 import FocusChart from './components/focuschart';
 
@@ -42,10 +43,10 @@ class App extends React.Component {
           </div>
           <div className="INDIwrapper">
             <INDIPanel>
-              <INDIChart tab="Guider:Guider" path="Guider:offset"/>
-              <INDIChart tab="Guider:Guider" path="Guider:guider_ra_move"/>
-              <INDIChart tab="Guider:Guider" path="Guider:guider_dec_move"/>
-              <FocusChart tab="Navigator:Focuser" path="Navigator:focus_data:focus_data"/>
+              <INDIChartContext tab="Guider:Guider" path="Guider:offset" history={true}><INDIChart/></INDIChartContext>
+              <INDIChartContext tab="Guider:Guider" path="Guider:guider_ra_move" history={true}><INDIChart/></INDIChartContext>
+              <INDIChartContext tab="Guider:Guider" path="Guider:guider_dec_move" history={true}><INDIChart/></INDIChartContext>
+              <INDIChartContext tab="Navigator:Focuser" path="Navigator:focus_data:focus_data" enable_blob={true}><FocusChart/></INDIChartContext>
             </INDIPanel>
           </div>
         </div>

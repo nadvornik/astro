@@ -5,15 +5,8 @@ import INDIChart from './indichart';
 
 export default class FocusChart extends INDIChart {
 
-  constructor(props, context) {
-    super(props, context);
-
-    this.enableBLOB(this.props.path);
-  }
-  
-  
   render() {
-    var focus_data = this.getJSONBLOB(this.props.path);
+    var focus_data = this.getJSONBLOB();
     if (!focus_data)  return <div/>;
     
     var series = ["v_curve", "v_curve_s"].filter(name => {

@@ -1,10 +1,8 @@
 import React from 'react';
 import Chart from "react-apexcharts";
-import { INDIContext } from './indi';
 import pako from "pako";
 
 export default class INDIChart extends React.Component {
-  static contextType = INDIContext;
   constructor(props, context) {
     super(props, context);
 
@@ -51,28 +49,18 @@ export default class INDIChart extends React.Component {
     
   }
 
-  enableBLOB(path) {
-    var [device, property, element] = path.split(":");
-    this.context.indi.enableBLOB(device, property);
-  }
+  historyToSeries() {
   
-
-  getProp(path) {
-    var [device, property, element] = path.split(":");
-    if (!this.context.state.entries[device]) return [];
-    return [this.context.state.entries[device][property], element]
-  }
-
-  historyToSeries(indiprop) {
-    var series = Object.values(indiprop.elements).map(e => ({
+    var series = Object.values(this.props.indiprop.elements).map(e => ({
       name: e.name, 
-      data: this.context.state.history[indiprop.device][indiprop.name].map(he => (he[e.i]))
+      data: this.props.history.map(he => (he[e.i]))
     }));
     return series;
   }
 
-  getJSONBLOB(path) {
-    const [indiprop, element] = this.getProp(path);
+  getJSONBLOB() {
+    const indiprop = this.props.indiprop;
+    const element = this.props.element;
     var blob_data
     
     try {
@@ -81,7 +69,6 @@ export default class INDIChart extends React.Component {
           blob_data = JSON.parse(indiprop.elements[element].value);
       }
       else if (indiprop.elements[element].format === '.json.z') {
-          console.log(pako.inflate(indiprop.elements[element].value, { to: 'string' }));
           blob_data = JSON.parse(pako.inflate(indiprop.elements[element].value, { to: 'string' }));
       }
     } catch (error) {
@@ -93,8 +80,7 @@ export default class INDIChart extends React.Component {
   }
 
   render() {
-    var [indiprop, element] = this.getProp(this.props.path);
-    var series = this.historyToSeries(indiprop);
+    var series = this.historyToSeries();
 
     return (
       <Chart
