@@ -1068,15 +1068,33 @@ class Navigator:
 						self.full_res['full_temp'].append(temp)
 						self.full_res['full_hum'].append(hum)
 						self.full_res['full_ts'] = t
+						try:
+							self.props['full_res']['hfr'].setValue(0)
+							self.props['full_res']['ra_stddev'].setValue(self.full_res['ra_err_list' ][-1] or 0)
+							self.props['full_res']['dec_stddev'].setValue(self.full_res['dec_err_list' ][-1] or 0)
+						except:
+							pass
+						self.driver.enqueueSetMessage(self.props['full_res'])
 					cmdQueue.put('capture-full-res-done')
 					if hdulist is not None:
 						hdulist.close()
 					return
 
 				if name.endswith('.jpg'):
-					im_c = cv2.imdecode(np.fromstring(jpg, dtype=np.uint8), -1)
+					im_c = cv2.imdecode(np.fromstring(imgdata, dtype=np.uint8), -1)
 
 				log.info("full_res decoded")
+				
+				
+				histogram = {
+				  'histogram': np.histogram(im_c, bins=256, range=(0, np.iinfo(im_c.dtype).max))[0].tolist()
+				}
+				self.props["histogram"]["histogram"].setValue(json.dumps(histogram), compress=True)
+				self.props["histogram"]["histogram"].setAttr("format", ".json.z")
+				self.props["histogram"].setAttr("state", "Ok")
+				self.driver.enqueueSetMessage(self.props["histogram"])
+				
+				
 				#mean, stddev = cv2.meanStdDev(im_c)
 				#im_c[:,:,0] = cv2.subtract(im_c[:,:,0], mean[0])
 				#im_c[:,:,1] = cv2.subtract(im_c[:,:,1], mean[1])
@@ -1103,6 +1121,13 @@ class Navigator:
 					self.full_res['full_temp'].append(temp)
 					self.full_res['full_hum'].append(hum)
 					self.full_res['full_ts'] = t
+					try:
+						self.props['full_res']['hfr'].setValue(0)
+						self.props['full_res']['ra_stddev'].setValue(self.full_res['ra_err_list' ][-1] or 0)
+						self.props['full_res']['dec_stddev'].setValue(self.full_res['dec_err_list' ][-1] or 0)
+					except:
+						pass
+					self.driver.enqueueSetMessage(self.props['full_res'])
 				cmdQueue.put('capture-full-res-done')
 				if hdulist is not None:
 					hdulist.close()
@@ -1116,6 +1141,13 @@ class Navigator:
 					self.full_res['full_temp'].append(temp)
 					self.full_res['full_hum'].append(hum)
 					self.full_res['full_ts'] = t
+					try:
+						self.props['full_res']['hfr'].setValue(0)
+						self.props['full_res']['ra_stddev'].setValue(self.full_res['ra_err_list' ][-1] or 0)
+						self.props['full_res']['dec_stddev'].setValue(self.full_res['dec_err_list' ][-1] or 0)
+					except:
+						pass
+					self.driver.enqueueSetMessage(self.props['full_res'])
 				cmdQueue.put('capture-full-res-done')
 				if hdulist is not None:
 					hdulist.close()
@@ -1142,6 +1174,13 @@ class Navigator:
 					self.full_res['full_hum'].append(hum)
 					self.full_res['full_ts'] = t
 		
+					try:
+						self.props['full_res']['hfr'].setValue(full_hfr)
+						self.props['full_res']['ra_stddev'].setValue(self.full_res['ra_err_list' ][-1] or 0)
+						self.props['full_res']['dec_stddev'].setValue(self.full_res['dec_err_list' ][-1] or 0)
+					except:
+						pass
+					self.driver.enqueueSetMessage(self.props['full_res'])
 				log.info("full_res filter hfr %f", full_hfr)
 
 				ell_list = []
@@ -2297,7 +2336,7 @@ class Focuser:
 		self.ba_dir = 0
 		self.reset(dark)
 
-	hfr_size = 30
+	hfr_size = 20
 
 	@staticmethod
 	def v_param(v_curve):
@@ -2549,7 +2588,7 @@ class Focuser:
 
 		self.im = im
 		
-#		im = cv2.medianBlur(im, 3)
+		im = cv2.medianBlur(im, 3)
 
 		if (self.dark.len() > 0):
 			log.info(im.shape)
@@ -2734,7 +2773,7 @@ class Focuser:
 				self.ba_pos = self.bahtinov.result()
 				if self.ba_dir == 0:
 					self.step(2)
-					self.phase_wait = 3
+					self.phase_wait = 8
 					self.changePhase('ba_init')
 				else:
 					self.ba_int = 0.0
@@ -2763,7 +2802,7 @@ class Focuser:
 				self.props["focus"]["Bahtinov"].setValue(self.ba_pos)
 				self.driver.enqueueSetMessage(self.props["focus"])
 
-				self.ba_int += self.ba_pos * 0.1
+				self.ba_int += self.ba_pos * 0.01
 				if np.abs(self.ba_int) > 1.0:
 					if self.ba_pos * self.ba_dir > 0:
 						self.step(-1)
@@ -3110,20 +3149,6 @@ class Runner(threading.Thread):
 				<defSwitch name="match" label="match">Off</defSwitch>
 			</defSwitchVector>
 
-			<defSwitchVector device="{0}" name="full_dispmode" label="FullRes Display mode" group="FullRes" state="Idle" perm="rw" rule="OneOfMany">
-				<defSwitch name="normal" label="normal">On</defSwitch>
-				<defSwitch name="zoom-2" label="zoom-2">Off</defSwitch>
-				<defSwitch name="zoom-3" label="zoom-3">Off</defSwitch>
-				<defSwitch name="zoom-4" label="zoom-4">Off</defSwitch>
-				<defSwitch name="zoom-8" label="zoom-8">Off</defSwitch>
-				<defSwitch name="zoom-16" label="zoom16">Off</defSwitch>
-				<defSwitch name="zoom-deg50" label="zoom-deg50">Off</defSwitch>
-				<defSwitch name="zoom-deg100" label="zoom-deg100">Off</defSwitch>
-				<defSwitch name="zoom-deg180" label="zoom-deg180">Off</defSwitch>
-				<defSwitch name="orig" label="orig">Off</defSwitch>
-				<defSwitch name="df-cor" label="df-cor">Off</defSwitch>
-				<defSwitch name="match" label="match">Off</defSwitch>
-			</defSwitchVector>
 
 			<defSwitchVector device="{0}" name="camera_control" label="Camera" group="Main Control" state="Idle" perm="rw" rule="AtMostOne">
 				<defSwitch name="capture">Off</defSwitch>
@@ -3186,6 +3211,31 @@ class Runner(threading.Thread):
 					<defNumber name="X" label="X" format="%5.0f">0</defNumber>
 					<defNumber name="Y" label="Y" format="%5.0f">0</defNumber>
 				</defNumberVector>
+
+				<defSwitchVector device="{0}" name="full_dispmode" label="FullRes Display mode" group="FullRes" state="Idle" perm="rw" rule="OneOfMany">
+					<defSwitch name="normal" label="normal">On</defSwitch>
+					<defSwitch name="zoom-2" label="zoom-2">Off</defSwitch>
+					<defSwitch name="zoom-3" label="zoom-3">Off</defSwitch>
+					<defSwitch name="zoom-4" label="zoom-4">Off</defSwitch>
+					<defSwitch name="zoom-8" label="zoom-8">Off</defSwitch>
+					<defSwitch name="zoom-16" label="zoom16">Off</defSwitch>
+					<defSwitch name="zoom-deg50" label="zoom-deg50">Off</defSwitch>
+					<defSwitch name="zoom-deg100" label="zoom-deg100">Off</defSwitch>
+					<defSwitch name="zoom-deg180" label="zoom-deg180">Off</defSwitch>
+					<defSwitch name="orig" label="orig">Off</defSwitch>
+					<defSwitch name="df-cor" label="df-cor">Off</defSwitch>
+					<defSwitch name="hfr" label="hfr">Off</defSwitch>
+				</defSwitchVector>
+
+				<defNumberVector device="{0}" name="full_res" label="full res stats" group="FullRes" state="Idle" perm="ro" timeout="60">
+					<defNumber name="hfr" label="hfr" format="%1.2f">0</defNumber>
+					<defNumber name="ra_stddev" label="ra_stddev" format="%1.2f">0</defNumber>
+					<defNumber name="dec_stddev" label="dec_stddev" format="%1.2f">0</defNumber>
+				</defNumberVector>
+
+				<defBLOBVector device="{0}" name="histogram" label="histogram" group="FullRes" state="Idle" perm="ro">
+					<defBLOB name="histogram"/>
+				</defBLOBVector>
 			</INDIDriver>
 			""".format(device))
 
