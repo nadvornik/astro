@@ -18,7 +18,10 @@ class App extends React.Component {
 
   render() {
     return (
-      <INDI wsurl='websocket' history={ {'Guider': {'offset': 1000, "guider_ra_move": 1000, "guider_dec_move": 1000}, 'Navigator': {'full_res': 10}} }>
+      <INDI wsurl='websocket'
+        history={ {'Guider:offset': 1000, "Guider:guider_ra_move": 1000, "Guider:guider_dec_move": 1000, 'Navigator:full_res': 10} }
+        blob={ ['Navigator:histogram', 'Navigator:focus_data'] }
+      >
         <div className="App">
           <div className="Images">
             <div className='viewport' >
@@ -47,9 +50,9 @@ class App extends React.Component {
               <INDIChartContext tab="Guider:Guider" path="Guider:offset" history={true}><INDIChart/></INDIChartContext>
               <INDIChartContext tab="Guider:Guider" path="Guider:guider_ra_move" history={true}><INDIChart/></INDIChartContext>
               <INDIChartContext tab="Guider:Guider" path="Guider:guider_dec_move" history={true}><INDIChart/></INDIChartContext>
-              <INDIChartContext tab="Navigator:Focuser" path="Navigator:focus_data:focus_data" enable_blob={true}><FocusChart/></INDIChartContext>
+              <INDIChartContext tab="Navigator:Focuser" path="Navigator:focus_data:focus_data"><FocusChart/></INDIChartContext>
               <INDIChartContext tab="Navigator:FullRes" path="Navigator:full_res" history={true}><INDIChart/></INDIChartContext>
-              <INDIChartContext tab="Navigator:FullRes" path="Navigator:histogram:histogram" enable_blob={true}><HistogramChart options={{yaxis: {logarithmic: true}}}/></INDIChartContext>
+              <INDIChartContext tab="Navigator:FullRes" path="Navigator:histogram:histogram"><HistogramChart/></INDIChartContext>
             </INDIPanel>
           </div>
         </div>

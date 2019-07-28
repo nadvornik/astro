@@ -1,24 +1,8 @@
 import React from 'react';
-import Chart from "react-apexcharts";
 import { INDIContext } from './indi';
-import pako from "pako";
 
 export default class INDIChartContext extends React.Component {
   static contextType = INDIContext;
-  constructor(props, context) {
-    super(props, context);
-
-    if (this.props.enable_blob) {
-      this.enableBLOB(this.props.path)
-    }
-
-  }
-
-  enableBLOB(path) {
-    var [device, property, element] = path.split(":");
-    this.context.indi.enableBLOB(device, property);
-  }
-  
 
   getProp(path) {
     var [device, property, element] = path.split(":");

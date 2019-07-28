@@ -2,7 +2,7 @@ import React from 'react';
 import Chart from "react-apexcharts";
 import pako from "pako";
 
-export default class INDIChart extends React.Component {
+export default class INDIChart extends React.PureComponent {
   constructor(props, context) {
     super(props, context);
 

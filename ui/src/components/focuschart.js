@@ -42,7 +42,6 @@ export default class FocusChart extends INDIChart {
       annotations: {xaxis: {$set: xannotation  }},
     })
 
-
     return (
       <Chart
         options={options}

@@ -167,7 +167,7 @@ function INDIValue(props) {
   );
 }
 
-class INDIproperty extends React.Component {
+class INDIproperty extends React.PureComponent {
 
   constructor(props) {
     super(props);
@@ -341,13 +341,16 @@ export class INDI extends React.Component {
     };
     
     if (this.props.history) {
-      Object.keys(this.props.history).forEach(device => {
+      this.history_len = {};
+      Object.keys(this.props.history).forEach(path => {
+        var [device, name] = path.split(":");
         this.state.history[device] = this.state.history[device] || {};
-        Object.keys(this.props.history[device]).forEach(name => {
-          this.state.history[device][name] = this.state.history[device][name] || [];
-        });
+        this.state.history[device][name] = this.state.history[device][name] || [];
+        this.history_len[device] = this.history_len[device] || {};
+        this.history_len[device][name] = this.props.history[path];
       });
     }
+
     
     [
       'actionSetProp', 'defSwitchVector', 'defTextVector', 'defNumberVector', 'defLightVector', 'defBLOBVector', 'setSwitchVector',
@@ -358,6 +361,12 @@ export class INDI extends React.Component {
     this.reconnect = false;
     this.wsauto = new Set(['<getProperties version="1.7"/>'])
     
+    if (this.props.blob) {
+      this.props.blob.forEach(path => {
+        var [device, name] = path.split(":");
+        this.enableBLOB(device, name);
+      });
+    }
   }
 
   componentDidMount() {
@@ -444,7 +453,7 @@ export class INDI extends React.Component {
   defSwitchVector(e) {
       //console.log(e.children);
       var entry = {...e.attributes, type: 'SwitchVector'}
-      entry.elements = {}
+      entry.elements = {};
       e.children.forEach((v, i) => (entry.elements[v.attributes.name] = {...v.attributes, value: v.children.length ? v.children[0].value.trim() : 'Off', i: i }));
       //alert(JSON.stringify(entry, null, 4));
       this.setState(prevState => (
@@ -457,7 +466,7 @@ export class INDI extends React.Component {
   defTextVector(e) {
       //alert(JSON.stringify(e, null, 4));
       var entry = {...e.attributes, type: 'TextVector'}
-      entry.elements = {}
+      entry.elements = {};
       e.children.forEach((v, i) => (entry.elements[v.attributes.name] = {...v.attributes, value: v.children.length ? v.children[0].value.trim() : '', i: i}));
       //alert(JSON.stringify(entry, null, 4));
       this.setState(prevState => (
@@ -470,7 +479,7 @@ export class INDI extends React.Component {
   defNumberVector(e) {
       //console.log(e.children);
       var entry = {...e.attributes, type: 'NumberVector'}
-      entry.elements = {}
+      entry.elements = {};
       e.children.forEach((v, i) => (entry.elements[v.attributes.name] = {...v.attributes, value: v.children.length ? v.children[0].value.trim() : '0', i: i}));
       //alert(JSON.stringify(entry, null, 4));
       this.setState(prevState => (
@@ -483,7 +492,7 @@ export class INDI extends React.Component {
   defLightVector(e) {
       //console.log(e.children);
       var entry = {...e.attributes, type: 'LightVector'}
-      entry.elements = {}
+      entry.elements = {};
       e.children.forEach((v, i) => (entry.elements[v.attributes.name] = {...v.attributes, value: v.children.length ? v.children[0].value.trim() : 'Idle', i: i }));
       //alert(JSON.stringify(entry, null, 4));
       this.setState(prevState => (
@@ -496,12 +505,21 @@ export class INDI extends React.Component {
   defBLOBVector(e) {
       //console.log(e.children);
       var entry = {...e.attributes, type: 'BLOBVector'}
-      entry.elements = {}
-      e.children.forEach((v, i) => (entry.elements[v.attributes.name] = {...v.attributes, value: '', i: i }));
       //alert(JSON.stringify(entry, null, 4));
-      this.setState(prevState => (
-          update(prevState, {entries: { $auto: {[entry.device]: { $auto: {[entry.name]: { $set: entry }}}}}})
-      ));
+      this.setState(prevState => {
+          entry.elements = {};
+          e.children.forEach((v, i) => {
+            var value = '';
+            try {
+              value = prevState.entries[entry.device][entry.name].elements[v.attributes.name].value;
+            }
+            catch (error) {
+              value = '';
+            }
+            entry.elements[v.attributes.name] = {...v.attributes, value: value, i: i }
+          });
+          return update(prevState, {entries: { $auto: {[entry.device]: { $auto: {[entry.name]: { $set: entry }}}}}})
+      });
       this.message(e);
   }
 
@@ -683,7 +701,7 @@ export class INDI extends React.Component {
      this.wsauto.add(xml);
      
      try {
-         this.webSocket.send(xml);
+         if (this.webSocket) this.webSocket.send(xml);
      }
      catch (error) {
          console.log(error);
@@ -692,7 +710,7 @@ export class INDI extends React.Component {
 
   updateHistory(device, name) {
     if (!this.props.history ||
-        !this.props.history[device] || !this.props.history[device][name] ||
+        !this.history_len[device] || !this.history_len[device][name] ||
         !this.state.history[device] || !this.state.history[device][name]) return;
 
     this.setState(prevState => {
@@ -704,7 +722,7 @@ export class INDI extends React.Component {
       });
       hist_entry.push(entry.timestamp);
 
-      return update(prevState, {history: {[device]: {[name]: {$set:  prevState.history[device][name].concat([hist_entry]).slice(-this.props.history[device][name])   }}}})
+      return update(prevState, {history: {[device]: {[name]: {$set:  prevState.history[device][name].concat([hist_entry]).slice(-this.history_len[device][name])   }}}})
     });
 
   }
