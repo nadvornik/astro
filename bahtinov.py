@@ -1,7 +1,7 @@
 import numpy as np
 import cv2
 from smooth import smooth
-from centroid import centroid, hfr
+from centroid import centroid, hfr, sym_center
 import logging
 
 
@@ -78,8 +78,8 @@ class Bahtinov:
 		bl = cv2.blur(bl, (10, 10))
 		minVal, maxVal, minLoc, maxLoc = cv2.minMaxLoc(bl)
 		self.center = (maxLoc[1], maxLoc[0]) 
-		img = get_rect(img, (50, 50), self.center)
-		x, y = centroid(img)
+		img = get_rect(img, (100, 100), self.center)
+		x, y = sym_center(img)
 		self.center = (maxLoc[1] + int(y), maxLoc[0] + int(x))
 		log.info("center off %d %d" % (x, y))
 		
