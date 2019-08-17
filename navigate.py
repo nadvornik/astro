@@ -2021,7 +2021,7 @@ class Guider:
 
 				status += " dist:%.1f" % (dist)
 
-				if self.dist > 100 and len(self.resp0) > 15 or len(self.resp0) > 60:
+				if self.dist > 100 and len(self.resp0) > 12 or len(self.resp0) > 60 or self.dist > 200:
 					self.t1 = time.time()
 					dt = t - self.t0
 					self.mount.go_ra.out(-1)
@@ -2666,7 +2666,7 @@ class Focuser:
 				self.status['phase'] = 'wait' #stop
 			else:
 				self.step(3)
-				self.phase_wait = 1
+				self.phase_wait = 3
 				self.changePhase('prep_record_v')
 		elif self.status['phase'] == 'prep_record_v': # record v curve
 			self.hfr = self.get_hfr(im_sub)
@@ -2802,7 +2802,7 @@ class Focuser:
 				self.props["focus"]["Bahtinov"].setValue(self.ba_pos)
 				self.driver.enqueueSetMessage(self.props["focus"])
 
-				self.ba_int += self.ba_pos * 0.01
+				self.ba_int = self.ba_int * 0.99 + self.ba_pos * 0.05
 				if np.abs(self.ba_int) > 1.0:
 					if self.ba_pos * self.ba_dir > 0:
 						self.step(-1)
@@ -2833,7 +2833,7 @@ class Focuser:
 			cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
 			if 'ba_' in self.status['phase']:
 				self.bahtinov.plot(disp)
-			if self.focus_yx is not None:
+			elif self.focus_yx is not None:
 				for p in self.focus_yx:
 					cv2.circle(disp, (int(p[1] + 0.5), int(p[0] + 0.5)), 20, (255), 1)
 			ui.imshow(self.tid, disp)
@@ -2842,7 +2842,7 @@ class Focuser:
 			cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
 			if 'ba_' in self.status['phase']:
 				self.bahtinov.plot(disp)
-			if self.focus_yx is not None:
+			elif self.focus_yx is not None:
 				for p in self.focus_yx:
 					cv2.circle(disp, (int(p[1] + 0.5), int(p[0] + 0.5)), 20, (255), 1)
 			ui.imshow(self.tid, disp)
@@ -2850,10 +2850,10 @@ class Focuser:
 			disp = normalize(self.stack_im)
 			if 'ba_' in self.status['phase']:
 				self.bahtinov.plot(disp)
-			cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
-			if self.focus_yx is not None:
+			elif self.focus_yx is not None:
 				for p in self.focus_yx:
 					cv2.circle(disp, (int(p[1] + 0.5), int(p[0] + 0.5)), 20, (255), 1)
+			cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
 			ui.imshow(self.tid, disp)
 		elif (dispmode.startswith('zoom-')):
 			zoom = int(dispmode[len('zoom-'):])
