@@ -187,6 +187,7 @@ class Camera_indi:
 					im = im.reshape((height, width))
 			except:
 				im = im.reshape((-1, width))
+			im = apply_gamma(im, 2.4)
 			log.info("shape %s", im.shape)
 			return im, time.time()
 		return None, time.time()
