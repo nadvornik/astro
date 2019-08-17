@@ -64,7 +64,7 @@ class Camera:
 		self.focuser = focuser
 		self.status.setdefault('width', 1280)
 		self.status.setdefault('height', 960)
-		self.status.setdefault('format', V4L2_PIX_FMT_SBGGR16)
+		self.status.setdefault('format', V4L2_PIX_FMT_Y16)
 		self.status['capture_idx'] = 0
 		self.status['capture'] = False
 		self.status.setdefault('capture_path', None)
@@ -199,7 +199,7 @@ class Camera:
 		time.sleep(0.2)
 	
 		try:
-			if (self.fmt == V4L2_PIX_FMT_SBGGR16):
+			if (self.fmt == V4L2_PIX_FMT_SBGGR16 or self.fmt == V4L2_PIX_FMT_Y16):
 				# the registers seems to be similar to gspca/sn9c20x.c driver
 				# but the actual addresses are different.
 				#
@@ -264,6 +264,23 @@ class Camera:
 		
 			if self.decode:
 				img = cv2.cvtColor(img, cv2.COLOR_BAYER_GR2RGB)
+		elif (self.fmt == V4L2_PIX_FMT_Y16):
+			img = img.reshape((-1, self.width, 2))
+			img16 = np.array(img[:,:, 0], dtype=np.uint16)
+			img = img16 * 256 + img[:,:, 1] * 64
+		
+			if self.status['capture'] and self.status['capture_path'] is not None:
+				i = self.status['capture_idx']
+				while os.path.isfile(self.status['capture_path'] + 'capture%04d.tif' % i):
+					i += 1
+				cv2.imwrite(self.status['capture_path'] + 'capture%04d.tif' % i, img)
+				log.info("saved {}".format(i))
+				i += 1
+				self.status['capture_idx'] = i
+
+		
+			if self.decode:
+				img = cv2.blur(img, (2, 2))
 		elif (self.fmt == V4L2_PIX_FMT_YUYV):
 			img = img.reshape((-1, self.width, 2))
 			if self.decode:
