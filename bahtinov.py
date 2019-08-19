@@ -235,7 +235,7 @@ class Bahtinov:
 			if check:
 				v1 = line0[1] / np.linalg.norm(line0[1])
 				v2 = line[1] / np.linalg.norm(line[1])
-				if np.dot(v1, v2) < np.cos(5.0 / 180 * np.pi):
+				if np.dot(v1, v2) < np.cos(1.0 / 180 * np.pi):
 					log.info("line changed angle %s %s" % (v1, v2))
 					ret = False
 					continue

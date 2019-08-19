@@ -2265,7 +2265,7 @@ class Guider:
 		self.prev_t = t
 
 class Focuser:
-	def __init__(self, driver, device, tid, status, dark = None, full_res = None):
+	def __init__(self, driver, device, tid, status, mount, dark = None, full_res = None):
 		self.status = status
 
 		self.driver = driver
@@ -2334,6 +2334,7 @@ class Focuser:
 		self.ba_pos = 0.0
 		self.ba_step = 0
 		self.ba_dir = 0
+		self.mount = mount
 		self.reset(dark)
 
 	hfr_size = 20
@@ -2812,6 +2813,14 @@ class Focuser:
 						self.ba_step += 1
 					self.ba_int = 0.0
 					log.info("ba_step %d" % self.ba_step)
+				
+			off_x = self.bahtinov.center[1] - im_sub.shape[1] // 2
+			off_y = self.bahtinov.center[0] - im_sub.shape[0] // 2
+			log.info("move center %d %d", off_x, off_y)
+			if np.abs(off_x) > 30 or np.abs(off_y) > 30:
+				self.mount.move_main_px(-off_x / 15, -off_y / 15, self.tid)
+			else:
+				self.mount.move_main_px(-off_x / 15, -off_y / 15, self.tid, max_t = 0.2)
 			
 		else:
 			if self.focus_yx is not None:
@@ -3072,9 +3081,10 @@ class Mount:
 		pass
 		# return roll, parity, pixpersec_ra_plus, pixpersec_ra_minus, pixpersec_dec_plus, pixpersec_dec_minus
 
-	def move_main_px(self, dx, dy, camera):
+	def move_main_px(self, dx, dy, camera, max_t = None):
 		if camera == 'navigator':
 			if self.main_tan is None:
+				log.info("move not solved")
 				return
 			log.info("move pix %f %f", dx, dy)
 
@@ -3089,24 +3099,39 @@ class Mount:
 			log.info("move arcsec %f %f", ra, dec)
 			if self.go_ra is not None:
 				if ra > 0:
-					log.info("move_ra sec %f", ra / self.status['arcsec_per_sec_ra_plus'])
-					self.go_ra.out(1, ra / self.status['arcsec_per_sec_ra_plus'])
+					t = ra / self.status['arcsec_per_sec_ra_plus']
+					if max_t is not None and t > max_t:
+						t = max_t
+					log.info("move_ra plus sec %f", t)
+					self.go_ra.out(1, t)
 				elif ra < 0:
-					log.info("move_ra sec %f", ra / self.status['arcsec_per_sec_ra_minus'])
-					self.go_ra.out(-1, -ra / self.status['arcsec_per_sec_ra_minus'])
+					t = -ra / self.status['arcsec_per_sec_ra_minus']
+					if max_t is not None and t > max_t:
+						t = max_t
+					log.info("move_ra minus sec %f", t)
+					self.go_ra.out(-1, t)
 				else:
 					self.go_ra.out(0)
 
 			if self.go_dec is not None:
 				if dec > 0:
-					log.info("move_dec sec %f", dec / self.status['arcsec_per_sec_dec_plus'])
-					self.go_dec.out(-1, dec / self.status['arcsec_per_sec_dec_plus'])
+					t = dec / self.status['arcsec_per_sec_dec_plus']
+					if max_t is not None and t > max_t:
+						t = max_t
+					log.info("move_dec plus sec %f", t)
+					self.go_dec.out(-1, t)
 				elif dec < 0:
-					log.info("move_dec sec %f", dec / self.status['arcsec_per_sec_dec_minus'])
-					self.go_dec.out(1, -dec / self.status['arcsec_per_sec_dec_minus'])
+					t = -dec / self.status['arcsec_per_sec_dec_plus']
+					if max_t is not None and t > max_t:
+						t = max_t
+
+					log.info("move_dec minus sec %f", t)
+					self.go_dec.out(1, t)
 				else:
 					self.go_dec.out(0)
 
+		else:
+			log.error("camera: %s", camera)
 	def stop(self):
 		if self.go_dec is not None:
 			self.go_dec.out(0)
@@ -3764,7 +3789,7 @@ def run_gphoto():
 
 	dark = Median(5)
 	nav = Navigator(status.path(["navigator"]), dark, mount, 'navigator', polar_tid = 'polar')
-	focuser = Focuser('navigator', status.path(["navigator", "focuser"]), dark = dark)
+	focuser = Focuser('navigator', status.path(["navigator", "focuser"]), mount, dark = dark)
 
 	runner = Runner('navigator', cam, navigator = nav, focuser = focuser)
 	runner.start()
@@ -3940,7 +3965,7 @@ def run_test_2_kstars():
 	cam = Camera_test_kstars_g(status.path(["guider", "navigator", "camera"]), cam1)
 
 
-	focuser = Focuser(driver, "Navigator", 'navigator', status.path(["navigator", "focuser"]), dark = dark1, full_res = status.path(["full_res"]))
+	focuser = Focuser(driver, "Navigator", 'navigator', status.path(["navigator", "focuser"]), mount, dark = dark1, full_res = status.path(["full_res"]))
 	
 	runner = Runner(driver, "Navigator", 'navigator', cam1, navigator = nav1, focuser = focuser)
 	runner.start()
@@ -3975,7 +4000,7 @@ def run_indi():
 	
 	nav = Navigator(driver, "Navigator", status.path(["navigator"]), dark, mount, 'navigator', polar_tid = 'polar')
 
-	focuser = Focuser(driver, "Navigator", 'navigator', status.path(["navigator", "focuser"]))
+	focuser = Focuser(driver, "Navigator", 'navigator', status.path(["navigator", "focuser"]), mount)
 
 	runner = Runner(driver, "Navigator", 'navigator', cam, navigator = nav, focuser = focuser)
 	runner.start()
@@ -4000,7 +4025,7 @@ def run_test_2_gphoto():
 	dark2 = Median(5)
 	
 	nav1 = Navigator(status.path(["navigator"]), dark1, mount, 'navigator', polar_tid = 'polar', full_res = status.path(["full_res"]))
-	focuser = Focuser('navigator', status.path(["navigator", "focuser"]), dark = dark1)
+	focuser = Focuser('navigator', status.path(["navigator", "focuser"]), mount, dark = dark1)
 
 	nav = Navigator(status.path(["guider", "navigator"]), dark2, mount, 'guider')
 
@@ -4047,7 +4072,7 @@ def run_2():
 	dark2 = Median(5)
 	
 	nav1 = Navigator(status.path(["navigator"]), dark1, mount, 'navigator', polar_tid = 'polar', full_res = status.path(["full_res"]))
-	focuser = Focuser('navigator', status.path(["navigator", "focuser"]), dark = dark1, full_res = status.path(["full_res"]))
+	focuser = Focuser('navigator', status.path(["navigator", "focuser"]), mount, dark = dark1, full_res = status.path(["full_res"]))
 
 	nav = Navigator(status.path(["guider", "navigator"]), dark2, mount, 'guider')
 
@@ -4104,7 +4129,7 @@ def run_2_indi():
 	
 	nav = Navigator(driver, "Navigator", status.path(["navigator"]), dark, mount, 'navigator', polar_tid = 'polar')
 
-	focuser = Focuser(driver, "Navigator", 'navigator', status.path(["navigator", "focuser"]))
+	focuser = Focuser(driver, "Navigator", 'navigator', status.path(["navigator", "focuser"]), mount)
 
 	runner = Runner(driver, "Navigator", 'navigator', cam, navigator = nav, focuser = focuser)
 	runner.start()
@@ -4220,7 +4245,7 @@ def run_2_v4l2():
 	dark2 = Median(5)
 	
 	nav1 = Navigator(status.path(["navigator"]), dark1, mount, 'navigator', polar_tid = 'polar')
-	focuser = Focuser('navigator', status.path(["navigator", "focuser"]), dark = dark1)
+	focuser = Focuser('navigator', status.path(["navigator", "focuser"]), mount, dark = dark1)
 
 	nav = Navigator(status.path(["guider", "navigator"]), dark2, mount, 'guider')
 
@@ -4279,7 +4304,7 @@ def run_test_full_res():
 	cam = Camera_test_kstars_g(status.path(["guider", "navigator", "camera"]), cam1)
 
 
-	focuser = Focuser(driver, "Navigator", 'navigator', status.path(["navigator", "focuser"]), dark = dark1)
+	focuser = Focuser(driver, "Navigator", 'navigator', status.path(["navigator", "focuser"]), nount, dark = dark1)
 	
 	runner = Runner(driver, "Navigator", 'navigator', cam, navigator = nav, focuser = focuser)
 #	profiler = LineProfiler()
