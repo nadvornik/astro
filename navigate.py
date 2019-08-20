@@ -94,6 +94,7 @@ class IndiDriver(IndiLoop):
 	def __init__(self):
 		super().__init__(driver=True, client_addr='localhost')
 		self.queues = {'snoop': {}, 'new': {}}
+		self.callbacks = {'snoop': {}, 'new': {}}
 		self.setQueue = queue.Queue()
 		self.timeout = 0.2
 		self.reply_timeout = 60
@@ -114,6 +115,12 @@ class IndiDriver(IndiLoop):
 	def register(self, device, msg_type = 'new'):
 		self.queues[msg_type][device] = queue.Queue()
 		log.info("register %s", device)
+
+	def register_callback(self, device, msg_type, cb):
+		if device not in self.callbacks[msg_type]:
+			self.callbacks[msg_type][device] = []
+		self.callbacks[msg_type][device].append(cb)
+		log.info("register callback %s", device)
 	
 	def get(self, device, block=True, timeout=None, msg_type = 'new'):
 		q = self.queues[msg_type][device]
@@ -129,6 +136,10 @@ class IndiDriver(IndiLoop):
 			return
 
 		device = prop.getAttr('device')
+		
+		if device in self.callbacks['new']:
+			for cb in self.callbacks['new'][device]:
+				cb(msg, prop)
 
 		if device in self.queues['new']:
 			self.queues['new'][device].put((msg, prop))
@@ -142,8 +153,13 @@ class IndiDriver(IndiLoop):
 	def handleSnoop(self, msg, prop):
 		device = prop.getAttr('device')
 
+		if device in self.callbacks['snoop']:
+			for cb in self.callbacks['snoop'][device]:
+				cb(msg, prop)
+
 		if prop.itype == 'BLOB':
 			msg = None
+
 		if device in self.queues['snoop']:
 			self.queues['snoop'][device].put((msg, prop))
 	
@@ -1678,8 +1694,8 @@ class Guider:
 		self.status['curr_hfr_list'] = []
 		self.off = (0.0, 0.0)
 		self.off_t = None
-		self.mount.go_ra.out(0)
-		self.mount.go_dec.out(0)
+		self.mount.go_ra_out(0)
+		self.mount.go_dec_out(0)
 		self.cnt = 0
 		self.pt0 = []
 		self.pt0base = []
@@ -1741,8 +1757,8 @@ class Guider:
 		
 	def cmd(self, cmd):
 		if cmd == "stop":
-			self.mount.go_ra.out(0)
-			self.mount.go_dec.out(0)
+			self.mount.go_ra_out(0)
+			self.mount.go_dec_out(0)
 			
 
 		elif cmd == "capture-started":
@@ -1934,8 +1950,8 @@ class Guider:
 		
 		if len(self.pt0) == 0:
 			cmdQueue.put('navigator')
-			self.mount.go_ra.out(0)
-			self.mount.go_dec.out(0)
+			self.mount.go_ra_out(0)
+			self.mount.go_dec_out(0)
 
 		if (self.dark.len() >= 4):
 			im_sub = cv2.subtract(im, self.dark.get(), dtype=cv2_dtype(im.dtype))
@@ -1966,7 +1982,7 @@ class Guider:
 			self.used_cnt = []
 			self.cnt = 0
 			self.dist = 1.0
-			self.mount.go_ra.out(1)
+			self.mount.go_ra_out(1)
 			self.changePhase('move')
 			self.t0 = time.time()
 			self.resp0 = []
@@ -2024,7 +2040,7 @@ class Guider:
 				if self.dist > 100 and len(self.resp0) > 12 or len(self.resp0) > 60 or self.dist > 200:
 					self.t1 = time.time()
 					dt = t - self.t0
-					self.mount.go_ra.out(-1)
+					self.mount.go_ra_out(-1)
 				
 					aresp = np.array(self.resp0)
 					aresp1 = aresp[aresp[:, 1] > 10]
@@ -2049,7 +2065,7 @@ class Guider:
 					self.cnt = 0
 					self.changePhase('back')
 				
-					self.mount.go_ra.out(-1, self.dist / self.status['pixpersec'])
+					self.mount.go_ra_out(-1, self.dist / self.status['pixpersec'])
 					cmdQueue.put('interrupt')
 
 			for p in pt:
@@ -2078,7 +2094,7 @@ class Guider:
 
 				for p in pt:
 					cv2.circle(disp, (int(p[1] + 0.5), int(p[0] + 0.5)), 10, (255), 1)
-				self.mount.go_ra.out(-1, err.real / self.status['pixpersec'])
+				self.mount.go_ra_out(-1, err.real / self.status['pixpersec'])
 				
 				if err.real < self.status['pixpersec'] * self.status['t_delay1'] + self.pixperframe:
 					self.t2 = t
@@ -2106,7 +2122,7 @@ class Guider:
 					self.err0_dec = err.imag
 					
 					if self.mount.go_dec is not None:
-						self.mount.go_dec.out(1, self.status['t_delay'] * 2 + 12)
+						self.mount.go_dec_out(1, self.status['t_delay'] * 2 + 12)
 						self.changePhase('move_dec')
 					else:
 						self.changePhase('track')
@@ -2888,11 +2904,12 @@ class Focuser:
 		self.driver.enqueueSetMessage(self.props["focus_data"])
 
 class Mount:
-	def __init__(self, status, polar, go_ra = None, go_dec = None):
+	def __init__(self, driver, status, polar, go_ra = None, go_dec = None):
 		self.status = status
 		self.polar = polar
 		self.go_ra = go_ra
 		self.go_dec = go_dec
+		self.allow_guide = True
 		self.status.setdefault('oag', True)
 		if self.status['oag']:
 			self.status.setdefault('oag_pos', None)
@@ -2924,6 +2941,44 @@ class Mount:
 		self.temp_sensor = TempSensor(self.status['temp_sensor'])
 		#self.ext_trigger = ExtTrigger()
 		
+		self.device = "EQMod Mount"
+		driver.register_callback(self.device, 'new', self.handle_new_cb)
+		driver.register_callback(self.device, 'snoop', self.handle_set_cb)
+
+	def handle_new_cb(self, msg, prop):
+		if prop.getAttr('device') == self.device and prop.getAttr('name') == "TELESCOPE_ABORT_MOTION":
+			if self.go_ra:
+				self.go_ra.out(0)
+			if self.go_dec:
+				self.go_dec.out(0)
+	
+	def handle_set_cb(self, msg, prop):
+		if prop.getAttr('device') == self.device and prop.getAttr('name') == "TELESCOPE_TRACK_STATE":
+			self.allow_guide = prop.checkValue("TRACK_ON", state = ['Ok', 'Idle', 'Busy']) == "On"
+			
+			log.info("allow_guide %s", self.allow_guide)
+			
+			if not self.allow_guide:
+				if self.go_ra:
+					self.go_ra.out(0)
+				if self.go_dec:
+					self.go_dec.out(0)
+				
+				
+	
+	def go_ra_out(self, d, t = 0):
+		if self.go_ra is not None:
+			if self.allow_guide:
+				self.go_ra.out(d, t)
+			else:
+				self.go_ra.out(0)
+
+	def go_dec_out(self, d, t = 0):
+		if self.go_dec is not None:
+			if self.allow_guide:
+				self.go_dec.out(d, t)
+			else:
+				self.go_dec.out(0)
 		
 	def tan_to_euler(self, tan, off=(0,0)):
 		ra, dec = tan.radec_center()
@@ -3103,15 +3158,15 @@ class Mount:
 					if max_t is not None and t > max_t:
 						t = max_t
 					log.info("move_ra plus sec %f", t)
-					self.go_ra.out(1, t)
+					self.go_ra_out(1, t)
 				elif ra < 0:
 					t = -ra / self.status['arcsec_per_sec_ra_minus']
 					if max_t is not None and t > max_t:
 						t = max_t
 					log.info("move_ra minus sec %f", t)
-					self.go_ra.out(-1, t)
+					self.go_ra_out(-1, t)
 				else:
-					self.go_ra.out(0)
+					self.go_ra_out(0)
 
 			if self.go_dec is not None:
 				if dec > 0:
@@ -3119,24 +3174,24 @@ class Mount:
 					if max_t is not None and t > max_t:
 						t = max_t
 					log.info("move_dec plus sec %f", t)
-					self.go_dec.out(-1, t)
+					self.go_dec_out(-1, t)
 				elif dec < 0:
 					t = -dec / self.status['arcsec_per_sec_dec_plus']
 					if max_t is not None and t > max_t:
 						t = max_t
 
 					log.info("move_dec minus sec %f", t)
-					self.go_dec.out(1, t)
+					self.go_dec_out(1, t)
 				else:
-					self.go_dec.out(0)
+					self.go_dec_out(0)
 
 		else:
 			log.error("camera: %s", camera)
 	def stop(self):
 		if self.go_dec is not None:
-			self.go_dec.out(0)
+			self.go_dec_out(0)
 		if self.go_ra is not None:
-			self.go_ra.out(0)
+			self.go_ra_out(0)
 
 	def move_to(self, ra, dec):
 		pass
@@ -3949,7 +4004,7 @@ def run_test_2_kstars():
 	go_ra = GuideOut("./guide_out_ra")
 	go_dec = GuideOut("./guide_out_dec")
 
-	mount = Mount(status.path(["mount"]), polar, go_ra, go_dec)
+	mount = Mount(driver, status.path(["mount"]), polar, go_ra, go_dec)
 
 	dark1 = Median(5)
 	dark2 = Median(5)
@@ -3990,7 +4045,7 @@ def run_indi():
 	ui.namedWindow('full_res')
 
 	polar = Polar(status.path(["polar"]), ['navigator'])
-	mount = Mount(status.path(["mount"]), polar)
+	mount = Mount(driver, status.path(["mount"]), polar)
 	fo = FocuserOut()
 
 	#cam = Camera_indi(driver, "CCD Simulator", status.path(["navigator", "camera"]), focuser=fo)
@@ -4114,7 +4169,7 @@ def run_2_indi():
 	go_ra = GuideOut("./guide_out_ra")
 	go_dec = GuideOut("./guide_out_dec")
 
-	mount = Mount(status.path(["mount"]), polar, go_ra, go_dec)
+	mount = Mount(driver, status.path(["mount"]), polar, go_ra, go_dec)
 
 	cam2 = Camera(status.path(["guider", "navigator", "camera"]))
 	cam2.prepare(1280, 960)
@@ -4288,7 +4343,7 @@ def run_test_full_res():
 	go_ra = GuideOut("./guide_out_ra")
 	go_dec = GuideOut("./guide_out_dec")
 
-	mount = Mount(status.path(["mount"]), polar, go_ra, go_dec)
+	mount = Mount(driver, status.path(["mount"]), polar, go_ra, go_dec)
 
 	dark1 = Median(5)
 	dark2 = Median(5)
