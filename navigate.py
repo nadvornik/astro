@@ -2121,12 +2121,15 @@ class Guider:
 				
 					self.err0_dec = err.imag
 					
+					#if self.mount.guider_callibrated():
+					#	self.changePhase('track')
+						
 					if self.mount.go_dec is not None:
 						self.mount.go_dec_out(1, self.status['t_delay'] * 2 + 12)
 						self.changePhase('move_dec')
 					else:
 						self.changePhase('track')
-						self.status['pixpersec_dec'] = None
+						self.status['pixpersec_dec'] = 0
 						self.mount.set_guider_calib(np.angle(self.ref_off, deg=True), 0, self.status['pixpersec'], self.status['pixpersec_neg'], 0, 0)
 						#self.alg_ra = GuiderAlgRa(self.mount.go_ra, self.status['t_delay'], self.status['pixpersec'], self.status['pixpersec_neg'], self.status['ra_alg'])
 						self.alg_ra.set_params(self.status['pixpersec'], self.status['pixpersec_neg'])
@@ -2166,7 +2169,7 @@ class Guider:
 					if abs(err.imag - self.err0_dec) < min(2 * self.status['pixpersec'], 10):
 						log.info("no dec axis")
 						self.parity = 0
-						self.status['pixpersec_dec'] = None
+						self.status['pixpersec_dec'] = 0
 						
 					elif m > 0:
 						log.info("dec_pos")
@@ -2181,12 +2184,11 @@ class Guider:
 
 					self.changePhase('track')
 					cmdQueue.put('interrupt')
+					log.error("refoff1 %s", self.ref_off)
+
 					self.mount.set_guider_calib(np.angle(self.ref_off, deg=True), self.parity, self.status['pixpersec'], self.status['pixpersec_neg'], self.status['pixpersec_dec'], self.status['pixpersec_dec'])
 					self.alg_ra.set_params(self.status['pixpersec'], self.status['pixpersec_neg'])
-					if self.status['pixpersec_dec'] is not None:
-						self.alg_dec.set_params(self.status['pixpersec_dec'], self.status['pixpersec_dec'], parity = self.parity)
-					else:
-						self.alg_dec.set_params(0, 0, 0)
+					self.alg_dec.set_params(0, 0, 0)
 					
 					self.props['callibration']['pixpersec_plus'].setValue(self.status['pixpersec'] or 0)
 					self.props['callibration']['pixpersec_minus'].setValue(self.status['pixpersec_neg'] or 0)
@@ -2199,6 +2201,15 @@ class Guider:
 
 
 		elif self.status['mode'] == 'track' or self.status['mode'] == 'close':
+			if self.mount.guider_callibrated():
+				log.error("refoff1 %s", self.ref_off)
+				ref_angle, self.parity, self.status['pixpersec'], self.status['pixpersec_neg'], self.status['pixpersec_dec'], dummy = self.mount.get_guider_calib()
+				self.ref_off = np.exp(1j * np.deg2rad(ref_angle))
+				log.error("refoff2 %s", self.ref_off)
+				self.alg_ra.set_params(self.status['pixpersec'], self.status['pixpersec_neg'])
+				self.alg_dec.set_params(self.status['pixpersec_dec'], self.status['pixpersec_dec'], parity = self.parity)
+
+			
 			if self.status['mode'] == 'track':
 				pt1m, pt2m, match = match_triangle(self.pt0, pt, 5, 80, self.off)
 				if len(match) > 0:
@@ -2929,8 +2940,8 @@ class Mount:
 
 		self.status.setdefault('arcsec_per_sec_ra_plus', 1)
 		self.status.setdefault('arcsec_per_sec_ra_minus', 1)
-		self.status.setdefault('arcsec_per_sec_dec_plus', 1)
-		self.status.setdefault('arcsec_per_sec_dec_minus', 1)
+		self.status.setdefault('arcsec_per_sec_dec_plus', 0)
+		self.status.setdefault('arcsec_per_sec_dec_minus', 0)
 
 
 		self.main_t = None
@@ -2942,6 +2953,7 @@ class Mount:
 		#self.ext_trigger = ExtTrigger()
 		
 		self.device = "EQMod Mount"
+		self.driver = driver
 		driver.register_callback(self.device, 'new', self.handle_new_cb)
 		driver.register_callback(self.device, 'snoop', self.handle_set_cb)
 
@@ -2963,6 +2975,40 @@ class Mount:
 					self.go_ra.out(0)
 				if self.go_dec:
 					self.go_dec.out(0)
+		
+		if prop.getAttr('device') == self.device and (prop.getAttr('name') == "TELESCOPE_TRACK_STATE" 
+		       or prop.getAttr('name') == 'ST4_GUIDE_RATE_NS' or prop.getAttr('name') == 'ST4_GUIDE_RATE_WE'):
+				self.getMountTracking()
+
+
+	def getMountTracking(self):
+
+		if self.driver.checkValue(self.device, 'ST4_GUIDE_RATE_NS', "ST4_RATE_NS_0") == "On":
+			self.status['arcsec_per_sec_dec_plus'] = 15
+			self.status['arcsec_per_sec_dec_minus'] = 15
+		elif self.driver.checkValue(self.device, 'ST4_GUIDE_RATE_NS', "ST4_RATE_NS_1") == "On":
+			self.status['arcsec_per_sec_dec_plus'] = 11.25
+			self.status['arcsec_per_sec_dec_minus'] = 11.25
+		elif self.driver.checkValue(self.device, 'ST4_GUIDE_RATE_NS', "ST4_RATE_NS_2") == "On":
+			self.status['arcsec_per_sec_dec_plus'] = 7.5
+			self.status['arcsec_per_sec_dec_minus'] = 7.5
+		elif self.driver.checkValue(self.device, 'ST4_GUIDE_RATE_NS', "ST4_RATE_NS_3") == "On":
+			self.status['arcsec_per_sec_dec_plus'] = 3.75
+			self.status['arcsec_per_sec_dec_minus'] = 3.75
+
+		if self.driver.checkValue(self.device, 'ST4_GUIDE_RATE_WE', "ST4_RATE_WE_0") == "On":
+			self.status['arcsec_per_sec_ra_plus'] = 15
+			self.status['arcsec_per_sec_ra_minus'] = 15
+		elif self.driver.checkValue(self.device, 'ST4_GUIDE_RATE_WE', "ST4_RATE_WE_1") == "On":
+			self.status['arcsec_per_sec_ra_plus'] = 11.25
+			self.status['arcsec_per_sec_ra_minus'] = 11.25
+		elif self.driver.checkValue(self.device, 'ST4_GUIDE_RATE_WE', "ST4_RATE_WE_2") == "On":
+			self.status['arcsec_per_sec_ra_plus'] = 7.5
+			self.status['arcsec_per_sec_ra_minus'] = 7.5
+		elif self.driver.checkValue(self.device, 'ST4_GUIDE_RATE_WE', "ST4_RATE_WE_3") == "On":
+			self.status['arcsec_per_sec_ra_plus'] = 3.75
+			self.status['arcsec_per_sec_ra_minus'] = 3.75
+				
 				
 				
 	
@@ -3017,6 +3063,7 @@ class Mount:
 			self.status['guider_pixscale'] = pixscale
 			self.status['guider_parity'] = parity
 			self.status['guider_roll'] = roll
+			log.info('callib1 roll %f par %f', self.status['guider_roll'], self.status['guider_parity'])
 			
 		
 		if self.main_t is not None and self.guider_t is not None and (np.abs(self.main_t - self.guider_t) < self.status['t_dif'] or 
@@ -3108,8 +3155,12 @@ class Mount:
 		if parity != 0:
 			log.info('parity %f %f', parity, self.status['guider_parity'])
 			self.status['guider_parity'] = parity
-		log.info('roll %f %f', 90 + roll * self.status['guider_parity'], self.status['guider_roll'])
+		else:
+			self.status['guider_parity'] = 1
+#		log.info('callib2 roll %f par %f', 90 + roll * self.status['guider_parity'], self.status['guider_roll'])
+#		self.status['guider_roll'] = 90 + roll * self.status['guider_parity']
 		self.status['guider_roll'] = 90 + roll * self.status['guider_parity']
+		log.info('callib2 roll %f par %f', self.status['guider_roll'], self.status['guider_parity'])
 		if self.status['guider_pixscale'] is not None:
 			if self.guider_tan is not None and time.time() - self.guider_t < 60:
 				gra, gdec, groll, gpixscale, gparity = self.tan_to_euler(self.guider_tan)
@@ -3129,12 +3180,42 @@ class Mount:
 			self.status['arcsec_per_sec_ra_minus'] = pixpersec_ra_minus * self.status['guider_pixscale'] / np.max([np.cos(gdec), 0.2])
 			if pixpersec_dec_plus is not None:
 				self.status['arcsec_per_sec_dec_plus'] = pixpersec_dec_plus * self.status['guider_pixscale']
+			else:
+				self.status['arcsec_per_sec_dec_plus'] = 0
 			if pixpersec_dec_minus is not None:
 				self.status['arcsec_per_sec_dec_minus'] = pixpersec_dec_minus * self.status['guider_pixscale']
+			else:
+				self.status['arcsec_per_sec_dec_minus'] = 0
+
+
+		log.info("set_guider_calib %s %s %s %s %s %s", roll, parity, pixpersec_ra_plus, pixpersec_ra_minus, pixpersec_dec_plus, pixpersec_dec_minus)
+		
+		self.getMountTracking()
 
 	def get_guider_calib(self):
-		pass
-		# return roll, parity, pixpersec_ra_plus, pixpersec_ra_minus, pixpersec_dec_plus, pixpersec_dec_minus
+		roll = (self.status['guider_roll'] - 90) * self.status['guider_parity']
+		if self.guider_tan is not None and time.time() - self.guider_t < 60:
+			gra, gdec, groll, gpixscale, gparity = self.tan_to_euler(self.guider_tan)
+		elif self.status['oag_pos'] is not None and self.main_tan is not None:
+			sq = Quaternion(self.status['oag_pos'][4])
+			mra, mdec, mroll, mpixscale, mparity = self.tan_to_euler(self.main_tan)
+			mq = Quaternion([mra, mdec, mroll])
+			q =  mq * sq
+			gra, gdec, groll = q.to_euler()
+		elif self.main_tan is not None:
+			gra, gdec, groll, gpixscale, gparity = self.tan_to_euler(self.main_tan)
+		else:
+			gdec = 0
+		gdec = np.deg2rad(gdec)
+		
+		return (roll, self.status['guider_parity'], 
+			self.status['arcsec_per_sec_ra_plus'] / self.status['guider_pixscale'] * np.max([np.cos(gdec), 0.2]),
+			self.status['arcsec_per_sec_ra_minus'] / self.status['guider_pixscale'] * np.max([np.cos(gdec), 0.2]),
+			self.status['arcsec_per_sec_dec_plus'] / self.status['guider_pixscale'],
+			self.status['arcsec_per_sec_dec_minus'] / self.status['guider_pixscale'])
+
+	def guider_callibrated(self):
+		return self.status['guider_pixscale'] is not None and (self.guider_tan is not None or self.main_tan is not None)
 
 	def move_main_px(self, dx, dy, camera, max_t = None):
 		if camera == 'navigator':
