@@ -44,7 +44,6 @@ from stacktraces import stacktraces
 import json
 
 from focuser_out import FocuserOut
-from temp_sensor import TempSensor
 from ext_trigger import ExtTrigger
 from centroid import centroid, sym_center, hfr, fit_ellipse, getRectSubPix
 from polyfit import *
@@ -56,6 +55,7 @@ from smooth import smooth
 import indi_python.indi_base as indi
 from indi_python.indi_loop import IndiLoop
 
+from tempmodel import TempModel
 
 import logging
 from functools import reduce
@@ -887,6 +887,10 @@ class Navigator:
 		if name == 'field_corr':
 			self.status['field_corr'] = prop['file'].getValue()
 			prop.setAttr('state', 'Ok')
+			try:
+				self.field_corr = np.load(self.status['field_corr'])
+			except:
+				self.field_corr = None
 			
 		elif name == 'commands':
 			if prop['reset'] == True:
@@ -1064,7 +1068,6 @@ class Navigator:
 			full_dispmode = self.props['full_dispmode'].getActiveSwitch()
 			process = psutil.Process(os.getpid())
 			t = time.time()
-			(temp, hum) = self.mount.temp_sensor.get()
 
 			hdulist = None
 			
@@ -1081,8 +1084,6 @@ class Navigator:
 					if self.full_res is not None:
 						self.full_res['full_hfr'].append(0)
 						self.full_res['full_name'].append(name)
-						self.full_res['full_temp'].append(temp)
-						self.full_res['full_hum'].append(hum)
 						self.full_res['full_ts'] = t
 						try:
 							self.props['full_res']['hfr'].setValue(0)
@@ -1134,8 +1135,6 @@ class Navigator:
 				if self.full_res is not None:
 					self.full_res['full_hfr'].append(0)
 					self.full_res['full_name'].append(name)
-					self.full_res['full_temp'].append(temp)
-					self.full_res['full_hum'].append(hum)
 					self.full_res['full_ts'] = t
 					try:
 						self.props['full_res']['hfr'].setValue(0)
@@ -1154,8 +1153,6 @@ class Navigator:
 				if self.full_res is not None:
 					self.full_res['full_hfr'].append(0)
 					self.full_res['full_name'].append(name)
-					self.full_res['full_temp'].append(temp)
-					self.full_res['full_hum'].append(hum)
 					self.full_res['full_ts'] = t
 					try:
 						self.props['full_res']['hfr'].setValue(0)
@@ -1186,8 +1183,6 @@ class Navigator:
 				if self.full_res is not None:
 					self.full_res['full_hfr'].append(full_hfr)
 					self.full_res['full_name'].append(name)
-					self.full_res['full_temp'].append(temp)
-					self.full_res['full_hum'].append(hum)
 					self.full_res['full_ts'] = t
 		
 					try:
@@ -1880,11 +1875,8 @@ class Guider:
 		
 		self.full_res['diff_acc'] = max(self.full_res['diff_acc'] + full_hfr_diff, 0.0)
 
-		temp_coef = self.full_res.get('temp_coef', 0)
-		temp_pos = (self.full_res['full_temp'][-1] - self.full_res['full_temp'][0]) * temp_coef
-		
 		if self.full_res['diff_thr'] == 0 or self.full_res['full_hfr'][-1] == 0:
-			temp_diff = temp_pos - self.full_res['temp_cor']
+			temp_diff = temp_pos
 			last_step = 0
 			if abs(temp_diff) > 0.5:
 				if self.full_res['last_step'] * temp_diff < 0:
@@ -2948,14 +2940,21 @@ class Mount:
 		self.guider_t = None
 		self.main_tan = None
 		self.guider_tan = None
-		self.status['temp_sensor'] = {}
-		self.temp_sensor = TempSensor(self.status['temp_sensor'])
 		#self.ext_trigger = ExtTrigger()
+		
+		self.tempmodel = TempModel()
 		
 		self.device = "EQMod Mount"
 		self.driver = driver
 		driver.register_callback(self.device, 'new', self.handle_new_cb)
 		driver.register_callback(self.device, 'snoop', self.handle_set_cb)
+
+		driver.register_callback("Sensors", 'snoop', self.handle_set_tempmodel_cb)
+
+	def handle_set_tempmodel_cb(self, msg, prop):
+		if prop.getAttr('device') == "Sensors" and prop.getAttr('name') == 'SENSORS':
+			val = float(prop.checkValue('MLX_REF'))
+			self.tempmodel.add(val)
 
 	def handle_new_cb(self, msg, prop):
 		if prop.getAttr('device') == self.device and prop.getAttr('name') == "TELESCOPE_ABORT_MOTION":
@@ -3446,7 +3445,8 @@ class Runner(threading.Thread):
 
 		
 		while True:
-		
+			sync_focus = False
+		        
 			mem_info = process.memory_info()
 			log.info("mem_used %d %d" % (mem_info.rss,mem_info.vms) )
 
@@ -3485,12 +3485,15 @@ class Runner(threading.Thread):
 			
 				elif name == 'run_mode':
 					if self.guider and prop['guider'] == True:
-						prop.setAttr('state', 'Ok')
-						if mode == 'zoom_focuser':
-							self.camera.cmd('z0')
-						self.guider.reset()
-						self.guider.pt0 = self.navigator.get_xy_cor()
-						mode = 'guider'
+						try:
+							if mode == 'zoom_focuser':
+								self.camera.cmd('z0')
+							self.guider.reset()
+							self.guider.pt0 = self.navigator.get_xy_cor()
+							mode = 'guider'
+							prop.setAttr('state', 'Ok')
+						except:
+							log.exception("guider")
 
 					elif self.focuser and prop['zoom_focuser'] == True:
 						prop.setAttr('state', 'Ok')
@@ -3555,6 +3558,7 @@ class Runner(threading.Thread):
 					cmdQueue.put(cmd)
 					prop.setAttr('state', 'Ok')
 					prop[cmd].setValue(False)
+					sync_focus = True
 
 				elif name == 'zoom_pos':
 					try:
@@ -3576,6 +3580,18 @@ class Runner(threading.Thread):
 						self.focuser.handleNewProp(msg, prop)
 		
 				self.driver.enqueueSetMessage(prop)
+
+			if self.focuser and self.camera_run and mode != 'focuser' and mode != 'zoom_focuser':
+				try:
+					temp_focus = self.navigator.mount.tempmodel.res()
+					while temp_focus < self.camera.focuser.pos - 12:
+						cmdQueue.put("f-1")
+						temp_focus += 16
+					while temp_focus > self.camera.focuser.pos + 12:
+						cmdQueue.put("f+1")
+						temp_focus -= 16
+				except:
+					pass
 
 			while True:
 				cmd=cmdQueue.get(self.tid, 0.0001)
@@ -3697,6 +3713,10 @@ class Runner(threading.Thread):
 						self.focuser.cmd(cmd)
 			
 			try:
+				if sync_focus or mode == 'focuser' or mode == 'zoom_focuser':
+					self.navigator.mount.tempmodel.set_offset(self.camera.focuser.pos)
+					sync_focus = False
+					
 				if self.props["focus_pos"]["pos"] != self.camera.focuser.pos:
 					self.props["focus_pos"]["pos"].setValue(self.camera.focuser.pos)
 					self.props["focus_pos"].setAttr('state', 'Ok')
