@@ -36,6 +36,7 @@ from guide_out import GuideOut
 import queue
 import random
 #from line_profiler import LineProfiler
+import tracemalloc
 
 from gui import ui
 from cmd import cmdQueue
@@ -1383,8 +1384,8 @@ def fit_line(xylist, sigma = 2):
 	return m, c
 
 class GuiderAlg(object):
-	def __init__(self, go, status):
-		self.go = go
+	def __init__(self, mount, status):
+		self.mount = mount
 		self.status = status
 		self.status.setdefault('min_move', 0.1)
 		self.status.setdefault('aggressivness', 0.5)
@@ -1399,15 +1400,11 @@ class GuiderAlg(object):
 		self.pixpersec_neg = pixpersec_neg
 		self.parity = parity
         	
-
-	
-	def get_corr_delay(self, t_proc):
-		return self.go.recent_avg(self.status['t_delay'] + t_proc, self.pixpersec, -self.pixpersec_neg)
 	
 
 class GuiderAlgDec(GuiderAlg):
-	def __init__(self, driver, device, go, status):
-		super(GuiderAlgDec, self).__init__(go, status)
+	def __init__(self, driver, device, mount, status):
+		super(GuiderAlgDec, self).__init__(mount, status)
 		self.status.setdefault('rev_move', 2.0)
 		self.status.setdefault('smooth_c', 0.1)
 		self.corr_acc = 0.0
@@ -1452,6 +1449,11 @@ class GuiderAlgDec(GuiderAlg):
 				self.corr_acc = 0.0
 
 
+
+	
+	def get_corr_delay(self, t_proc):
+		return self.mount.go_dec.recent_avg(self.status['t_delay'] + t_proc, self.pixpersec, -self.pixpersec_neg)
+
 	def get_corr(self, err, err2, t0):
 		corr1 = err * self.parity + self.get_corr_delay(time.time() - t0) 
 		
@@ -1495,13 +1497,13 @@ class GuiderAlgDec(GuiderAlg):
 		self.corr = corr
 		
 		if corr > self.status['min_move']:
-			self.go.out(-1, corr / self.pixpersec_neg)
+			self.mount.go_dec_out(-1, corr / self.pixpersec_neg)
 			self.status['last_move'] = corr
 		elif corr < -self.status['min_move']:
-			self.go.out(1, -corr / self.pixpersec)
+			self.mount.go_dec_out(1, -corr / self.pixpersec)
 			self.status['last_move'] = corr
 		else:
-			self.go.out(0)
+			self.mount.go_dec_out(0)
 			self.corr = 0
 
 		self.props["guider_dec_move"]["current"].setValue(self.corr)
@@ -1510,8 +1512,8 @@ class GuiderAlgDec(GuiderAlg):
 
 
 class GuiderAlgRa(GuiderAlg):
-	def __init__(self, driver, device, go, status):
-		super(GuiderAlgRa, self).__init__(go, status)
+	def __init__(self, driver, device, mount, status):
+		super(GuiderAlgRa, self).__init__(mount, status)
 		self.status.setdefault('smooth_c', 0.1)
 		self.smooth_var2 = 1.0
 		self.corr_acc = 0.0
@@ -1554,6 +1556,10 @@ class GuiderAlgRa(GuiderAlg):
 				self.corr_acc = 0.0
 
 
+	
+	def get_corr_delay(self, t_proc):
+		return self.mount.go_ra.recent_avg(self.status['t_delay'] + t_proc, self.pixpersec, -self.pixpersec_neg)
+
 	def get_corr(self, err, err2, t0):
 		corr = err * self.parity + self.get_corr_delay(time.time() - t0)
 		corr *= self.status['aggressivness']
@@ -1580,13 +1586,13 @@ class GuiderAlgRa(GuiderAlg):
 		self.corr = corr
 		
 		if corr > self.status['min_move']:
-			self.go.out(-1, corr / self.pixpersec_neg)
+			self.mount.go_ra_out(-1, corr / self.pixpersec_neg)
 			self.status['last_move'] = corr
 		elif corr < -self.status['min_move']:
-			self.go.out(1, -corr / self.pixpersec)
+			self.mount.go_ra_out(1, -corr / self.pixpersec)
 			self.status['last_move'] = corr
 		else:
-			self.go.out(0)
+			self.mount.go_ra_out(0)
 			self.corr = 0
 
 		self.props["guider_ra_move"]["current"].setValue(self.corr)
@@ -1645,8 +1651,8 @@ class Guider:
 
 		self.mount = mount
 
-		self.alg_ra = GuiderAlgRa(driver, device, self.mount.go_ra, self.status['ra_alg'])
-		self.alg_dec = GuiderAlgDec(driver, device, self.mount.go_dec, self.status['dec_alg'])
+		self.alg_ra = GuiderAlgRa(driver, device, self.mount, self.status['ra_alg'])
+		self.alg_dec = GuiderAlgDec(driver, device, self.mount, self.status['dec_alg'])
 		
 		self.dark = dark
 		self.tid = tid
@@ -1903,7 +1909,7 @@ class Guider:
 			self.full_res['last_step'] = last_step
 			
 		else:
-			self.full_res['temp_cor'] = int(temp_pos) 
+			#self.full_res['temp_cor'] = int(temp_pos) 
 		
 			if self.full_res['diff_acc'] > self.full_res['diff_thr']:
 				self.full_res['diff_acc'] = 0 #reset
@@ -2113,8 +2119,8 @@ class Guider:
 				
 					self.err0_dec = err.imag
 					
-					#if self.mount.guider_callibrated():
-					#	self.changePhase('track')
+					if self.mount.guider_callibrated():
+						self.changePhase('track')
 						
 					if self.mount.go_dec is not None:
 						self.mount.go_dec_out(1, self.status['t_delay'] * 2 + 12)
@@ -3158,7 +3164,7 @@ class Mount:
 			self.status['guider_parity'] = 1
 #		log.info('callib2 roll %f par %f', 90 + roll * self.status['guider_parity'], self.status['guider_roll'])
 #		self.status['guider_roll'] = 90 + roll * self.status['guider_parity']
-		self.status['guider_roll'] = 90 + roll * self.status['guider_parity']
+		self.status['guider_roll'] = -90 + roll * self.status['guider_parity']
 		log.info('callib2 roll %f par %f', self.status['guider_roll'], self.status['guider_parity'])
 		if self.status['guider_pixscale'] is not None:
 			if self.guider_tan is not None and time.time() - self.guider_t < 60:
@@ -3192,7 +3198,7 @@ class Mount:
 		self.getMountTracking()
 
 	def get_guider_calib(self):
-		roll = (self.status['guider_roll'] - 90) * self.status['guider_parity']
+		roll = (self.status['guider_roll'] + 90) * self.status['guider_parity']
 		if self.guider_tan is not None and time.time() - self.guider_t < 60:
 			gra, gdec, groll, gpixscale, gparity = self.tan_to_euler(self.guider_tan)
 		elif self.status['oag_pos'] is not None and self.main_tan is not None:
@@ -3412,6 +3418,7 @@ class Runner(threading.Thread):
 		self.video_tid = video_tid
 		self.video_capture = False
 		self.camera_run = False
+		self.tracemalloc_snapshot = tracemalloc.take_snapshot()
 		
 		
 	def run(self):
@@ -3544,6 +3551,17 @@ class Runner(threading.Thread):
 							prop['capture'].setValue(False)
 							prop['test_capture'].setValue(False)
 							prop.setAttr('state', 'Ok')
+							
+							
+							snapshot = tracemalloc.take_snapshot()
+							top_stats = snapshot.compare_to(self.tracemalloc_snapshot, 'lineno')
+
+							log.info("[ Top differences ]")
+							for stat in top_stats[:30]:
+								log.info(stat)
+							self.tracemalloc_snapshot = snapshot
+
+
 						else:
 							prop['capture'].setValue(False)
 							prop['test_capture'].setValue(False)
@@ -3694,6 +3712,14 @@ class Runner(threading.Thread):
 						cmdQueue.put('capture-finished')
 						cmdQueue.put('capture-full-res-done')
 						self.capture_in_progress = False
+
+					snapshot = tracemalloc.take_snapshot()
+					top_stats = snapshot.compare_to(self.tracemalloc_snapshot, 'lineno')
+
+					log.info("[ Top differences ]")
+					for stat in top_stats[:30]:
+						log.info(stat)
+					self.tracemalloc_snapshot = snapshot
 					break
 				elif cmd == 'capture_start':
 					self.camera.cmd(cmd)
@@ -4479,6 +4505,7 @@ if __name__ == "__main__":
 	os.environ["LC_NUMERIC"] = "C"
 	signal.signal(signal.SIGINT, cmdQueue.send_exit)
 	signal.signal(signal.SIGTERM, cmdQueue.send_exit)
+	tracemalloc.start()
 	
 	#mystderr = os.fdopen(os.dup(sys.stderr.fileno()), 'w', 0)
 	#devnull = open(os.devnull,"w")
