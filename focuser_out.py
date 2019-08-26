@@ -3,6 +3,7 @@ import sys
 import subprocess
 import atexit
 import logging
+import threading
 
 log = logging.getLogger()
 
@@ -12,6 +13,7 @@ class FocuserOut:
 		self.pos = 0
 		self.rt_cmd = None
 		self.testmode = True
+		self.lock = threading.Lock()
 		try:
 			self.rt_cmd = subprocess.Popen("./focuser_out", close_fds=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, bufsize=1 )
 			atexit.register(self.rt_cmd.terminate)
@@ -22,16 +24,17 @@ class FocuserOut:
 
 	
 	def move(self, m):
-		self.pos += m
-		if self.rt_cmd is not None:
-			try:
-				self.rt_cmd.stdin.write(("%d\n" % (m)).encode())
-				self.rt_cmd.stdin.flush()
-				line = self.rt_cmd.stdout.readline().decode()
-				self.pos = int(line)
-			except:
-				log.exception('Unexpected error')			
-		log.info("focuser %d", self.pos)
+		with self.lock:
+			self.pos += m
+			if self.rt_cmd is not None:
+				try:
+					self.rt_cmd.stdin.write(("%d\n" % (m)).encode())
+					self.rt_cmd.stdin.flush()
+					line = self.rt_cmd.stdout.readline().decode()
+					self.pos = int(line)
+				except:
+					log.exception('Unexpected error')			
+			log.info("focuser %d", self.pos)
 
 			
 			

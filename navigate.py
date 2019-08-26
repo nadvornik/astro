@@ -2913,11 +2913,12 @@ class Focuser:
 		self.driver.enqueueSetMessage(self.props["focus_data"])
 
 class Mount:
-	def __init__(self, driver, status, polar, go_ra = None, go_dec = None):
+	def __init__(self, driver, status, polar, go_ra = None, go_dec = None, focuser = None):
 		self.status = status
 		self.polar = polar
 		self.go_ra = go_ra
 		self.go_dec = go_dec
+		self.focuser = focuser
 		self.allow_guide = True
 		self.status.setdefault('oag', True)
 		if self.status['oag']:
@@ -2961,6 +2962,23 @@ class Mount:
 		if prop.getAttr('device') == "Sensors" and prop.getAttr('name') == 'SENSORS':
 			val = float(prop.checkValue('MLX_REF'))
 			self.tempmodel.add(val)
+
+
+			if self.focuser and self.allow_guide:
+				try:
+					temp_focus = self.tempmodel.res()
+					while temp_focus < self.focuser.pos - 12:
+						self.focuser.cmd("f-1")
+						log.info("Focus comp %f", self.focuser.pos)
+						temp_focus += 16
+					while temp_focus > self.focuser.pos + 12:
+						self.focuser.cmd("f+1")
+						log.info("Focus comp %f", self.focuser.pos)
+						temp_focus -= 16
+				except:
+					log.exception("Temperature focus")
+
+
 
 	def handle_new_cb(self, msg, prop):
 		if prop.getAttr('device') == self.device and prop.getAttr('name') == "TELESCOPE_ABORT_MOTION":
@@ -3598,19 +3616,6 @@ class Runner(threading.Thread):
 						self.focuser.handleNewProp(msg, prop)
 		
 				self.driver.enqueueSetMessage(prop)
-
-			if self.focuser and self.camera_run and mode != 'focuser' and mode != 'zoom_focuser':
-				try:
-					temp_focus = self.navigator.mount.tempmodel.res()
-					while temp_focus < self.camera.focuser.pos - 12:
-						cmdQueue.put("f-1")
-						temp_focus += 16
-					while temp_focus > self.camera.focuser.pos + 12:
-						cmdQueue.put("f+1")
-						temp_focus -= 16
-				except:
-					pass
-
 			while True:
 				cmd=cmdQueue.get(self.tid, 0.0001)
 				if cmd is None:
@@ -4131,12 +4136,12 @@ def run_test_2_kstars():
 	go_ra = GuideOut("./guide_out_ra")
 	go_dec = GuideOut("./guide_out_dec")
 
-	mount = Mount(driver, status.path(["mount"]), polar, go_ra, go_dec)
+	fo = FocuserOut()
+	mount = Mount(driver, status.path(["mount"]), polar, go_ra, go_dec, focuser=fo)
 
 	dark1 = Median(5)
 	dark2 = Median(5)
 
-	fo = FocuserOut()
 	cam1 = Camera_test_kstars(status.path(["navigator", "camera"]), go_ra, go_dec, fo)
 	nav1 = Navigator(driver, "Navigator", status.path(["navigator"]), dark1, mount, 'navigator', polar_tid = 'polar', full_res = status.path(["full_res"]))
 
@@ -4296,12 +4301,12 @@ def run_2_indi():
 	go_ra = GuideOut("./guide_out_ra")
 	go_dec = GuideOut("./guide_out_dec")
 
-	mount = Mount(driver, status.path(["mount"]), polar, go_ra, go_dec)
+	fo = FocuserOut()
+	mount = Mount(driver, status.path(["mount"]), polar, go_ra, go_dec, focuser=fo)
 
 	cam2 = Camera(status.path(["guider", "navigator", "camera"]))
 	cam2.prepare(1280, 960)
 
-	fo = FocuserOut()
 
 
 	cam = Camera_indi(driver, "CCD Simulator", status.path(["navigator", "camera"]), focuser=fo)
