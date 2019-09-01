@@ -22,6 +22,8 @@ import sys
 import io
 import os.path
 import time
+import dateutil.parser
+
 import threading
 import os
 import psutil
@@ -36,7 +38,7 @@ from guide_out import GuideOut
 import queue
 import random
 #from line_profiler import LineProfiler
-import tracemalloc
+#import tracemalloc
 
 from gui import ui
 from cmd import cmdQueue
@@ -1081,7 +1083,7 @@ class Navigator:
 #			log.error("shape %s", im.shape) #(3, 720, 1280)
 #			im = im[1]
 
-				if (full_dispmode == 'full-disp-orig'):
+				if (full_dispmode == 'orig'):
 					if self.full_res is not None:
 						self.full_res['full_hfr'].append(0)
 						self.full_res['full_name'].append(name)
@@ -1091,7 +1093,8 @@ class Navigator:
 							self.props['full_res']['ra_stddev'].setValue(self.full_res['ra_err_list' ][-1] or 0)
 							self.props['full_res']['dec_stddev'].setValue(self.full_res['dec_err_list' ][-1] or 0)
 						except:
-							pass
+							log.exception("full_res")
+
 						self.driver.enqueueSetMessage(self.props['full_res'])
 					cmdQueue.put('capture-full-res-done')
 					if hdulist is not None:
@@ -1142,7 +1145,7 @@ class Navigator:
 						self.props['full_res']['ra_stddev'].setValue(self.full_res['ra_err_list' ][-1] or 0)
 						self.props['full_res']['dec_stddev'].setValue(self.full_res['dec_err_list' ][-1] or 0)
 					except:
-						pass
+						log.exception("full_res")
 					self.driver.enqueueSetMessage(self.props['full_res'])
 				cmdQueue.put('capture-full-res-done')
 				if hdulist is not None:
@@ -1160,7 +1163,8 @@ class Navigator:
 						self.props['full_res']['ra_stddev'].setValue(self.full_res['ra_err_list' ][-1] or 0)
 						self.props['full_res']['dec_stddev'].setValue(self.full_res['dec_err_list' ][-1] or 0)
 					except:
-						pass
+						log.exception("full_res")
+
 					self.driver.enqueueSetMessage(self.props['full_res'])
 				cmdQueue.put('capture-full-res-done')
 				if hdulist is not None:
@@ -1191,7 +1195,7 @@ class Navigator:
 						self.props['full_res']['ra_stddev'].setValue(self.full_res['ra_err_list' ][-1] or 0)
 						self.props['full_res']['dec_stddev'].setValue(self.full_res['dec_err_list' ][-1] or 0)
 					except:
-						pass
+						log.exception("full_res")
 					self.driver.enqueueSetMessage(self.props['full_res'])
 				log.info("full_res filter hfr %f", full_hfr)
 
@@ -1220,7 +1224,7 @@ class Navigator:
 				return
 
 			try:
-				if (full_dispmode != 'full-disp-hfr'):
+				if (full_dispmode != 'hfr'):
 					solver = Solver(sources_list = pts, field_w = w, field_h = h, ra = self.status['ra'], dec = self.status['dec'], field_deg = self.status['field_deg'], radius = 100)
 					self.full_res_solver = solver
 					solver.start()
@@ -1261,7 +1265,7 @@ class Navigator:
 
 				ui.imshow('full_res', im_c)
 		
-				if (full_dispmode == 'full-disp-hfr'):
+				if (full_dispmode == 'hfr'):
 					cmdQueue.put('capture-full-res-done')
 					if hdulist is not None:
 						hdulist.close()
@@ -1283,8 +1287,8 @@ class Navigator:
 							self.mount.set_pos_tan(self.wcs, t, self.tid)
 
 
-					if (full_dispmode.startswith('full-disp-zoom-')):
-						zoom = full_dispmode[len('full-disp-zoom-'):]
+					if (full_dispmode.startswith('zoom-')):
+						zoom = full_dispmode[len('zoom-'):]
 					else:
 						zoom = 1
 			
@@ -2119,8 +2123,8 @@ class Guider:
 				
 					self.err0_dec = err.imag
 					
-					if self.mount.guider_callibrated():
-						self.changePhase('track')
+					#if self.mount.guider_callibrated():
+					#	self.changePhase('track')
 						
 					if self.mount.go_dec is not None:
 						self.mount.go_dec_out(1, self.status['t_delay'] * 2 + 12)
@@ -2920,6 +2924,7 @@ class Mount:
 		self.go_dec = go_dec
 		self.focuser = focuser
 		self.allow_guide = True
+		self.allow_tempcomp = False
 		self.status.setdefault('oag', True)
 		if self.status['oag']:
 			self.status.setdefault('oag_pos', None)
@@ -2961,20 +2966,23 @@ class Mount:
 	def handle_set_tempmodel_cb(self, msg, prop):
 		if prop.getAttr('device') == "Sensors" and prop.getAttr('name') == 'SENSORS':
 			val = float(prop.checkValue('MLX_REF'))
-			self.tempmodel.add(val)
+			try:
+				ts = dateutil.parser.parse(prop.getAttr('timestamp')).timestamp()
+			except:
+				ts = time.time()
+			self.tempmodel.add(val, ts)
+			#log.info("handle_set_tempmodel_cb %f %f", val, time.time() - ts)
 
 
-			if self.focuser and self.allow_guide:
+			if self.focuser and self.allow_tempcomp:
 				try:
 					temp_focus = self.tempmodel.res()
 					while temp_focus < self.focuser.pos - 12:
 						self.focuser.cmd("f-1")
 						log.info("Focus comp %f", self.focuser.pos)
-						temp_focus += 16
 					while temp_focus > self.focuser.pos + 12:
 						self.focuser.cmd("f+1")
 						log.info("Focus comp %f", self.focuser.pos)
-						temp_focus -= 16
 				except:
 					log.exception("Temperature focus")
 
@@ -2988,8 +2996,8 @@ class Mount:
 				self.go_dec.out(0)
 	
 	def handle_set_cb(self, msg, prop):
-		if prop.getAttr('device') == self.device and prop.getAttr('name') == "TELESCOPE_TRACK_STATE":
-			self.allow_guide = prop.checkValue("TRACK_ON", state = ['Ok', 'Idle', 'Busy']) == "On"
+		if prop.getAttr('device') == self.device and prop.getAttr('name') == "TELESCOPE_TRACK_STATE" or prop.getAttr('name') == "CONNECTION":
+			self.allow_guide = self.driver.checkValue(self.device, "TELESCOPE_TRACK_STATE", "TRACK_ON", state = ['Ok', 'Idle', 'Busy']) == "On"
 			
 			log.info("allow_guide %s", self.allow_guide)
 			
@@ -3032,7 +3040,8 @@ class Mount:
 			self.status['arcsec_per_sec_ra_plus'] = 3.75
 			self.status['arcsec_per_sec_ra_minus'] = 3.75
 				
-				
+	def enable_tempcomp(self, enable):
+		self.allow_tempcomp = enable
 				
 	
 	def go_ra_out(self, d, t = 0):
@@ -3436,7 +3445,6 @@ class Runner(threading.Thread):
 		self.video_tid = video_tid
 		self.video_capture = False
 		self.camera_run = False
-		self.tracemalloc_snapshot = tracemalloc.take_snapshot()
 		
 		
 	def run(self):
@@ -3571,13 +3579,13 @@ class Runner(threading.Thread):
 							prop.setAttr('state', 'Ok')
 							
 							
-							snapshot = tracemalloc.take_snapshot()
-							top_stats = snapshot.compare_to(self.tracemalloc_snapshot, 'lineno')
-
-							log.info("[ Top differences ]")
-							for stat in top_stats[:30]:
-								log.info(stat)
-							self.tracemalloc_snapshot = snapshot
+#							snapshot = tracemalloc.take_snapshot()
+#							top_stats = snapshot.statistics('traceback')
+#							log.info("[ Top differences ]")
+#							for stat in top_stats[:5]:
+#								log.info(stat)
+#								for line in stat.traceback.format():
+#									log.info(line)
 
 
 						else:
@@ -3616,6 +3624,13 @@ class Runner(threading.Thread):
 						self.focuser.handleNewProp(msg, prop)
 		
 				self.driver.enqueueSetMessage(prop)
+
+			try:
+				if self.focuser:
+					self.navigator.mount.enable_tempcomp(not sync_focus and mode != 'focuser' and mode != 'zoom_focuser' and self.camera_run)
+			except:
+				log.exception("enable_tempcomp1")
+
 			while True:
 				cmd=cmdQueue.get(self.tid, 0.0001)
 				if cmd is None:
@@ -3718,13 +3733,13 @@ class Runner(threading.Thread):
 						cmdQueue.put('capture-full-res-done')
 						self.capture_in_progress = False
 
-					snapshot = tracemalloc.take_snapshot()
-					top_stats = snapshot.compare_to(self.tracemalloc_snapshot, 'lineno')
-
-					log.info("[ Top differences ]")
-					for stat in top_stats[:30]:
-						log.info(stat)
-					self.tracemalloc_snapshot = snapshot
+#					snapshot = tracemalloc.take_snapshot()
+#					top_stats = snapshot.statistics('traceback')
+#					log.info("[ Top differences ]")
+#					for stat in top_stats[:5]:
+#						log.info(stat)
+#						for line in stat.traceback.format():
+#							log.info(line)
 					break
 				elif cmd == 'capture_start':
 					self.camera.cmd(cmd)
@@ -3744,16 +3759,19 @@ class Runner(threading.Thread):
 						self.focuser.cmd(cmd)
 			
 			try:
-				if sync_focus or mode == 'focuser' or mode == 'zoom_focuser':
-					self.navigator.mount.tempmodel.set_offset(self.camera.focuser.pos)
-					sync_focus = False
-					
-				if self.props["focus_pos"]["pos"] != self.camera.focuser.pos:
-					self.props["focus_pos"]["pos"].setValue(self.camera.focuser.pos)
-					self.props["focus_pos"].setAttr('state', 'Ok')
-					self.driver.enqueueSetMessage(self.props["focus_pos"])
+				if self.focuser:
+					if sync_focus or mode == 'focuser' or mode == 'zoom_focuser':
+						self.navigator.mount.tempmodel.set_offset(self.camera.focuser.pos)
+						sync_focus = False
+						self.navigator.mount.enable_tempcomp(mode != 'focuser' and mode != 'zoom_focuser' and self.camera_run)
+						
+					if self.props["focus_pos"]["pos"] != self.camera.focuser.pos:
+						self.props["focus_pos"]["pos"].setValue(self.camera.focuser.pos)
+						self.props["focus_pos"].setAttr('state', 'Ok')
+						self.driver.enqueueSetMessage(self.props["focus_pos"])
 			except:
-				pass
+				log.exception("enable_tempcomp2")
+
 			
 			if not self.camera_run:
 				time.sleep(1)
@@ -4510,7 +4528,7 @@ if __name__ == "__main__":
 	os.environ["LC_NUMERIC"] = "C"
 	signal.signal(signal.SIGINT, cmdQueue.send_exit)
 	signal.signal(signal.SIGTERM, cmdQueue.send_exit)
-	tracemalloc.start()
+#	tracemalloc.start(10)
 	
 	#mystderr = os.fdopen(os.dup(sys.stderr.fileno()), 'w', 0)
 	#devnull = open(os.devnull,"w")
