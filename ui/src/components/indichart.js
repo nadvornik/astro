@@ -76,11 +76,30 @@ export default class INDIChart extends React.PureComponent {
       console.log(error);
       return;
     }
+    console.log(blob_data);
     return blob_data;
   }
 
+  blobToSeries() {
+    var data = this.getJSONBLOB();
+    if (!data) return;
+    
+    var series = Object.keys(data).map(name => ({
+      name: name, 
+      data: data[name]
+    }));
+    console.log(series);
+    return series;
+  }
+
   render() {
-    var series = this.historyToSeries();
+    var series;
+    if (this.props.history) 
+        series = this.historyToSeries();
+    else
+        series = this.blobToSeries();
+
+    if (! series) return <div/>;
 
     return (
       <Chart

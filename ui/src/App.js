@@ -19,8 +19,8 @@ class App extends React.Component {
   render() {
     return (
       <INDI wsurl='websocket'
-        history={ {'Guider:offset': 1000, "Guider:guider_ra_move": 1000, "Guider:guider_dec_move": 1000, 'Navigator:full_res': 10} }
-        blob={ ['Navigator:histogram', 'Navigator:focus_data'] }
+        history={ {'Guider:offset': 500, "Guider:guider_ra_move": 500, "Guider:guider_dec_move": 500, 'Navigator:full_res': 30} }
+        blob={ ['Navigator:histogram', 'Navigator:focus_data', 'Guider:period_data'] }
       >
         <div className="App">
           <div className="Images">
@@ -47,9 +47,10 @@ class App extends React.Component {
           </div>
           <div className="INDIwrapper">
             <INDIPanel>
-              <INDIChartContext tab="Guider:Guider" path="Guider:offset" history={true}><INDIChart/></INDIChartContext>
+              <INDIChartContext tab="Guider:Guider" path="Guider:offset" history={true}><INDIChart options={ {yaxis: {tickAmount: 6, min: -3, max: 3, decimalsInFloat: 1 }} }/></INDIChartContext>
               <INDIChartContext tab="Guider:Guider" path="Guider:guider_ra_move" history={true}><INDIChart/></INDIChartContext>
               <INDIChartContext tab="Guider:Guider" path="Guider:guider_dec_move" history={true}><INDIChart/></INDIChartContext>
+              <INDIChartContext tab="Guider:Guider" path="Guider:period_data:period_data"><INDIChart/></INDIChartContext>
               <INDIChartContext tab="Navigator:Focuser" path="Navigator:focus_data:focus_data"><FocusChart/></INDIChartContext>
               <INDIChartContext tab="Navigator:FullRes" path="Navigator:full_res" history={true}><INDIChart/></INDIChartContext>
               <INDIChartContext tab="Navigator:FullRes" path="Navigator:histogram:histogram"><HistogramChart/></INDIChartContext>
