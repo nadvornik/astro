@@ -31,7 +31,7 @@ class Engine(threading.Thread):
 		self.ready = True
 		self.queue = queue
 		self.terminating = False
-		self.start()
+#		self.start()
 
 	
 
@@ -66,6 +66,11 @@ class Engine(threading.Thread):
 	
 	def solve(self, axy):
 		self.ready = False
+		if self.cmd is None and not self.terminating:
+			self.start()
+			while self.cmd is None and not self.terminating:
+				time.sleep(0.1)
+
 		while True:
 			try:
 				self.cmd.stdin.write((axy + "\n").encode())
