@@ -1393,11 +1393,17 @@ class GuiderAlg(object):
 		self.status = status
 		self.status.setdefault('min_move', 0.1)
 		self.status.setdefault('aggressivness', 0.5)
+		self.status.setdefault('smooth_c', 0.01)
 		self.status['t_delay'] = 0.5
 		self.status['last_move'] = 0
 		self.corr = 0
 		self.status['restart'] = False
 		self.parity = 0
+		self.move = True
+		self.stddev = 1
+		self.stddev_n = 50
+		self.last_t = time.time()
+		self.start()
 
 	def set_params(self, pixpersec, pixpersec_neg, parity = 1):
 		self.pixpersec = pixpersec
@@ -1405,12 +1411,64 @@ class GuiderAlg(object):
 		self.parity = parity
         	
 	
+	def start(self):
+		self.err_hist = []
+		self.time_hist = []
+		
+		self.err_var = 0
+		self.corr_hist = []
+		
+	def setMove(self, m):
+		self.move = m
+
+	def add_err_hist(self, err, t):
+		if self.move:
+			return
+		self.err_hist.append(err)
+		self.err_var += err * err
+		l = len(self.err_hist)
+		if l >= self.stddev_n:
+			self.stddev = (self.err_var / self.stddev_n) ** 0.5
+			self.stddev = min(self.stddev, self.pixpersec)
+			prev_e = self.err_hist[-self.stddev_n]
+			self.err_var -= prev_e * prev_e
+		self.time_hist.append(t)
+
+
+	def add_corr_hist(self, corr):
+		self.corr_hist.append(corr)
+		self.corr = corr
+	
+	def get_corr_delay(self, t_proc):
+		#return self.mount.go_ra.recent_avg(self.status['t_delay'] + t_proc, self.pixpersec, -self.pixpersec_neg)
+		t = time.time() - self.last_t
+		s = np.sign(self.corr)
+		d = min(np.abs(self.corr), t * self.pixpersec)
+		return -1 * s * d
+
+	def corrInt(self, corr):
+		s = np.sign(corr)
+		corr = np.abs(corr)
+		corr *= self.stddev * 2 / (corr + self.stddev * 2)
+		smooth_c = self.status['smooth_c']
+		self.corr_acc += s * corr * smooth_c
+		if np.abs(self.corr_acc) > self.pixpersec:
+			self.corr_acc = self.pixpersec * np.sign(self.corr_acc)
+		return self.corr_acc
+	
+	def corrProp(self, corr):
+		s = np.sign(corr)
+		corr = np.abs(corr)
+		corr *= (corr + self.stddev * 0.5) / (corr + self.stddev)
+		corr *= self.status['aggressivness']
+		if corr < self.status['min_move']:
+			corr = 0
+		return corr * s
 
 class GuiderAlgDec(GuiderAlg):
 	def __init__(self, driver, device, mount, status):
 		super(GuiderAlgDec, self).__init__(mount, status)
-		self.status.setdefault('rev_move', 2.0)
-		self.status.setdefault('smooth_c', 0.1)
+		self.status.setdefault('rev_move', 0.5)
 		self.corr_acc = 0.0
 
 		self.driver = driver
@@ -1423,12 +1481,13 @@ class GuiderAlgDec(GuiderAlg):
 				<defNumber name="min_move" label="min_move" format="%1.1f" min="0" max="5" step="0.1">0.1</defNumber>
 				<defNumber name="rev_move" label="rev_move" format="%1.1f" min="0" max="5" step="0.1">2.0</defNumber>
 				<defNumber name="t_delay" label="t_delay" format="%1.1f" min="0" max="10" step="0.1">0.5</defNumber>
-				<defNumber name="smooth" label="smooth" format="%1.2f" min="0.01" max="1" step="0.01">0.1</defNumber>
+				<defNumber name="smooth" label="smooth" format="%1.4f" min="0.01" max="1" step="0.01">0.1</defNumber>
 			</defNumberVector>
 
 			<defNumberVector device="{0}" name="guider_dec_move" label="Guider Dec Output" group="Guider" state="Idle" perm="ro">
 				<defNumber name="current" label="move" format="%2.3f" min="0" max="0" step="0">0</defNumber>
-				<defNumber name="acc" label="acc" format="%2.3f" min="0" max="0" step="0">0</defNumber>
+				<defNumber name="prop" label="prop" format="%2.3f" min="0" max="0" step="0">0</defNumber>
+				<defNumber name="int" label="int" format="%2.3f" min="0" max="0" step="0">0</defNumber>
 			</defNumberVector>
 
 			<defSwitchVector device="{0}" name="guider_dec_commands" label="Guider Dec Commands" group="Guider" state="Idle" perm="rw" rule="AtMostOne">
@@ -1439,6 +1498,12 @@ class GuiderAlgDec(GuiderAlg):
 		""".format(device))
 
 		self.props = driver[device]
+		self.props["guider_dec"]["aggressivness"].setValue(self.status['aggressivness'])
+		self.props["guider_dec"]["min_move"].setValue(self.status['min_move'])
+		self.props["guider_dec"]["rev_move"].setValue(self.status['rev_move'])
+		self.props["guider_dec"]["t_delay"].setValue(self.status['t_delay'])
+		self.props["guider_dec"]["smooth"].setValue(self.status['smooth_c'])
+		self.driver.enqueueSetMessage(self.props["guider_dec"])
 		
 	def handleNewProp(self, msg, prop):
 		name = prop.getAttr('name')
@@ -1455,72 +1520,63 @@ class GuiderAlgDec(GuiderAlg):
 
 
 	
-	def get_corr_delay(self, t_proc):
-		return self.mount.go_dec.recent_avg(self.status['t_delay'] + t_proc, self.pixpersec, -self.pixpersec_neg)
+#	def get_corr_delay(self, t_proc):
+#		return self.mount.go_dec.recent_avg(self.status['t_delay'] + t_proc, self.pixpersec, -self.pixpersec_neg)
 
-	def get_corr(self, err, err2, t0):
-		corr1 = err * self.parity + self.get_corr_delay(time.time() - t0) 
-		
-		corr1 *= self.status['aggressivness']
-		
-		smooth_c = self.status['smooth_c']
 
-#		if np.abs(corr1) < self.status['rev_move']:
-		corr_acc = self.corr_acc + corr1 * smooth_c
-		if np.abs(corr_acc) < 3:
-			self.corr_acc = corr_acc
-#		else:
-#			self.corr_acc = 0
-		
-		corr = corr1 + self.corr_acc
-
-		if self.status['restart']:
-			log.info("dec err %f, corr1 %f, corr_acc %f, corr %f, restart", err, corr1, self.corr_acc, corr)
-			self.status['restart'] = False
-			self.corr_acc = 0
-			return corr
-			
-		if corr > 0 and corr_acc < 0 and corr < self.status['rev_move']:
-			corr = 0
-		elif corr < 0 and corr_acc > 0 and corr > -self.status['rev_move']:
-			corr = 0
-		
-#		if corr * self.status['last_move'] < 0:
-#			self.corr_acc = 0
-		
-		
-		log.info("dec err %f, corr1 %f, corr_acc %f, corr %f", err, corr1, self.corr_acc, corr)
-
-		return corr
-
-	def proc(self, err, err2, t0):
+	def proc(self, err, t0):
 		if self.parity == 0:
 			return
-
-		corr = self.get_corr(err, err2, t0)
-		self.corr = corr
 		
-		if corr > self.status['min_move']:
+		err *= self.parity
+		
+		self.add_err_hist(err, t0)
+		
+		corr = err + self.get_corr_delay(time.time() - t0)
+		#corr *= self.status['aggressivness']
+		
+		corr_i = self.corrInt(corr)
+		corr_p = self.corrProp(corr)
+	
+
+		if corr_i > 0 and corr_p < 0 and corr_p > -self.status['rev_move']:
+			corr_p = 0
+		elif corr_i < 0 and corr_p > 0 and corr_p < self.status['rev_move']:
+			corr_p = 0
+		
+		
+		corr = corr_i + corr_p
+			
+		log.info("dec err %f, corr_i %f, corr_p %f, corr %f, stddev %f", err, corr_i, corr_p, corr, self.stddev)
+		
+		self.add_corr_hist(corr)
+		
+		
+		if corr > 0:
 			self.mount.go_dec_out(-1, corr / self.pixpersec_neg)
 			self.status['last_move'] = corr
-		elif corr < -self.status['min_move']:
+		elif corr < 0:
 			self.mount.go_dec_out(1, -corr / self.pixpersec)
 			self.status['last_move'] = corr
 		else:
 			self.mount.go_dec_out(0)
-			self.corr = 0
+		self.last_t = time.time()
+
 
 		self.props["guider_dec_move"]["current"].setValue(self.corr)
-		self.props["guider_dec_move"]["acc"].setValue(self.corr_acc)
+		self.props["guider_dec_move"]["prop"].setValue(corr_p)
+		self.props["guider_dec_move"]["int"].setValue(corr_i)
 		self.driver.enqueueSetMessage(self.props["guider_dec_move"])
 
 
 class GuiderAlgRa(GuiderAlg):
 	def __init__(self, driver, device, mount, status):
 		super(GuiderAlgRa, self).__init__(mount, status)
-		self.status.setdefault('smooth_c', 0.1)
-		self.smooth_var2 = 1.0
+		self.status.setdefault('smooth_c', 0.01)
+		#self.smooth_var2 = 1.0
 		self.corr_acc = 0.0
+		self.status.setdefault("period", 0)
+		self.status.setdefault('p_aggressivness', 0.1)
 
 		self.driver = driver
 		self.device = device
@@ -1529,28 +1585,49 @@ class GuiderAlgRa(GuiderAlg):
 
 			<defNumberVector device="{0}" name="guider_ra" label="Guider RA" group="Guider" state="Idle" perm="rw">
 				<defNumber name="aggressivness" label="aggressivness" format="%1.1f" min="0" max="1.5" step="0.1">0.5</defNumber>
+				<defNumber name="p_aggressivness" label="p_aggressivness" format="%1.1f" min="0" max="1.5" step="0.1">0.5</defNumber>
 				<defNumber name="min_move" label="min_move" format="%1.1f" min="0" max="5" step="0.1">0.1</defNumber>
 				<defNumber name="t_delay" label="t_delay" format="%1.1f" min="0" max="10" step="0.1">0.5</defNumber>
-				<defNumber name="smooth" label="smooth" format="%1.3f" min="0.01" max="1" step="0.01">0.1</defNumber>
+				<defNumber name="smooth" label="smooth" format="%1.4f" min="0.01" max="1" step="0.01">0.1</defNumber>
+				<defNumber name="period" label="period" format="%1.0f" min="0" max="100" step="1">0</defNumber>
 			</defNumberVector>
 
 			<defNumberVector device="{0}" name="guider_ra_move" label="Guider RA Output" group="Guider" state="Idle" perm="ro">
 				<defNumber name="current" label="move" format="%2.1f" min="0" max="0" step="0">0</defNumber>
-				<defNumber name="acc" label="acc" format="%2.3f" min="0" max="0" step="0">0</defNumber>
+				<defNumber name="prop" label="prop" format="%2.3f" min="0" max="0" step="0">0</defNumber>
+				<defNumber name="int" label="int" format="%2.3f" min="0" max="0" step="0">0</defNumber>
+				<defNumber name="per" label="per" format="%2.3f" min="0" max="0" step="0">0</defNumber>
 			</defNumberVector>
 
 			<defSwitchVector device="{0}" name="guider_ra_commands" label="Guider RA Commands" group="Guider" state="Idle" perm="rw" rule="AtMostOne">
 				<defSwitch name="reset" label="reset">Off</defSwitch>
 			</defSwitchVector>
 
+			<defBLOBVector device="{0}" name="period_data" label="period_data" group="Guider" state="Idle" perm="ro">
+				<defBLOB name="period_data"/>
+			</defBLOBVector>
+
 		</INDIDriver>
 		""".format(device))
 		self.props = driver[device]
+		self.props["guider_ra"]["aggressivness"].setValue(self.status['aggressivness'])
+		self.props["guider_ra"]["p_aggressivness"].setValue(self.status['p_aggressivness'])
+		self.props["guider_ra"]["min_move"].setValue(self.status['min_move'])
+		self.props["guider_ra"]["t_delay"].setValue(self.status['t_delay'])
+		self.props["guider_ra"]["smooth"].setValue(self.status['smooth_c'])
+	
+		self.tres = 0.1
+		self.pbuf = None
+		self.setPeriod(self.status['period'])
+		self.t_start = time.time()
+		
+		
 
 	def handleNewProp(self, msg, prop):
 		name = prop.getAttr('name')
 		if name == 'guider_ra':
-			self.status['aggressivness'], self.status['min_move'], self.status['t_delay'], self.status['smooth_c'] = prop.to_array()
+			self.status['aggressivness'], self.status['p_aggressivness'], self.status['min_move'], self.status['t_delay'], self.status['smooth_c'], period = prop.to_array()
+			self.setPeriod(int(period))
 			prop.setAttr('state', 'Ok')
 			
 		elif name == 'guider_ra_commands':
@@ -1560,47 +1637,131 @@ class GuiderAlgRa(GuiderAlg):
 				self.corr_acc = 0.0
 
 
-	
-	def get_corr_delay(self, t_proc):
-		return self.mount.go_ra.recent_avg(self.status['t_delay'] + t_proc, self.pixpersec, -self.pixpersec_neg)
 
-	def get_corr(self, err, err2, t0):
-		corr = err * self.parity + self.get_corr_delay(time.time() - t0)
-		corr *= self.status['aggressivness']
+	def fft_period(self, func):
+		l = len(func)
+		w = np.zeros([l*3], dtype=np.float)
+		w[0:l] = np.hanning(l) * func
 	
-		smooth_c = self.status['smooth_c']
-		corr_acc = self.corr_acc + corr * smooth_c
-		if np.abs(corr_acc) < np.abs(self.pixpersec / 2.0):
-			self.corr_acc = corr_acc
-	
-		err2norm = (err2 ** 2 / self.smooth_var2) ** 0.5
-		corr *= 1.0 / (1.0 + err2norm)
-		corr += self.corr_acc
+		fft = np.fft.rfft(w)
+		fft = np.abs(fft) ** 2 / 100
+		rev = np.fft.irfft(fft)
+		log.info("func %s", repr(func))
+		i = 0
+		while rev[i] > rev[i + 1]:
+			rev[i] = 0
+			i += 1
+		T = np.argmax(rev[:l])
+		log.info("period %d", T)
+		return T
 
-		self.smooth_var2 = self.smooth_var2 * (1.0 - smooth_c) + err2**2 * smooth_c
+
+
+	def setPeriod(self, period):
+		self.status['period'] = period
+		self.props["guider_ra"]["period"].setValue(period)
+		self.driver.enqueueSetMessage(self.props["guider_ra"])
+
+		if period == 0:
+			return
+		if self.pbuf is not None and len(self.pbuf) == period:
+			return
+		self.pbuf = np.zeros((period,))
+		self.prev_phase = 0
+		self.prev_c = 0
 		
-		log.info("ra err %f, err2 %f, err2norm %f, err2agg %f, corr_acc %f, corr %f", err, err2, err2norm, 1.0 / (1.0 + err2norm), self.corr_acc, corr)
-		return corr
+		
+	
+	def corrPeriod(self, corr, t):
+		if self.status['period'] == 0:
+			if len(self.corr_hist) > 150:
+				t0 = self.time_hist[0]
+				t1 = self.time_hist[-1]
+				t = np.arange(0, t1 - t0, self.tres)
+				err_hist = np.interp(t, np.array(self.time_hist) - t0, self.err_hist)
+				period = self.fft_period(err_hist)
+				self.setPeriod(period)
+				self.t_start = t1
+			else:
+				return 0
 
-	def proc(self, err, err2, t0):
+		if self.move:
+			corr = 0
+
+		s = np.sign(corr)
+		corr = np.abs(corr)
+		corr *= s * self.stddev * 2 / (corr + self.stddev * 2)
+
+		phase = int((t - self.t_start) / self.tres + 0.5) % self.status['period']
+		log.info("prev_phase %d, prev_c %f, phase %d, c %f", self.prev_phase, self.prev_c, phase, corr)
+		p = self.prev_phase
+		i = 0
+		n = max(1, (phase - self.prev_phase) % self.status['period'] - 1)
+		while p != phase:
+			if p == 0:
+				self.pbuf -= np.mean(self.pbuf)
+				self.props["period_data"]["period_data"].setValue(json.dumps({'period': list(self.pbuf)}), compress=True)
+				self.props["period_data"]["period_data"].setAttr("format", ".json.z")
+				self.props["period_data"].setAttr("state", "Ok")
+				self.driver.enqueueSetMessage(self.props["period_data"])
+
+			p1 = (p + 1) % self.status['period']
+			#log.info("%d %d %d", n, i, n - i)
+			self.pbuf[p] = (self.pbuf[p] + self.pbuf[p1]) * 0.45 + (self.prev_c * (n - i) + corr * i) / n
+			#self.pbuf[p] = (self.pbuf[p] + self.pbuf[p1]) * 0.25 + self.prev_c
+			p = p1
+			i += 1
+		self.prev_phase = phase
+		self.prev_c = corr
+
+		p = phase
+		res = []
+		for i in range(int(self.status['t_delay'] / self.tres) + 1):
+			res.append(self.pbuf[p])
+			p = (p + 1) % self.status['period']
+		#(phase + int(self.status['t_delay'] / self.tres) ) % self.status['period']
+		return np.mean(res) * self.status['p_aggressivness']
+
+
+
+	def proc(self, err, t0):
 		if self.parity == 0:
 			return
-
-		corr = self.get_corr(err, err2, t0)
-		self.corr = corr
 		
-		if corr > self.status['min_move']:
+		err *= self.parity
+		
+		self.add_err_hist(err, t0)
+		
+		corr = err + self.get_corr_delay(time.time() - t0)
+		#corr *= self.status['aggressivness']
+		
+		corr_i = self.corrInt(corr)
+		corr_p = self.corrProp(corr)
+		corr_period = self.corrPeriod(err, t0)
+		self.corr_period = corr_period
+	
+		corr = corr_i + corr_period + corr_p
+			
+		log.info("ra err %f, corr_i %f, corr_p %f, corr_period %f, corr %f, period %s, stddev %f", err, corr_i, corr_p, corr_period, corr, self.status['period'], self.stddev)
+		
+		self.add_corr_hist(corr)
+		
+		
+		if corr > 0:
 			self.mount.go_ra_out(-1, corr / self.pixpersec_neg)
 			self.status['last_move'] = corr
-		elif corr < -self.status['min_move']:
+		elif corr < 0:
 			self.mount.go_ra_out(1, -corr / self.pixpersec)
 			self.status['last_move'] = corr
 		else:
 			self.mount.go_ra_out(0)
-			self.corr = 0
+		self.last_t = time.time()
 
 		self.props["guider_ra_move"]["current"].setValue(self.corr)
-		self.props["guider_ra_move"]["acc"].setValue(self.corr_acc)
+		self.props["guider_ra_move"]["prop"].setValue(corr_p)
+		self.props["guider_ra_move"]["int"].setValue(corr_i)
+		self.props["guider_ra_move"]["per"].setValue(corr_period)
+#		self.props["guider_ra_move"]["stddev"].setValue(self.stddev)
 		self.driver.enqueueSetMessage(self.props["guider_ra_move"])
 
 
@@ -1640,6 +1801,8 @@ class Guider:
 			<defNumberVector device="{0}" name="offset" label="Offset" group="Guider" state="Idle" perm="ro">
 				<defNumber name="RA" label="RA" format="%4.2f" min="0" max="0" step="0">0</defNumber>
 				<defNumber name="DEC" label="Dec" format="%4.2f" min="0" max="0" step="0">0</defNumber>
+				<defNumber name="RAstd" label="RA_stddev" format="%4.2f" min="0" max="0" step="0">0</defNumber>
+				<defNumber name="DECstd" label="Dec_stddev" format="%4.2f" min="0" max="0" step="0">0</defNumber>
 			</defNumberVector>
 
 		</INDIDriver>
@@ -1694,8 +1857,8 @@ class Guider:
 		self.status['pixpersec'] = None
 		self.status['pixpersec_neg'] = None
 		self.status['pixpersec_dec'] = None
-		self.status['curr_ra_err_list'] = []
-		self.status['curr_dec_err_list'] = []
+#		self.status['curr_ra_err_list'] = []
+#		self.status['curr_dec_err_list'] = []
 		self.status['curr_hfr_list'] = []
 		self.off = (0.0, 0.0)
 		self.off_t = None
@@ -1778,6 +1941,8 @@ class Guider:
 				log.info("capture_in_progress negative")
 		
 			if self.capture_in_progress == 0:
+				self.alg_ra.setMove(True)
+				self.alg_dec.setMove(True)
 				try:
 					dither_dec = self.dither.imag
 					if self.status['pixpersec_dec'] is not None:
@@ -1797,12 +1962,12 @@ class Guider:
 				#self.status['dec_alg']['restart'] = True
 				
 				if self.full_res is not None:
-					if len(self.status['curr_ra_err_list' ]) > 0:
-						self.full_res['ra_err_list' ].append(np.mean(np.array(self.status['curr_ra_err_list' ]) ** 2) ** 0.5)
+					if len(self.alg_ra.err_hist) > 0:
+						self.full_res['ra_err_list' ].append(np.mean(np.array(self.alg_ra.err_hist) ** 2) ** 0.5)
 					else:
 						self.full_res['ra_err_list' ].append(0.0)
-					if len(self.status['curr_dec_err_list']) > 0:
-						self.full_res['dec_err_list'].append(np.mean(np.array(self.status['curr_dec_err_list']) ** 2) ** 0.5)
+					if len(self.alg_dec.err_hist) > 0:
+						self.full_res['dec_err_list'].append(np.mean(np.array(self.alg_dec.err_hist) ** 2) ** 0.5)
 					else:
 						self.full_res['dec_err_list'].append(0.0)
 					if len(self.status['curr_hfr_list']) > 0:
@@ -2190,7 +2355,7 @@ class Guider:
 
 					self.mount.set_guider_calib(np.angle(self.ref_off, deg=True), self.parity, self.status['pixpersec'], self.status['pixpersec_neg'], self.status['pixpersec_dec'], self.status['pixpersec_dec'])
 					self.alg_ra.set_params(self.status['pixpersec'], self.status['pixpersec_neg'])
-					self.alg_dec.set_params(0, 0, 0)
+					self.alg_dec.set_params(self.status['pixpersec_dec'], self.status['pixpersec_dec'], parity = self.parity)
 					
 					self.props['callibration']['pixpersec_plus'].setValue(self.status['pixpersec'] or 0)
 					self.props['callibration']['pixpersec_minus'].setValue(self.status['pixpersec_neg'] or 0)
@@ -2232,12 +2397,14 @@ class Guider:
 
 				self.props["offset"]["RA"].setValue(err.real)
 				self.props["offset"]["DEC"].setValue(err.imag)
+				self.props["offset"]["RAstd"].setValue(self.alg_ra.stddev)
+				self.props["offset"]["DECstd"].setValue(self.alg_dec.stddev)
 				self.driver.enqueueSetMessage(self.props["offset"])
 
-				self.alg_ra.proc(err.real, err.imag, t)
+				self.alg_ra.proc(err.real, t)
 
 				if self.alg_dec is not None:
-					self.alg_dec.proc(err.imag, err.real, t)
+					self.alg_dec.proc(err.imag, t)
 					status += " err:%.1f %.1f corr:%.1f %.1f t_d:%.1f t_p:%.1f" % (err.real, err.imag, self.alg_ra.corr, self.alg_dec.corr, self.status['t_delay'], t_proc)
 				else:
 					status += " err:%.1f %.1f corr:%.1f t_d:%.1f t_p:%.1f" % (err.real, err.imag, self.alg_ra.corr, self.status['t_delay'], t_proc)
@@ -2245,6 +2412,11 @@ class Guider:
 				ok = (np.abs(err.real) < max(0.5, np.abs(self.status['t_delay'] * self.status['pixpersec'])))
 				if self.parity != 0:
 					ok = (ok and np.abs(err.imag) < np.abs(self.status['t_delay'] * self.status['pixpersec_dec']))
+				
+				if ok:
+					self.alg_ra.setMove(False)
+					self.alg_dec.setMove(False)
+
 				
 				if ok or self.status['seq'] == 'seq-free':
 					if self.countdown > 0:
@@ -2257,13 +2429,12 @@ class Guider:
 				if not self.capture_init and self.capture_proc_in_progress == 0 and ready and self.status['seq'] != 'seq-stop':
 					cmdQueue.put('capture')
 					self.capture_init = True
-					self.status['curr_ra_err_list'] = []
-					self.status['curr_dec_err_list'] = []
 					self.status['curr_hfr_list'] = []
+					self.alg_dec.start()
+					self.alg_ra.start()
+					
 				
 				if self.capture_in_progress > 0:
-					self.status['curr_ra_err_list'].append(err.real)
-					self.status['curr_dec_err_list'].append(err.imag)
 					self.status['curr_hfr_list'].append(get_hfr_list(im_sub, pt, sub_bg=True))
 				
 				log.info("capture %d %d %d", self.capture_init, self.capture_in_progress, self.capture_proc_in_progress)
