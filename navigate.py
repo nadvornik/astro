@@ -3136,12 +3136,14 @@ class Mount:
 
 	def handle_set_tempmodel_cb(self, msg, prop):
 		if prop.getAttr('device') == "Sensors" and prop.getAttr('name') == 'SENSORS':
-			val = float(prop.checkValue('MLX_REF'))
 			try:
 				ts = dateutil.parser.parse(prop.getAttr('timestamp')).timestamp()
 			except:
 				ts = time.time()
-			self.tempmodel.add(val, ts)
+			val = float(prop.checkValue('MLX2_TEMP'))
+			self.tempmodel.add(0, val, ts)
+			val = float(prop.checkValue('MLX2_REF'))
+			self.tempmodel.add(1, val, ts)
 			#log.info("handle_set_tempmodel_cb %f %f", val, time.time() - ts)
 
 
