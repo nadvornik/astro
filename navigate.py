@@ -2885,6 +2885,8 @@ class Focuser:
 				self.status['v_curve2_s'] = None
 				self.status['hyst'] = None
 				self.status['remaining_steps'] = None
+				self.status['delay_steps'] = 0
+				self.status['delay_curve'] = []
 
 				self.hfr = self.get_hfr(im_sub, min_hfr = 5)
 
@@ -2944,7 +2946,7 @@ class Focuser:
 
 				self.status['remaining_steps'] = round(self.status['xmin'] - len(self.status['v_curve2']) - self.status['hyst'])
 				log.info("remaining %d", self.status['remaining_steps'])
-				if self.status['remaining_steps'] < 5:
+				if self.status['remaining_steps'] < 8:
 					self.changePhase('focus_v2')
 					
 					self.props["focuser_callibration"]["hyst"].setValue(self.status['hyst'])
@@ -2953,18 +2955,37 @@ class Focuser:
 					if self.full_res is not None:
 						self.full_res['hyst'] = max(0, int(round(- self.status['hyst'])))
 			self.step(1)
-			self.phase_wait = 1
 			self.status['v_curve2'].append(self.hfr)
 		elif self.status['phase'] == 'focus_v2': # estimate maximum, go there
 			self.hfr = self.get_hfr(im_sub)
 			self.status['v_curve2'].append(self.hfr)
-			if self.status['remaining_steps'] > 0:
-				self.status['remaining_steps'] -= 1
-				self.step(1)
-			else:
+			self.status['delay_curve'].append(self.hfr)
+			if len(self.status['delay_curve']) > 10:
+				dc = np.array(self.status['delay_curve'])
+				log.info("dc %s", dc)
+				mean = np.mean(dc[-4:])
+				stddev = np.std(dc[-4:])
+				for i in range(10):
+					log.info("mean %f, std %f", mean, stddev)
+					idx = dc < mean + 2 * stddev
+					mean = np.mean(dc[idx])
+					stddev = np.std(dc[idx])
+				log.info("mean %f, std %f", mean, stddev)
+				for i in range(len(dc)):
+					if dc[i] > mean + 1 * stddev:
+						self.status['remaining_steps'] -= 1
+					else:
+						break
+				log.info("v2 remaining %d", self.status['remaining_steps'])
+
+				while self.status['remaining_steps'] > 0:
+					self.status['remaining_steps'] -= 1
+					self.step(1)
+				
 				t = time.time()
 				np.save("v_curve1_%d.npy" % t, np.array(self.status['v_curve']))
 				np.save("v_curve2_%d.npy" % t, np.array(self.status['v_curve2']))
+				self.phase_wait = 2
 				self.changePhase('wait')
 				
 			log.info("hfr %f", self.hfr)
