@@ -1539,9 +1539,9 @@ class GuiderAlgDec(GuiderAlg):
 		corr_p = self.corrProp(corr)
 	
 
-		if corr_i > 0 and corr_p < 0 and corr_p > -self.status['rev_move']:
+		if corr_i > 0 and corr_i + corr_p < 0 and corr_i + corr_p > -self.status['rev_move']:
 			corr_p = 0
-		elif corr_i < 0 and corr_p > 0 and corr_p < self.status['rev_move']:
+		elif corr_i < 0 and corr_i + corr_p > 0 and corr_i + corr_p < self.status['rev_move']:
 			corr_p = 0
 		
 		
