@@ -2413,7 +2413,7 @@ class Guider:
 				if self.parity != 0:
 					ok = (ok and np.abs(err.imag) < np.abs(self.status['t_delay'] * self.status['pixpersec_dec']))
 				
-				if ok:
+				if ok and self.countdown < 2:
 					self.alg_ra.setMove(False)
 					self.alg_dec.setMove(False)
 
@@ -3545,6 +3545,7 @@ class Runner(threading.Thread):
 			<defNumberVector device="{0}" name="EXPOSURE" label="Expose" group="Main Control" state="Idle" perm="rw" timeout="60">
 				<defNumber name="EXP_TIME" label="Duration (s)" format="%5.3f" min="0.001" max="3600" step="1">1</defNumber>
 				<defNumber name="TEST_EXP_TIME" label="Test Duration (s)" format="%5.3f" min="0.001" max="3600" step="1">1</defNumber>
+				<defNumber name="EXP_COUNT" label="Exposure counter" format="%4.0f" min="0" max="1000" step="1">1</defNumber>
 			</defNumberVector>
 
 			<defSwitchVector device="{0}" name="run_control" label="Control" group="Main Control" state="Idle" perm="rw" rule="AtMostOne">
@@ -3744,53 +3745,20 @@ class Runner(threading.Thread):
 						mode = 'navigator'
 						prop.enforceRule(mode, True)
 
-				elif name == 'camera_control':
-				
-					if prop['capture'] == True or prop['test_capture'] == True:
-						if self.camera_run:
-							if mode == 'zoom_focuser':
-								self.camera.cmd('z0')
-								mode = 'navigator'
-								self.props['run_mode'].enforceRule(mode, True)
-								self.driver.enqueueSetMessage(self.props['run_mode'])
-
-							try:
-								self.camera.capture_bulb(test=(prop['test_capture'] == True), callback_start = self.capture_start_cb, callback_end = self.capture_end_cb)
-							except AttributeError:
-								pass
-							except:
-								log.exception('Unexpected error')					
-							if self.capture_in_progress:
-								log.info("runner: capture_in_progress not finished")
-								log.info("capture_finished_fix")
-	
-								cmdQueue.put('capture-finished')
-								cmdQueue.put('capture-full-res-done')
-								self.capture_in_progress = False
-						
-							prop['capture'].setValue(False)
-							prop['test_capture'].setValue(False)
-							prop.setAttr('state', 'Ok')
-							
-							
-#							snapshot = tracemalloc.take_snapshot()
-#							top_stats = snapshot.statistics('traceback')
-#							log.info("[ Top differences ]")
-#							for stat in top_stats[:5]:
-#								log.info(stat)
-#								for line in stat.traceback.format():
-#									log.info(line)
-
-
-						else:
-							prop['capture'].setValue(False)
-							prop['test_capture'].setValue(False)
-							prop.setAttr('state', 'Failed')
-							self.driver.message("Camera is paused", self.device)
 				elif name == 'EXPOSURE':
 					self.camera.cmd('exp-sec-' + str(prop['EXP_TIME']))
 					self.camera.cmd('test-exp-sec-' + str(prop['TEST_EXP_TIME']))
 					prop.setAttr('state', 'Ok')
+				elif name == 'camera_control':
+				
+					if self.camera_run:
+						if mode == 'zoom_focuser':
+							self.camera.cmd('z0')
+							mode = 'navigator'
+							self.props['run_mode'].enforceRule(mode, True)
+							self.driver.enqueueSetMessage(self.props['run_mode'])
+						self.capture(prop['test_capture'] == True)
+
 				elif name == 'focus_plus' or name == 'focus_minus':
 					cmd = prop.getActiveSwitch()
 					cmdQueue.put(cmd)
@@ -3908,32 +3876,14 @@ class Runner(threading.Thread):
 					elif mode == 'focuser':
 						self.focuser.cmd(cmd)
 				elif cmd == 'capture' or cmd == 'test-capture':
-					if mode == 'zoom_focuser':
-						self.camera.cmd('z0')
-						mode = 'navigator'
-						self.props['run_mode'].enforceRule(mode, True)
-						self.driver.enqueueSetMessage(self.props['run_mode'])
-					try:
-						self.camera.capture_bulb(test=(cmd == 'test-capture'), callback_start = self.capture_start_cb, callback_end = self.capture_end_cb)
-					except AttributeError:
-						pass
-					except:
-						log.exception('Unexpected error')					
-					if self.capture_in_progress:
-						log.info("runner: capture_in_progress not finished")
-						log.info("capture_finished_fix")
-
-						cmdQueue.put('capture-finished')
-						cmdQueue.put('capture-full-res-done')
-						self.capture_in_progress = False
-
-#					snapshot = tracemalloc.take_snapshot()
-#					top_stats = snapshot.statistics('traceback')
-#					log.info("[ Top differences ]")
-#					for stat in top_stats[:5]:
-#						log.info(stat)
-#						for line in stat.traceback.format():
-#							log.info(line)
+					if self.camera_run:
+						if mode == 'zoom_focuser':
+							self.camera.cmd('z0')
+							mode = 'navigator'
+							self.props['run_mode'].enforceRule(mode, True)
+							self.driver.enqueueSetMessage(self.props['run_mode'])
+						self.capture(cmd == 'test-capture')
+						self.driver.enqueueSetMessage(self.props['camera_control'])
 					break
 				elif cmd == 'capture_start':
 					self.camera.cmd(cmd)
@@ -3952,6 +3902,13 @@ class Runner(threading.Thread):
 					if mode == 'focuser':
 						self.focuser.cmd(cmd)
 			
+			ecnt = int(self.props['EXPOSURE']['EXP_COUNT'].getValue())
+			if ecnt > 0:
+				self.capture()
+				self.props['EXPOSURE']['EXP_COUNT'].setValue(ecnt - 1)
+				self.driver.enqueueSetMessage(self.props['EXPOSURE'])
+				self.driver.enqueueSetMessage(self.props['camera_control'])
+
 			try:
 				if self.focuser:
 					if sync_focus or mode == 'focuser' or mode == 'zoom_focuser':
@@ -4006,6 +3963,52 @@ class Runner(threading.Thread):
 			#	cmdQueue.put('exit')
 		cmdQueue.put('exit')
 		self.camera.shutdown()
+
+
+	def capture(self, test=False):
+		if self.camera_run:
+			if test:
+				self.props['camera_control']['test_capture'].setValue(True)
+			else:
+				self.props['camera_control']['capture'].setValue(True)
+			self.props['camera_control'].setAttr('state', 'Busy')
+			self.driver.enqueueSetMessage(self.props['camera_control'])
+
+			try:
+				self.camera.capture_bulb(test=test, callback_start = self.capture_start_cb, callback_end = self.capture_end_cb)
+			except AttributeError:
+				pass
+			except:
+				log.exception('Unexpected error')					
+
+			if self.capture_in_progress:
+				log.info("runner: capture_in_progress not finished")
+				log.info("capture_finished_fix")
+
+				cmdQueue.put('capture-finished')
+				cmdQueue.put('capture-full-res-done')
+				self.capture_in_progress = False
+		
+			self.props['camera_control']['capture'].setValue(False)
+			self.props['camera_control']['test_capture'].setValue(False)
+			self.props['camera_control'].setAttr('state', 'Ok')
+			
+			
+#			snapshot = tracemalloc.take_snapshot()
+#			top_stats = snapshot.statistics('traceback')
+#			log.info("[ Top differences ]")
+#			for stat in top_stats[:5]:
+#				log.info(stat)
+#				for line in stat.traceback.format():
+#					log.info(line)
+
+
+		else:
+			self.props['camera_control']['capture'].setValue(False)
+			self.props['camera_control']['test_capture'].setValue(False)
+			self.props['camera_control'].setAttr('state', 'Failed')
+			self.driver.message("Camera is paused", self.device)
+
 	
 	def capture_start_cb(self):
 		cmdQueue.put('capture-started')
