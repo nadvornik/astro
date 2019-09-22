@@ -1459,7 +1459,7 @@ class GuiderAlg(object):
 	def corrProp(self, corr):
 		s = np.sign(corr)
 		corr = np.abs(corr)
-		corr *= (corr + self.stddev * 0.5) / (corr + self.stddev)
+		#corr *= (corr + self.stddev * 0.5) / (corr + self.stddev)
 		corr *= self.status['aggressivness']
 		if corr < self.status['min_move']:
 			corr = 0
@@ -1535,14 +1535,14 @@ class GuiderAlgDec(GuiderAlg):
 		corr = err + self.get_corr_delay(time.time() - t0)
 		#corr *= self.status['aggressivness']
 		
-		corr_i = self.corrInt(corr)
+		corr_i = self.corrInt(err)
 		corr_p = self.corrProp(corr)
 	
 
 		if corr_i > 0 and corr_i + corr_p < 0 and corr_i + corr_p > -self.status['rev_move']:
-			corr_p = 0
+			corr_p = -corr_i
 		elif corr_i < 0 and corr_i + corr_p > 0 and corr_i + corr_p < self.status['rev_move']:
-			corr_p = 0
+			corr_p = -corr_i
 		
 		
 		corr = corr_i + corr_p
@@ -1735,7 +1735,7 @@ class GuiderAlgRa(GuiderAlg):
 		corr = err + self.get_corr_delay(time.time() - t0)
 		#corr *= self.status['aggressivness']
 		
-		corr_i = self.corrInt(corr)
+		corr_i = self.corrInt(err)
 		corr_p = self.corrProp(corr)
 		corr_period = self.corrPeriod(err, t0)
 		self.corr_period = corr_period
@@ -2051,7 +2051,7 @@ class Guider:
 		self.full_res['diff_acc'] = max(self.full_res['diff_acc'] + full_hfr_diff, 0.0)
 
 		if self.full_res['diff_thr'] == 0 or self.full_res['full_hfr'][-1] == 0:
-			temp_diff = temp_pos
+			temp_diff = 0 #temp_pos
 			last_step = 0
 			if abs(temp_diff) > 0.5:
 				if self.full_res['last_step'] * temp_diff < 0:
@@ -3035,13 +3035,14 @@ class Focuser:
 					self.ba_int = 0.0
 					log.info("ba_step %d" % self.ba_step)
 				
-			off_x = self.bahtinov.center[1] - im_sub.shape[1] // 2
-			off_y = self.bahtinov.center[0] - im_sub.shape[0] // 2
-			log.info("move center %d %d", off_x, off_y)
-			if np.abs(off_x) > 30 or np.abs(off_y) > 30:
-				self.mount.move_main_px(-off_x / 15, -off_y / 15, self.tid)
-			else:
-				self.mount.move_main_px(-off_x / 15, -off_y / 15, self.tid, max_t = 0.2)
+				if np.abs(self.ba_pos) < 1:
+					off_x = self.bahtinov.center[1] - im_sub.shape[1] // 2
+					off_y = self.bahtinov.center[0] - im_sub.shape[0] // 2
+					log.info("move center %d %d", off_x, off_y)
+					if np.abs(off_x) > 30 or np.abs(off_y) > 30:
+						self.mount.move_main_px(-off_x / 15, -off_y / 15, self.tid)
+					else:
+						self.mount.move_main_px(-off_x / 15, -off_y / 15, self.tid, max_t = 0.2)
 			
 		else:
 			if self.focus_yx is not None:

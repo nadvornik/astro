@@ -71,6 +71,7 @@ class Bahtinov:
 		return skel
 
 	def ba_center(self, img):
+		img = cv2.dilate(img, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(15,15)))
 		bl = cv2.blur(img, (10, 10))
 		bl = cv2.blur(bl, (10, 10))
 		bl = cv2.blur(bl, (10, 10))
@@ -78,7 +79,7 @@ class Bahtinov:
 		bl = cv2.blur(bl, (10, 10))
 		minVal, maxVal, minLoc, maxLoc = cv2.minMaxLoc(bl)
 		self.center = (maxLoc[1], maxLoc[0]) 
-		img = get_rect(img, (100, 100), self.center)
+		img = get_rect(img, (200, 200), self.center)
 		x, y = sym_center(img)
 		self.center = (maxLoc[1] + int(y), maxLoc[0] + int(x))
 		log.info("center off %d %d" % (x, y))
