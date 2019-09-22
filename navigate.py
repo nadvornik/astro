@@ -2885,8 +2885,6 @@ class Focuser:
 				self.status['v_curve2_s'] = None
 				self.status['hyst'] = None
 				self.status['remaining_steps'] = None
-				self.status['delay_steps'] = 0
-				self.status['delay_curve'] = []
 
 				self.hfr = self.get_hfr(im_sub, min_hfr = 5)
 
@@ -2928,6 +2926,12 @@ class Focuser:
 
 					self.status['xmin'], self.status['side_len'], self.status['smooth_size'], self.status['c1'], self.status['m1'], self.status['c2'], self.status['m2'], v_curve_s = Focuser.v_param(self.status['v_curve'])
 					self.status['v_curve_s'] = v_curve_s.tolist()
+					
+					self.status['delay_len'] = 0;
+					self.status['delay_start'] = int(self.status['side_len'] // 2 + 1)
+					self.status['delay_steps'] = 0;
+					
+					self.status['delay_calibrated'] = False;
 
 					self.props["focuser_callibration"]["m1"].setValue(self.status['m1'])
 					self.props["focuser_callibration"]["m2"].setValue(self.status['m2'])
@@ -2941,12 +2945,25 @@ class Focuser:
 		elif self.status['phase'] == 'focus_v': # go back, record first part of second v curve
 			self.hfr = self.get_hfr(im_sub)
 			if len(self.status['v_curve2']) > self.status['side_len'] or self.hfr <= self.status['min_hfr'] and len(self.status['v_curve2']) > 4:
+				if not self.status['delay_calibrated']:
+					if self.status['delay_len']:
+						stddevlist = []
+						for i in range(self.status['delay_start'], len(self.status['v_curve2']) - self.status['delay_len']):
+							stddevlist.append(np.std(self.status['v_curve2'][i : i + self.status['delay_len']]))
+						log.info('stddevlist %s', stddevlist)
+						self.status['delay_steps'] = int(np.argmin(stddevlist))
+						log.info('v_curve2 pre  %s', self.status['v_curve2'])
+						self.status['v_curve2'] = (self.status['v_curve2'][ : self.status['delay_start'] + self.status['delay_steps']] + 
+						                           self.status['v_curve2'][self.status['delay_start'] + self.status['delay_steps'] + self.status['delay_len'] : ])
+						log.info('v_curve2 post %s', self.status['v_curve2'])
+					self.status['delay_calibrated'] = True
+			
 				self.status['hyst'], v_curve2_s = Focuser.v_shift(np.array(self.status['v_curve']), np.array(self.status['v_curve2']), self.status['smooth_size'], self.status['c1'], self.status['m1'], self.status['c2'], self.status['m2'])
 				self.status['v_curve2_s'] = v_curve2_s.tolist()
 
-				self.status['remaining_steps'] = round(self.status['xmin'] - len(self.status['v_curve2']) - self.status['hyst'])
+				self.status['remaining_steps'] = round(self.status['xmin'] - len(self.status['v_curve2']) - self.status['hyst']) - self.status['delay_steps']
 				log.info("remaining %d", self.status['remaining_steps'])
-				if self.status['remaining_steps'] < 8:
+				if self.status['remaining_steps'] < 2:
 					self.changePhase('focus_v2')
 					
 					self.props["focuser_callibration"]["hyst"].setValue(self.status['hyst'])
@@ -2954,38 +2971,21 @@ class Focuser:
 
 					if self.full_res is not None:
 						self.full_res['hyst'] = max(0, int(round(- self.status['hyst'])))
-			self.step(1)
+			if not self.status['delay_calibrated'] and len(self.status['v_curve2']) >= self.status['delay_start'] and self.status['delay_len'] < 4:
+				self.status['delay_len'] += 1
+			else:
+				self.step(1)
 			self.status['v_curve2'].append(self.hfr)
-		elif self.status['phase'] == 'focus_v2': # estimate maximum, go there
+		elif self.status['phase'] == 'focus_v2': # go there
 			self.hfr = self.get_hfr(im_sub)
 			self.status['v_curve2'].append(self.hfr)
-			self.status['delay_curve'].append(self.hfr)
-			if len(self.status['delay_curve']) > 10:
-				dc = np.array(self.status['delay_curve'])
-				log.info("dc %s", dc)
-				mean = np.mean(dc[-4:])
-				stddev = np.std(dc[-4:])
-				for i in range(10):
-					log.info("mean %f, std %f", mean, stddev)
-					idx = dc < mean + 2 * stddev
-					mean = np.mean(dc[idx])
-					stddev = np.std(dc[idx])
-				log.info("mean %f, std %f", mean, stddev)
-				for i in range(len(dc)):
-					if dc[i] > mean + 1 * stddev:
-						self.status['remaining_steps'] -= 1
-					else:
-						break
-				log.info("v2 remaining %d", self.status['remaining_steps'])
-
-				while self.status['remaining_steps'] > 0:
-					self.status['remaining_steps'] -= 1
-					self.step(1)
-				
+			if self.status['remaining_steps'] > 0:
+				self.status['remaining_steps'] -= 1
+				self.step(1)
+			else:
 				t = time.time()
 				np.save("v_curve1_%d.npy" % t, np.array(self.status['v_curve']))
 				np.save("v_curve2_%d.npy" % t, np.array(self.status['v_curve2']))
-				self.phase_wait = 2
 				self.changePhase('wait')
 				
 			log.info("hfr %f", self.hfr)
