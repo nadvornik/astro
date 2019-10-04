@@ -2328,7 +2328,7 @@ class Guider:
 				log.info(status)
 				log.info("%f %f", abs(err.imag - self.err0_dec), 2 * self.status['pixpersec'])
 			
-				if t > self.t2 + self.status['t_delay'] * 2 + 10 or abs(err.imag - self.err0_dec) > 50:
+				if t > self.t2 + self.status['t_delay'] * 2 + 20 or abs(err.imag - self.err0_dec) > 50:
 					aresp = np.array(self.resp0)
 					aresp1 = aresp[aresp[:, 0] > self.t2 + self.status['t_delay1'] - self.t0, ::2]
 					m, c = fit_line(aresp1)
@@ -2928,7 +2928,7 @@ class Focuser:
 					self.status['v_curve_s'] = v_curve_s.tolist()
 					
 					self.status['delay_len'] = 0;
-					self.status['delay_start'] = int(self.status['side_len'] // 2 + 1)
+					self.status['delay_start'] = int(self.status['side_len'] // 2 - 1)
 					self.status['delay_steps'] = 0;
 					
 					self.status['delay_calibrated'] = False;
@@ -2944,7 +2944,7 @@ class Focuser:
 			self.step(-1)
 		elif self.status['phase'] == 'focus_v': # go back, record first part of second v curve
 			self.hfr = self.get_hfr(im_sub)
-			if len(self.status['v_curve2']) > self.status['side_len'] or self.hfr <= self.status['min_hfr'] and len(self.status['v_curve2']) > 4:
+			if len(self.status['v_curve2']) > self.status['side_len'] + self.status['delay_len'] or self.hfr <= self.status['min_hfr'] and len(self.status['v_curve2']) > 4:
 				if not self.status['delay_calibrated']:
 					if self.status['delay_len']:
 						stddevlist = []
@@ -2956,6 +2956,7 @@ class Focuser:
 						self.status['v_curve2'] = (self.status['v_curve2'][ : self.status['delay_start'] + self.status['delay_steps']] + 
 						                           self.status['v_curve2'][self.status['delay_start'] + self.status['delay_steps'] + self.status['delay_len'] : ])
 						log.info('v_curve2 post %s', self.status['v_curve2'])
+						self.status['delay_len'] = 0
 					self.status['delay_calibrated'] = True
 			
 				self.status['hyst'], v_curve2_s = Focuser.v_shift(np.array(self.status['v_curve']), np.array(self.status['v_curve2']), self.status['smooth_size'], self.status['c1'], self.status['m1'], self.status['c2'], self.status['m2'])
@@ -2971,7 +2972,7 @@ class Focuser:
 
 					if self.full_res is not None:
 						self.full_res['hyst'] = max(0, int(round(- self.status['hyst'])))
-			if not self.status['delay_calibrated'] and len(self.status['v_curve2']) >= self.status['delay_start'] and self.status['delay_len'] < 4:
+			if not self.status['delay_calibrated'] and len(self.status['v_curve2']) >= self.status['delay_start'] and self.status['delay_len'] < 8:
 				self.status['delay_len'] += 1
 			else:
 				self.step(1)
@@ -2982,6 +2983,8 @@ class Focuser:
 			if self.status['remaining_steps'] > 0:
 				self.status['remaining_steps'] -= 1
 				self.step(1)
+			elif self.status['remaining_steps'] > -10:
+				self.status['remaining_steps'] -= 1
 			else:
 				t = time.time()
 				np.save("v_curve1_%d.npy" % t, np.array(self.status['v_curve']))
@@ -3162,11 +3165,11 @@ class Mount:
 				ts = dateutil.parser.parse(prop.getAttr('timestamp')).timestamp()
 			except:
 				ts = time.time()
-			val = float(prop.checkValue('MLX2_TEMP'))
-			self.tempmodel.add(0, val, ts)
-			val = float(prop.checkValue('MLX2_REF'))
-			self.tempmodel.add(1, val, ts)
-			#log.info("handle_set_tempmodel_cb %f %f", val, time.time() - ts)
+			val1 = float(prop.checkValue('MLX2_TEMP'))
+			self.tempmodel.add(0, val1, ts)
+			val2 = float(prop.checkValue('MLX2_REF'))
+			self.tempmodel.add(1, val2, ts)
+			#log.info("handle_set_tempmodel_cb %f %f %f", val1, val2, time.time() - ts)
 
 
 			if self.focuser and self.allow_tempcomp:
