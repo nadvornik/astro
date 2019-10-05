@@ -112,8 +112,8 @@ class Camera_test_kstars:
                 	im = apply_gamma(im, 2.2)
                 	self.i += 1
 		
-		log.info("focuser %d" % self.focuser.pos)
-		bl = np.abs(self.focuser.pos / 150.0)**2 + 1
+		log.info("focuser %d" % self.focuser.get_pos())
+		bl = np.abs(self.focuser.get_pos() / 150.0)**2 + 1
 		
 		
 		
@@ -144,7 +144,7 @@ class Camera_test_kstars:
 		h, w, c = self.im.shape
 		im = np.rot90(self.im[:, 0:w//2])
 
-		bl = np.abs(self.focuser.pos / 150.0)**2 + 1
+		bl = np.abs(self.focuser.get_pos() / 150.0)**2 + 1
 		ibl = int(bl + 1)
 		#im = cv2.blur(im, (ibl, ibl))
 		#im = cv2.blur(im, (ibl, ibl))
@@ -185,7 +185,7 @@ class Camera_test_kstars_g:
 		im = im[h//4:h//4*3, w//2:]
 		#im = cv2.flip(im, 1)
 
-		bl = np.abs((self.cam0.focuser.pos + 200) / 150.0)**2 + 1
+		bl = np.abs((self.cam0.focuser.get_pos() + 200) / 150.0)**2 + 1
 		ibl = int(bl + 1)
 		#im = cv2.blur(im, (ibl, ibl))
 		#im = cv2.blur(im, (ibl, ibl))

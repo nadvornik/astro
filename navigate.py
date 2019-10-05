@@ -47,6 +47,7 @@ from stacktraces import stacktraces
 import json
 
 from focuser_out import FocuserOut
+from focuser_indi import FocuserIndi
 from ext_trigger import ExtTrigger
 from centroid import centroid, sym_center, hfr, fit_ellipse, getRectSubPix
 from polyfit import *
@@ -3158,12 +3159,12 @@ class Mount:
 			if self.focuser and self.allow_tempcomp:
 				try:
 					temp_focus = self.tempmodel.res()
-					while temp_focus < self.focuser.pos - 12:
+					while temp_focus < self.focuser.get_pos() - 12:
 						self.focuser.cmd("f-1")
-						log.info("Focus comp %f", self.focuser.pos)
-					while temp_focus > self.focuser.pos + 12:
+						log.info("Focus comp %f", self.focuser.get_pos())
+					while temp_focus > self.focuser.get_pos() + 12:
 						self.focuser.cmd("f+1")
-						log.info("Focus comp %f", self.focuser.pos)
+						log.info("Focus comp %f", self.focuser.get_pos())
 				except:
 					log.exception("Temperature focus")
 
@@ -3892,12 +3893,12 @@ class Runner(threading.Thread):
 			try:
 				if self.focuser:
 					if sync_focus or mode == 'focuser' or mode == 'zoom_focuser':
-						self.navigator.mount.tempmodel.set_offset(self.camera.focuser.pos)
+						self.navigator.mount.tempmodel.set_offset(self.camera.focuser.get_pos())
 						sync_focus = False
 						self.navigator.mount.enable_tempcomp(mode != 'focuser' and mode != 'zoom_focuser' and self.camera_run)
 						
-					if self.props["focus_pos"]["pos"] != self.camera.focuser.pos:
-						self.props["focus_pos"]["pos"].setValue(self.camera.focuser.pos)
+					if self.props["focus_pos"]["pos"] != self.camera.focuser.get_pos():
+						self.props["focus_pos"]["pos"].setValue(self.camera.focuser.get_pos())
 						self.props["focus_pos"].setAttr('state', 'Ok')
 						self.driver.enqueueSetMessage(self.props["focus_pos"])
 			except:
@@ -4331,7 +4332,8 @@ def run_test_2_kstars():
 	go_ra = GuideOut("./guide_out_ra")
 	go_dec = GuideOut("./guide_out_dec")
 
-	fo = FocuserOut()
+	fo = FocuserIndi(driver, "Focuser Simulator")
+#	fo = FocuserIndi(driver, "MoonLite")
 	mount = Mount(driver, status.path(["mount"]), polar, go_ra, go_dec, focuser=fo)
 
 	dark1 = Median(5)
@@ -4496,7 +4498,7 @@ def run_2_indi():
 	go_ra = GuideOut("./guide_out_ra")
 	go_dec = GuideOut("./guide_out_dec")
 
-	fo = FocuserOut()
+	fo = FocuserIndi(driver, "MoonLite")
 	mount = Mount(driver, status.path(["mount"]), polar, go_ra, go_dec, focuser=fo)
 
 	cam2 = Camera(status.path(["guider", "navigator", "camera"]))

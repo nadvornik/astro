@@ -53,6 +53,8 @@ class FocuserOut:
 		if cmd == "f+1":
 			self.move(16)
 
+	def get_pos(self):
+		return self.pos
 
 if __name__ == "__main__":
 	focuser = FocuserOut()
