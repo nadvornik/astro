@@ -1779,7 +1779,7 @@ class Guider:
 				<defSwitch name="close">Off</defSwitch>
 			</defSwitchVector>
 
-			<defSwitchVector device="{0}" name="expose" label="Expose" group="Guider" state="Idle" perm="rw" rule="OneOfMany">
+			<defSwitchVector device="{0}" name="expose" label="Expose" group="Main Control" state="Idle" perm="rw" rule="OneOfMany">
 				<defSwitch name="stop">On</defSwitch>
 				<defSwitch name="guided">Off</defSwitch>
 				<defSwitch name="guided2">Off</defSwitch>
