@@ -2309,7 +2309,7 @@ class Guider:
 			
 				pt0, pt, match = match_closest(self.pt0, pt, 5, off)
 				
-			if len(match) > 0:
+			if len(self.pt0) == 1 and len(match) > 0 or len(self.pt0) <= 3 and len(match) >= 2 or len(self.pt0) >= 4 and len(match) >= 3:
 				self.off, weights = avg_pt(pt0, pt)
 				err = complex(*self.off) / self.ref_off
 				
@@ -3097,14 +3097,12 @@ class Focuser:
 		self.driver.enqueueSetMessage(self.props["focus_data"])
 
 class Mount:
-	def __init__(self, driver, status, polar, go_ra = None, go_dec = None, focuser = None):
+	def __init__(self, driver, status, polar, go_ra = None, go_dec = None):
 		self.status = status
 		self.polar = polar
 		self.go_ra = go_ra
 		self.go_dec = go_dec
-		self.focuser = focuser
 		self.allow_guide = True
-		self.allow_tempcomp = False
 		self.status.setdefault('oag', True)
 		if self.status['oag']:
 			self.status.setdefault('oag_pos', None)
@@ -3134,40 +3132,10 @@ class Mount:
 		self.guider_tan = None
 		#self.ext_trigger = ExtTrigger()
 		
-		self.tempmodel = TempModel()
-		
 		self.device = "EQMod Mount"
 		self.driver = driver
 		driver.register_callback(self.device, 'new', self.handle_new_cb)
 		driver.register_callback(self.device, 'snoop', self.handle_set_cb)
-
-		driver.register_callback("Sensors", 'snoop', self.handle_set_tempmodel_cb)
-
-	def handle_set_tempmodel_cb(self, msg, prop):
-		if prop.getAttr('device') == "Sensors" and prop.getAttr('name') == 'SENSORS':
-			try:
-				ts = dateutil.parser.parse(prop.getAttr('timestamp')).timestamp()
-			except:
-				ts = time.time()
-			val1 = float(prop.checkValue('MLX2_TEMP'))
-			self.tempmodel.add(0, val1, ts)
-			val2 = float(prop.checkValue('MLX2_REF'))
-			self.tempmodel.add(1, val2, ts)
-			#log.info("handle_set_tempmodel_cb %f %f %f", val1, val2, time.time() - ts)
-
-
-			if self.focuser and self.allow_tempcomp:
-				try:
-					temp_focus = self.tempmodel.res()
-					while temp_focus < self.focuser.get_pos() - 12:
-						self.focuser.cmd("f-1")
-						log.info("Focus comp %f", self.focuser.get_pos())
-					while temp_focus > self.focuser.get_pos() + 12:
-						self.focuser.cmd("f+1")
-						log.info("Focus comp %f", self.focuser.get_pos())
-				except:
-					log.exception("Temperature focus")
-
 
 
 	def handle_new_cb(self, msg, prop):
@@ -3216,9 +3184,6 @@ class Mount:
 			self.status['arcsec_per_sec_ra'] = 7.5
 		elif self.driver.checkValue(self.device, 'ST4_GUIDE_RATE_WE', "ST4_RATE_WE_3") == "On":
 			self.status['arcsec_per_sec_ra'] = 3.75
-				
-	def enable_tempcomp(self, enable):
-		self.allow_tempcomp = enable
 				
 	
 	def go_ra_out(self, d, t = 0):
@@ -3485,7 +3450,68 @@ class Mount:
 		pass
 
 
+class TempFocuser:
+	def __init__(self, driver, focuser):
+		self.focuser = focuser
+		self.allow_tempcomp = False
+		self.running = False
+		self.tempmodel = TempModel()
+		
+		self.driver = driver
+		driver.register_callback("Sensors", 'snoop', self.handle_set_tempmodel_cb)
 
+	def handle_set_tempmodel_cb(self, msg, prop):
+		if prop.getAttr('device') == "Sensors" and prop.getAttr('name') == 'SENSORS':
+			try:
+				ts = dateutil.parser.parse(prop.getAttr('timestamp')).timestamp()
+			except:
+				ts = time.time()
+			val1 = float(prop.checkValue('MLX2_TEMP'))
+			self.tempmodel.add(0, val1, ts)
+			val2 = float(prop.checkValue('MLX2_REF'))
+			self.tempmodel.add(1, val2, ts)
+			#log.info("handle_set_tempmodel_cb %f %f %f", val1, val2, time.time() - ts)
+			self.temp_focus = self.tempmodel.res()
+
+
+	def run(self):
+		try:
+			log.info("Focus comp start")
+			while self.allow_tempcomp:
+				try:
+					temp_focus = self.temp_focus
+					if temp_focus < self.focuser.get_pos() - 12:
+						self.focuser.cmd("f-1")
+						log.info("Focus comp %f %f", self.focuser.get_pos(), temp_focus)
+					if temp_focus > self.focuser.get_pos() + 12:
+						self.focuser.cmd("f+1")
+						log.info("Focus comp %f %f", self.focuser.get_pos(), temp_focus)
+				except:
+					log.exception("Temperature focus")
+				time.sleep(1)
+		except:
+			log.exception("Temperature focus")
+		self.running = False
+		log.info("Focus comp end")
+
+	def sync(self):
+		self.tempmodel.set_offset(self.focuser.get_pos())
+		self.temp_focus = self.tempmodel.res()
+		
+	
+	def enable_tempcomp(self, enable):
+		if not self.running and enable:
+			self.sync()
+			self.running = True
+			self.allow_tempcomp = enable
+			threading.Thread(target=self.run).start()
+		log.info("tempcomp %s", enable)
+			
+		self.allow_tempcomp = enable
+		if not self.allow_tempcomp:
+			while self.running:
+				time.sleep(0.1)
+				
 
 
 class Runner(threading.Thread):
@@ -3650,7 +3676,8 @@ class Runner(threading.Thread):
 
 		process = psutil.Process(os.getpid())
 		
-		
+		if self.focuser:
+			temp_focuser = TempFocuser(self.driver, self.camera.focuser)
 
 		
 		while True:
@@ -3770,7 +3797,7 @@ class Runner(threading.Thread):
 
 			try:
 				if self.focuser:
-					self.navigator.mount.enable_tempcomp(not sync_focus and mode != 'focuser' and mode != 'zoom_focuser' and self.camera_run)
+					temp_focuser.enable_tempcomp(not sync_focus and mode != 'focuser' and mode != 'zoom_focuser' and self.camera_run)
 			except:
 				log.exception("enable_tempcomp1")
 
@@ -3857,12 +3884,18 @@ class Runner(threading.Thread):
 					elif mode == 'focuser':
 						self.focuser.cmd(cmd)
 				elif cmd == 'capture' or cmd == 'test-capture':
+
 					if self.camera_run:
 						if mode == 'zoom_focuser':
 							self.camera.cmd('z0')
 							mode = 'navigator'
 							self.props['run_mode'].enforceRule(mode, True)
 							self.driver.enqueueSetMessage(self.props['run_mode'])
+						try:
+							if self.focuser:
+								temp_focuser.enable_tempcomp(True)
+						except:
+							log.exception("enable_tempcomp2")
 						self.capture(cmd == 'test-capture')
 						self.driver.enqueueSetMessage(self.props['camera_control'])
 					break
@@ -3893,9 +3926,9 @@ class Runner(threading.Thread):
 			try:
 				if self.focuser:
 					if sync_focus or mode == 'focuser' or mode == 'zoom_focuser':
-						self.navigator.mount.tempmodel.set_offset(self.camera.focuser.get_pos())
+						temp_focuser.sync()
 						sync_focus = False
-						self.navigator.mount.enable_tempcomp(mode != 'focuser' and mode != 'zoom_focuser' and self.camera_run)
+						temp_focuser.enable_tempcomp(mode != 'focuser' and mode != 'zoom_focuser' and self.camera_run)
 						
 					if self.props["focus_pos"]["pos"] != self.camera.focuser.get_pos():
 						self.props["focus_pos"]["pos"].setValue(self.camera.focuser.get_pos())
@@ -3942,6 +3975,9 @@ class Runner(threading.Thread):
 			i += 1
 			#if i == 300:
 			#	cmdQueue.put('exit')
+
+		if self.focuser:
+			temp_focuser.enable_tempcomp(false)
 		cmdQueue.put('exit')
 		self.camera.shutdown()
 
@@ -4499,7 +4535,7 @@ def run_2_indi():
 	go_dec = GuideOut("./guide_out_dec")
 
 	fo = FocuserIndi(driver, "MoonLite")
-	mount = Mount(driver, status.path(["mount"]), polar, go_ra, go_dec, focuser=fo)
+	mount = Mount(driver, status.path(["mount"]), polar, go_ra, go_dec)
 
 	cam2 = Camera(status.path(["guider", "navigator", "camera"]))
 	cam2.prepare(1280, 960)
@@ -4511,9 +4547,9 @@ def run_2_indi():
 	#cam = Camera_indi(driver, "ZWO CCD ASI1600MM Pro", status.path(["navigator", "camera"]), focuser=fo)
 	dark = Median(5)
 	
-	nav = Navigator(driver, "Navigator", status.path(["navigator"]), dark, mount, 'navigator', polar_tid = 'polar')
+	nav = Navigator(driver, "Navigator", status.path(["navigator"]), dark, mount, 'navigator', polar_tid = 'polar', full_res = status.path(["full_res"]))
 
-	focuser = Focuser(driver, "Navigator", 'navigator', status.path(["navigator", "focuser"]), mount)
+	focuser = Focuser(driver, "Navigator", 'navigator', status.path(["navigator", "focuser"]), mount, full_res = status.path(["full_res"]))
 
 	runner = Runner(driver, "Navigator", 'navigator', cam, navigator = nav, focuser = focuser)
 	runner.start()
