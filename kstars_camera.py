@@ -22,11 +22,12 @@ def apply_gamma(img, gamma):
 
 
 class Camera_test_kstars:
-	def __init__(self, status, go_ra, go_dec, focuser):
+	def __init__(self, status, go_ra, go_dec, focuser, mount):
 		self.status = status
 		self.go_ra = go_ra
 		self.go_dec = go_dec
 		self.focuser = focuser
+		self.mount = mount
 		self.status['exp-sec'] = 60
 		self.status['test-exp-sec'] = 1
 		self.e_ra = 70
@@ -82,9 +83,11 @@ class Camera_test_kstars:
 
 	
 	def capture(self):
+		m_ra = self.mount.status['mount_ra'] or 0
+		m_dec = self.mount.status['mount_dec'] or 0
 		
-		self.e_ra = 70 + np.random.normal(0, 0.002) + 0.001 * (time.time() - self.t0) + np.sin((time.time() - self.t0) / 3.0) * 0.002
-		self.e_dec = 65 + np.random.normal(0, 0.002) - 0.0005 * (time.time() - self.t0)
+		self.e_ra = m_ra + np.random.normal(0, 0.002) # + 0.001 * (time.time() - self.t0) + np.sin((time.time() - self.t0) / 3.0) * 0.002
+		self.e_dec = m_dec + np.random.normal(0, 0.002) # - 0.0005 * (time.time() - self.t0)
 		
 		ra = -(self.go_ra.recent_avg() - self.go_ra.recent_avg(0.001)) / 3600.0 * 60.0  + self.e_ra
 		dec = (self.go_dec.recent_avg() - self.go_dec.recent_avg(0.001)) / 3600.0 * 60.0  + self.e_dec
@@ -94,7 +97,7 @@ class Camera_test_kstars:
 			self.iface.setRaDec(ra / 360.0 * 24.0, dec)
 			time.sleep(0.4)
 		
-			self.iface.exportImage("/tmp/kstars.jpg") #,2000,2000, signature='sii')
+			self.iface.exportImage("/tmp/kstars.jpg",800,600, signature='sii')
 			time.sleep(0.1)
 
 			im = cv2.imread("/tmp/kstars.jpg")
@@ -105,7 +108,8 @@ class Camera_test_kstars:
 
 		self.im = apply_gamma(im, 2.2)
 		h, w, c = self.im.shape
-		im = np.rot90(self.im[:, 0:w//2])
+		#im = np.rot90(self.im[:, 0:w//2])
+		
 
 		if self.bahtinov:
                 	im = cv2.imread("ba_test/test%d.jpg" % (self.i % 300 + 264))

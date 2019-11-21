@@ -619,7 +619,9 @@ class Navigator:
 			except:
 				self.field_corr = None
 		
-		self.i_dark = 0
+		self.ra_dark = 0.0
+		self.dec_dark = 0.0
+		
 		self.full_res = full_res
 		if self.full_res is not None:
 			self.full_res['full_hfr'] = []
@@ -737,9 +739,10 @@ class Navigator:
 					self.status['radius'] = self.status['field_deg']
 					self.wcs = self.solver.wcs
 			
-					if i - self.i_dark > 12:
+					if np.abs(self.status['ra'] - self.ra_dark) > 20.0/3600.0 and np.abs(self.status['dec'] - self.dec_dark) > 20.0/3600.0:
 						self.dark.add_mean(self.solved_im, self.solver.ind_sources)
-						self.i_dark = i
+						self.ra_dark = self.status['ra']
+						self.dec_dark = self.status['dec']
 				
 					self.index_sources = self.solver.ind_radec
 					self.plotter = Plotter(self.wcs)
@@ -948,17 +951,12 @@ class Navigator:
 				prop.setAttr('state', 'Ok')
 
 			if prop['sync'] == True:
-
-				try:
-					self.driver.sendClientMessageWait("EQMod Mount", "ON_COORD_SET", {"SYNC": "On"})
-					ra, dec = self.props['coord'].to_array()
-					self.driver.sendClientMessageWait("EQMod Mount", "EQUATORIAL_EOD_COORD", {"RA": ra, "DEC": dec})
-					self.driver.sendClientMessageWait("EQMod Mount", "ON_COORD_SET", {"TRACK": "On"})
-
+				ra, dec = self.props['coord'].to_array()
+				ra *= 15.0
+				if self.mount.sync(ra, dec):
 					prop['sync'].setValue(False)
 					prop.setAttr('state', 'Ok')
-				except:
-					log.exception('sync')
+				else:
 					prop['sync'].setValue(False)
 					prop.setAttr('state', 'Alert')
 
@@ -3103,6 +3101,10 @@ class Mount:
 		self.go_ra = go_ra
 		self.go_dec = go_dec
 		self.allow_guide = True
+		
+		self.tracking = False
+		self.tracking_since = 0
+		
 		self.status.setdefault('oag', True)
 		if self.status['oag']:
 			self.status.setdefault('oag_pos', None)
@@ -3147,7 +3149,11 @@ class Mount:
 	
 	def handle_set_cb(self, msg, prop):
 		if prop.getAttr('device') == self.device and prop.getAttr('name') == "TELESCOPE_TRACK_STATE" or prop.getAttr('name') == "CONNECTION":
-			self.allow_guide = self.driver.checkValue(self.device, "TELESCOPE_TRACK_STATE", "TRACK_ON", state = ['Ok', 'Idle', 'Busy']) == "On"
+			tracking = self.driver.checkValue(self.device, "TELESCOPE_TRACK_STATE", "TRACK_ON", state = ['Ok', 'Idle', 'Busy']) == "On"
+			if tracking and not self.tracking:
+				self.tracking_since = time.time()
+			self.tracking = tracking
+			self.allow_guide = self.tracking
 			
 			log.info("allow_guide %s", self.allow_guide)
 			
@@ -3162,7 +3168,8 @@ class Mount:
 				self.getMountTracking()
 
 		if prop.getAttr('device') == self.device and prop.getAttr('name') == "EQUATORIAL_EOD_COORD":
-			self.status['mount_ra'], self.status['mount_dec'] = prop.to_array()
+			ra, self.status['mount_dec'] = prop.to_array()
+			self.status['mount_ra'] = ra * 15
 
 
 	def getMountTracking(self):
@@ -3446,8 +3453,28 @@ class Mount:
 		if self.go_ra is not None:
 			self.go_ra_out(0)
 
+
+
+	def sync(self, ra, dec):
+		try:
+			self.driver.sendClientMessageWait(self.device, "ON_COORD_SET", {"SYNC": "On"})
+			self.driver.sendClientMessageWait(self.device, "EQUATORIAL_EOD_COORD", {"RA": ra / 15.0, "DEC": dec})
+			self.driver.sendClientMessageWait(self.device, "ON_COORD_SET", {"TRACK": "On"})
+			self.status['mount_ra'] = ra
+			self.status['mount_dec'] = dec
+			return True
+		except:
+			log.exception('sync')
+		return False
+
 	def move_to(self, ra, dec):
-		pass
+		try:
+			self.driver.sendClientMessageWait(self.device, "ON_COORD_SET", {"TRACK": "On"})
+			self.driver.sendClientMessageWait(self.device, "EQUATORIAL_EOD_COORD", {"RA": ra / 15.0, "DEC": dec})
+			return True
+		except:
+			log.exception('move_to')
+		return False
 
 
 class TempFocuser:
@@ -3586,6 +3613,14 @@ class Runner(threading.Thread):
 		if focuser:
 			driver.defineProperties("""
 			<INDIDriver>
+				<defNumberVector device="{0}" name="target_coord" label="Target Coord" group="Main Control" state="Idle" perm="rw">
+					<defNumber name="RA" label="RA" format="%10.6m" min="0" max="0" step="0">0</defNumber>
+					<defNumber name="DEC" label="Dec" format="%10.6m" min="0" max="0" step="0">0</defNumber>
+				</defNumberVector>
+				<defSwitchVector device="{0}" name="target_lock" label="Target Lock" group="Main Control" state="Idle" perm="rw" rule="AnyOfMany">
+					<defSwitch name="lock">Off</defSwitch>
+				</defSwitchVector>
+
 				<defSwitchVector device="{0}" name="focus_plus" label="Focus" group="Main Control" state="Idle" perm="rw" rule="AtMostOne">
 					<defSwitch name="f+3">Off</defSwitch>
 					<defSwitch name="f+2">Off</defSwitch>
@@ -3641,6 +3676,7 @@ class Runner(threading.Thread):
 		self.tid = tid
 		self.camera = camera
 		self.navigator = navigator
+		self.mount = self.navigator.mount
 		self.guider = guider
 		self.focuser = focuser
 		self.capture_in_progress = False
@@ -3679,9 +3715,11 @@ class Runner(threading.Thread):
 		if self.focuser:
 			temp_focuser = TempFocuser(self.driver, self.camera.focuser)
 
+		last_slew_ts = 0
 		
 		while True:
 			sync_focus = False
+			target_lock_start = False
 		        
 			mem_info = process.memory_info()
 			log.info("mem_used %d %d" % (mem_info.rss,mem_info.vms) )
@@ -3785,6 +3823,13 @@ class Runner(threading.Thread):
 					except:
 						log.exception("zoom pos")
 						prop.setAttr('state', 'Alert')
+
+				elif name == 'target_coord':
+					prop.setAttr('state', 'Ok')
+				elif name == 'target_lock':
+					if prop.checkValue('lock') == 'On':
+						target_lock_start = True
+					prop.setAttr('state', 'Ok')
 				else:
 					if self.navigator:
 						self.navigator.handleNewProp(msg, prop)
@@ -3971,6 +4016,43 @@ class Runner(threading.Thread):
 						self.focuser.proc_frame(im, i)
 				except:
 					log.exception('proc_frame')
+
+
+			if (mode == 'navigator' and 'target_coord' in self.props
+			    and self.props['target_lock'].checkValue('lock') == 'On'):
+				log.info('target_lock enabled  tracking %s, since %s, slew %s, solved %s' % (self.mount.tracking, self.mount.tracking_since + 2 < self.navigator.status['t_solved'], self.mount.tracking_since > last_slew_ts, self.navigator.status['t_solved'] + 10 > time.time()))
+				log.info('target_lock t_solved %s %s', self.navigator.status['t_solved'], time.time())
+				if self.mount.tracking and self.mount.tracking_since + 2 < self.navigator.status['t_solved'] and self.mount.tracking_since > last_slew_ts and self.navigator.status['t_solved'] + 10 > time.time():
+					mount_c = np.array([self.mount.status['mount_ra'], self.mount.status['mount_dec']])
+					nav_c = np.array([self.navigator.status['ra'], self.navigator.status['dec']])
+					target_c = self.props['target_coord'].to_array()
+					target_c[0] *= 15.0
+					
+					sync_diff = np.abs((mount_c - nav_c + 180 + 720) % 360.0 - 180)
+					target_diff = np.abs((target_c - nav_c + 180 + 720) % 360.0 - 180)
+					
+					
+					log.info('target_lock mount %s nav %s target %s sync_dif %s target_dif %s' % (mount_c, nav_c, target_c, sync_diff, target_diff))
+					
+					res = True
+					if sync_diff[0] > 30.0/3600.0 or sync_diff[1] > 30.0/3600.0:
+						log.info('target_lock sync')
+						res = self.mount.sync(nav_c[0], nav_c[1])
+					elif target_diff[0] > 30.0/3600.0 or target_diff[1] > 30.0/3600.0:
+						if (target_diff[0] < 5 and target_diff[1] < 5) or target_lock_start:
+							log.info('target_lock slew')
+							last_slew_ts = time.time()
+							res = self.mount.move_to(target_c[0], target_c[1])
+						elif not target_lock_start:
+							log.error('target_lock diff too big')
+							res = False
+					
+					if not res:
+						self.props['target_lock']['lock'].setValue(False)
+						self.props['target_lock'].setAttr('state', 'Alert')
+						self.driver.enqueueSetMessage(self.props['target_lock'])
+
+
 
 			i += 1
 			#if i == 300:
@@ -4370,12 +4452,12 @@ def run_test_2_kstars():
 
 	fo = FocuserIndi(driver, "Focuser Simulator")
 #	fo = FocuserIndi(driver, "MoonLite")
-	mount = Mount(driver, status.path(["mount"]), polar, go_ra, go_dec, focuser=fo)
+	mount = Mount(driver, status.path(["mount"]), polar, go_ra, go_dec)
 
 	dark1 = Median(5)
 	dark2 = Median(5)
 
-	cam1 = Camera_test_kstars(status.path(["navigator", "camera"]), go_ra, go_dec, fo)
+	cam1 = Camera_test_kstars(status.path(["navigator", "camera"]), go_ra, go_dec, fo, mount)
 	nav1 = Navigator(driver, "Navigator", status.path(["navigator"]), dark1, mount, 'navigator', polar_tid = 'polar', full_res = status.path(["full_res"]))
 
 	nav = Navigator(driver, "Guider", status.path(["guider", "navigator"]), dark2, mount, 'guider')
