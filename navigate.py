@@ -1836,14 +1836,14 @@ class Guider:
 			self.full_res['temp_cor'] = 0
 			
 
-		self.reset()
+		self.reset(phase='inactive')
 		self.t0 = 0
 		self.resp0 = []
 		self.pt0 = []
 		self.prev_t = 0
 
-	def reset(self):
-		self.changePhase('start')
+	def reset(self, phase='start'):
+		self.changePhase(phase)
 		self.status['t_delay'] = None
 		self.status['t_delay1'] = None
 		self.status['t_delay2'] = None
@@ -1913,13 +1913,18 @@ class Guider:
 	def changePhase(self, mode):
 		self.status['mode'] = mode
 		self.props['guider_phase'].enforceRule(mode, True)
+		if mode == 'inactive':
+			self.props['guider_phase'].setAttr('state', 'Idle')
+		else:
+			self.props['guider_phase'].setAttr('state', 'Ok')
 		self.driver.enqueueSetMessage(self.props['guider_phase'])
 
-		
 	def cmd(self, cmd):
 		if cmd == "stop":
 			self.mount.go_ra_out(0)
 			self.mount.go_dec_out(0)
+			self.changePhase('inactive')
+
 			
 
 		elif cmd == "capture-started":
@@ -2307,7 +2312,7 @@ class Guider:
 			
 				pt0, pt, match = match_closest(self.pt0, pt, 5, off)
 				
-			if len(self.pt0) == 1 and len(match) > 0 or len(self.pt0) <= 3 and len(match) >= 2 or len(self.pt0) >= 4 and len(match) >= 3:
+			if len(match) > 0:
 				self.off, weights = avg_pt(pt0, pt)
 				err = complex(*self.off) / self.ref_off
 				
@@ -2367,7 +2372,7 @@ class Guider:
 			
 					pt0, pt, match = match_closest(self.pt0, pt, 5, off)
 
-			if len(match) > 0:
+			if len(self.pt0) == 1 and len(match) > 0 or len(self.pt0) <= 3 and len(match) >= 2 or len(self.pt0) >= 4 and len(match) >= 3:
 				self.off, weights = avg_pt(pt0, pt)
 				log.info("centroid off1 %s", self.off)
 				self.off += centroid_mean(im_sub, pt0, self.off)
@@ -2433,9 +2438,18 @@ class Guider:
 					self.mount.go_ra.save("go_ra_%d.npy" % self.t0)
 					self.mount.go_dec.save("go_dec_%d.npy" % self.t0)
 					log.info("SAVED") 
+
+				if self.status['alarm_count'] > 0:
+					self.props['guider_phase'].setAttr('state', 'Ok')
+					self.driver.enqueueSetMessage(self.props['guider_phase'])
 				self.status['alarm_count'] = 0
 			else:
 				self.status['alarm_count'] += 1
+				
+				if self.status['alarm_count'] > 5:
+					self.props['guider_phase'].setAttr('state', 'Alert')
+					self.driver.enqueueSetMessage(self.props['guider_phase'])
+
 				
 		if len(self.pt0) > 0:
 			for p in self.pt0:
@@ -3682,6 +3696,7 @@ class Runner(threading.Thread):
 		self.video_tid = video_tid
 		self.video_capture = False
 		self.camera_run = False
+		self.target_lock_cnt = 0
 		
 		
 	def run(self):
@@ -3718,7 +3733,6 @@ class Runner(threading.Thread):
 		
 		while True:
 			sync_focus = False
-			target_lock_start = False
 		        
 			mem_info = process.memory_info()
 			log.info("mem_used %d %d" % (mem_info.rss,mem_info.vms) )
@@ -3827,7 +3841,7 @@ class Runner(threading.Thread):
 					prop.setAttr('state', 'Ok')
 				elif name == 'target_lock':
 					if prop.checkValue('lock') == 'On':
-						target_lock_start = True
+						self.target_lock_cnt = 10
 					prop.setAttr('state', 'Ok')
 				else:
 					if self.navigator:
@@ -4019,9 +4033,15 @@ class Runner(threading.Thread):
 
 			if (mode == 'navigator' and 'target_coord' in self.props
 			    and self.props['target_lock'].checkValue('lock') == 'On'):
-				log.info('target_lock enabled  tracking %s, since %s, slew %s, solved %s' % (self.mount.tracking, self.mount.tracking_since + 2 < self.navigator.status['t_solved'], self.mount.tracking_since > last_slew_ts, self.navigator.status['t_solved'] + 10 > time.time()))
+
+				guider_state = 'Idle'
+				try:
+					guider_state = self.driver['Guider']['guider_phase'].getAttr('state')
+				except:
+					log.exception('guider_state')
+				log.info('target_lock enabled  tracking %s, since %s, slew %s, solved %s, guider_state %s' % (self.mount.tracking, self.mount.tracking_since + 2 < self.navigator.status['t_solved'], self.mount.tracking_since > last_slew_ts, self.navigator.status['t_solved'] + 10 > time.time(), guider_state))
 				log.info('target_lock t_solved %s %s', self.navigator.status['t_solved'], time.time())
-				if self.mount.tracking and self.mount.tracking_since + 2 < self.navigator.status['t_solved'] and self.mount.tracking_since > last_slew_ts and self.navigator.status['t_solved'] + 10 > time.time():
+				if self.mount.tracking and self.mount.tracking_since + 2 < self.navigator.status['t_solved'] and self.mount.tracking_since > last_slew_ts and self.navigator.status['t_solved'] + 10 > time.time() and guider_state != 'Ok':
 					mount_c = np.array([self.mount.status['mount_ra'], self.mount.status['mount_dec']])
 					nav_c = np.array([self.navigator.status['ra'], self.navigator.status['dec']])
 					target_c = self.props['target_coord'].to_array()
@@ -4038,11 +4058,11 @@ class Runner(threading.Thread):
 						log.info('target_lock sync')
 						res = self.mount.sync(nav_c[0], nav_c[1])
 					elif target_diff[0] > 30.0/3600.0 or target_diff[1] > 30.0/3600.0:
-						if (target_diff[0] < 5 and target_diff[1] < 5) or target_lock_start:
+						if (target_diff[0] < 5 and target_diff[1] < 5) or self.target_lock_cnt > 0:
 							log.info('target_lock slew')
 							last_slew_ts = time.time()
 							res = self.mount.move_to(target_c[0], target_c[1])
-						elif not target_lock_start:
+						elif not self.target_lock_cnt == 0:
 							log.error('target_lock diff too big')
 							res = False
 					
@@ -4053,6 +4073,8 @@ class Runner(threading.Thread):
 
 
 
+			if self.target_lock_cnt > 0:
+				self.target_lock_cnt -= 1
 			i += 1
 			#if i == 300:
 			#	cmdQueue.put('exit')
@@ -4116,6 +4138,7 @@ class Runner(threading.Thread):
                                 self.navigator.full_res_solver.terminate(wait=False)
 	
 	def capture_end_cb(self, img, name):
+		self.navigator.stack.reset()
 		self.capture_in_progress = False
 		log.info("capture_finished_cb")
 		cmdQueue.put('capture-finished')
