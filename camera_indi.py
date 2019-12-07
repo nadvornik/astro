@@ -63,11 +63,20 @@ class Camera_indi:
 	def set_mode(self, mode):
 		if mode == 'z0':
 			self.driver.sendClientMessageWait(self.device, "CCD_BINNING", {'HOR_BIN': self.status['binning'], 'VER_BIN': self.status['binning']})
+			# refresh max values
 			self.driver.sendClientMessageWait(self.device, "CCD_STREAM_FRAME", {
 				'X': 0,
 				'Y': 0,
-				'WIDTH': self.max_width // self.status['binning'],
-				'HEIGHT': self.max_height // self.status['binning']
+				'WIDTH': 64,
+				'HEIGHT': 64
+			})
+			maxw = int(self.driver[self.device]["CCD_STREAM_FRAME"]["WIDTH"].getAttr('max'))
+			maxh = int(self.driver[self.device]["CCD_STREAM_FRAME"]["HEIGHT"].getAttr('max'))
+			self.driver.sendClientMessageWait(self.device, "CCD_STREAM_FRAME", {
+				'X': 0,
+				'Y': 0,
+				'WIDTH': min(self.max_width // self.status['binning'], maxw),
+				'HEIGHT': min(self.max_height // self.status['binning'], maxh)
 			})
 			self.status['mode'] = 'z0'
 		elif mode == 'z1':
