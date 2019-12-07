@@ -2519,7 +2519,7 @@ class Focuser:
 		self.mount = mount
 		self.reset(dark)
 
-	hfr_size = 20
+	hfr_size = 24
 
 	@staticmethod
 	def v_param(v_curve):
@@ -2875,29 +2875,28 @@ class Focuser:
 		elif self.status['phase'] == 'record_v': # record v curve
 			self.hfr = self.get_hfr(im_sub)
 			self.status['v_curve'].append(self.hfr)
+			med_len = 7
 
-			if len(self.status['v_curve']) == 15:
+			if len(self.status['v_curve']) == med_len:
 				self.status['start_hfr'] = np.median(self.status['v_curve'])
 				self.status['min_hfr'] = self.status['start_hfr']
 				self.status['cur_hfr'] = self.status['start_hfr']
 
-			if len(self.status['v_curve']) > 15:
-				self.status['cur_hfr'] = np.median(self.status['v_curve'][-15:])
+			if len(self.status['v_curve']) > med_len:
+				self.status['cur_hfr'] = np.median(self.status['v_curve'][-med_len:])
 				log.info('cur_hfr %f %f %f', self.status['cur_hfr'], self.status['min_hfr'], self.status['start_hfr'])
 
 				if self.status['cur_hfr'] < self.status['min_hfr']:
 					self.status['min_hfr'] = self.status['cur_hfr']
 					self.status['side_len'] = len(self.status['v_curve'])
 
-			if len(self.status['v_curve']) > 30:
-				self.status['prev_hfr'] = np.median(self.status['v_curve'][-30:-15])
-
+			if len(self.status['v_curve']) > med_len * 2:
 				if (self.status['cur_hfr'] > self.status['start_hfr'] or 
-				    self.status['cur_hfr'] > max(8, self.status['min_hfr'] * 3) or
+				    self.status['cur_hfr'] > Focuser.hfr_size / 2 or
 				    len(self.status['v_curve']) > 2 * self.status['side_len']):
 					self.changePhase('focus_v')
-					for i in range(0, len(self.status['v_curve']) - 16):
-						start_hfr = np.median(self.status['v_curve'][i:i+15])
+					for i in range(0, len(self.status['v_curve']) - med_len - 1):
+						start_hfr = np.median(self.status['v_curve'][i:i+med_len])
 						if start_hfr < self.status['cur_hfr']:
 							self.status['v_curve'] = self.status['v_curve'][i:]
 							break
