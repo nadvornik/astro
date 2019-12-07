@@ -106,7 +106,7 @@ function parse_num(s) {
 
   var num = parseFloat(comp[1]);
   res += mul * num;
-  if (num < 0)
+  if (comp[1].startsWith('-'))
     mul = -mul;
   mul /= 60.0;
 
@@ -619,6 +619,8 @@ export class INDI extends React.Component {
   }
 
   message(e) {
+    
+    if (e.attributes.state === 'Alert') beep_snd.play();
     if (!e.attributes.message) return;
 //    this.setState(prevState => ({messages: [...prevState.messages.slice(-50), `${e.attributes.timestamp} ${e.attributes.device}: ${e.attributes.message}`]}));
     this.setState(prevState => ({messages: [`${e.attributes.timestamp} ${e.attributes.device}: ${e.attributes.message}`, ...prevState.messages.slice(0, 50)]}));
