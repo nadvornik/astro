@@ -3491,11 +3491,11 @@ class Mount:
 
 
 class TempFocuser:
-	def __init__(self, driver, focuser):
+	def __init__(self, driver, focuser, status):
 		self.focuser = focuser
 		self.allow_tempcomp = False
 		self.running = False
-		self.tempmodel = TempModel()
+		self.tempmodel = TempModel(status)
 		
 		self.driver = driver
 		driver.register_callback("Sensors", 'snoop', self.handle_set_tempmodel_cb)
@@ -3555,10 +3555,10 @@ class TempFocuser:
 
 
 class Runner(threading.Thread):
-	def __init__(self, driver, device, tid, camera, navigator = None, guider = None, focuser = None, video_tid = None):
+	def __init__(self, driver, device, tid, status, camera, navigator = None, guider = None, focuser = None, video_tid = None):
 		threading.Thread.__init__(self)
 
-
+		self.status = status
 		self.driver = driver
 		self.device = device
 		driver.defineProperties("""
@@ -3727,7 +3727,8 @@ class Runner(threading.Thread):
 		process = psutil.Process(os.getpid())
 		
 		if self.focuser:
-			temp_focuser = TempFocuser(self.driver, self.camera.focuser)
+			self.status.setdefault('tempmodel', {})
+			temp_focuser = TempFocuser(self.driver, self.camera.focuser, self.status['tempmodel'])
 
 		last_slew_ts = 0
 		
@@ -4491,10 +4492,10 @@ def run_test_2_kstars():
 
 	focuser = Focuser(driver, "Navigator", 'navigator', status.path(["navigator", "focuser"]), mount, dark = dark1, full_res = status.path(["full_res"]))
 	
-	runner = Runner(driver, "Navigator", 'navigator', cam1, navigator = nav1, focuser = focuser)
+	runner = Runner(driver, "Navigator", 'navigator', status.path(["navigator", "runner"]), cam1, navigator = nav1, focuser = focuser)
 	runner.start()
 	
-	runner2 = Runner(driver, "Guider", 'guider', cam, navigator = nav, guider = guider)
+	runner2 = Runner(driver, "Guider", 'guider', status.path(["guider", "runner"]), cam, navigator = nav, guider = guider)
 	runner2.start()
 	
 	main_loop()
@@ -4655,14 +4656,14 @@ def run_2_indi():
 
 	focuser = Focuser(driver, "Navigator", 'navigator', status.path(["navigator", "focuser"]), mount, full_res = status.path(["full_res"]))
 
-	runner = Runner(driver, "Navigator", 'navigator', cam, navigator = nav, focuser = focuser)
+	runner = Runner(driver, "Navigator", 'navigator', status.path(["navigator", "runner"]), cam, navigator = nav, focuser = focuser)
 	runner.start()
 
 	dark2 = Median(5)
 	nav2 = Navigator(driver, "Guider", status.path(["guider", "navigator"]), dark2, mount, 'guider')
 	guider = Guider(driver, "Guider", status.path(["guider"]), mount, dark2, 'guider', full_res = status.path(["full_res"]))
 
-	runner2 = Runner(driver, "Guider", 'guider', cam2, navigator = nav2, guider = guider)
+	runner2 = Runner(driver, "Guider", 'guider', status.path(["guider", "runner"]), cam2, navigator = nav2, guider = guider)
 	runner2.start()
 
 	main_loop()
@@ -4828,7 +4829,7 @@ def run_test_full_res():
 	cam = Camera_test_kstars_g(status.path(["guider", "navigator", "camera"]), cam1)
 
 
-	focuser = Focuser(driver, "Navigator", 'navigator', status.path(["navigator", "focuser"]), nount, dark = dark1)
+	focuser = Focuser(driver, "Navigator", 'navigator', status.path(["navigator", "focuser"]), mount, dark = dark1)
 	
 	runner = Runner(driver, "Navigator", 'navigator', cam, navigator = nav, focuser = focuser)
 #	profiler = LineProfiler()

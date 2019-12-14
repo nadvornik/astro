@@ -6,43 +6,57 @@ import logging
 log = logging.getLogger()
 
 class TempSeries:
-    def __init__(self, tc):
+    def __init__(self, tc, status):
+        self.status = status
         self.tc = tc
 #        print(tc)
-        self.reset()
+        self.status.setdefault('val', 0)
+        self.status.setdefault('prev_t', None)
+        
         
     def reset(self):
-        self.val = 0
-        self.prev_t = None
+        self.status['val'] = 0
+        self.status['prev_t'] = None
     
     def add(self, val, t = None):
         if t is None:
             t = time.time()
     
-        if self.prev_t is None:
-            self.val = val
-            self.prev_t = t
+        if self.status['prev_t'] is None:
+            self.status['val'] = val
+            self.status['prev_t'] = t
             return
         
-        dt = t - self.prev_t
+        dt = t - self.status['prev_t']
         r = np.exp(-dt / self.tc)
         
-        self.val = self.val * r + val * (1.0 - r)
-        self.prev_t = t
-        
+        self.status['val'] = self.status['val'] * r + val * (1.0 - r)
+        self.status['prev_t'] = t
+
+    def getval(self):
+        return self.status['val']
 
 class TempModel:
-    def __init__(self):
+    def __init__(self, status = {}):
         #self.n_ser = 13
+        self.status = status
         self.n_ser = 8
         self.n_inp = 2
         self.ser = []
         self.offset = 0
+        self.status.setdefault('series', [None] * self.n_inp)
+        if len(self.status['series']) != self.n_inp:
+            self.status['series'] = [None] * self.n_inp
+        	
         for j in range(self.n_inp):
             self.ser.append([])
+            if not self.status['series'][j] or len(self.status['series'][j]) != self.n_ser:
+            	self.status['series'][j] = [None] * self.n_ser
             for i in range(self.n_ser):
 #                self.ser[j].append(TempSeries(10 * 1.7**i))
-                self.ser[j].append(TempSeries(10 * 2**i))
+                if not self.status['series'][j][i]:
+                    self.status['series'][j][i] = {}
+                self.ser[j].append(TempSeries(10 * 2**i, self.status['series'][j][i]))
 
 
         self.m = np.array([ -123.57791442,   717.21010979, -2192.03585869,  4138.65435635,
@@ -60,7 +74,7 @@ class TempModel:
     def vals(self):
         res = []
         for j in range(self.n_inp):
-    	    res += list(map(lambda s: s.val, self.ser[j]))
+    	    res += list(map(lambda s: s.getval(), self.ser[j]))
         return res
 
     def res(self):
@@ -160,7 +174,7 @@ if __name__ == "__main__":
         ax1.plot(-src)
         ax1.plot(-res)
 
-    pl_ts = [(t_temp1a, t_temp1b, t_foc1), (t_temp2a, t_temp2b, t_foc2), (t_temp3a, t_temp3b, t_foc3)]
+    pl_ts = [(t_temp3a, t_temp3b, t_foc3)]
     
     fig = plt.figure()
     for i, (t_temp_a, t_temp_b, t_foc) in enumerate(pl_ts): 
