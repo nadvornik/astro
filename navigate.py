@@ -3841,8 +3841,7 @@ class Runner(threading.Thread):
 				elif name == 'target_coord':
 					prop.setAttr('state', 'Ok')
 				elif name == 'target_lock':
-					if prop.checkValue('lock') == 'On':
-						self.target_lock_cnt = 10
+					self.target_lock_cnt = 20
 					prop.setAttr('state', 'Ok')
 				else:
 					if self.navigator:
@@ -4040,6 +4039,17 @@ class Runner(threading.Thread):
 					guider_state = self.driver['Guider']['guider_phase'].getAttr('state')
 				except:
 					log.exception('guider_state')
+
+				dispmode = self.props['dispmode'].getActiveSwitch()
+				if (dispmode == 'orig' or dispmode == 'df-cor') and guider_state != 'Ok':
+					self.props['dispmode'].enforceRule('normal', True)
+					self.driver.enqueueSetMessage(self.props['dispmode'])
+
+				if dispmode != 'orig' and dispmode != 'df-cor' and guider_state == 'Ok':
+					self.props['dispmode'].enforceRule('df-cor', True)
+					self.driver.enqueueSetMessage(self.props['dispmode'])
+					
+
 				log.info('target_lock enabled  tracking %s, since %s, slew %s, solved %s, guider_state %s' % (self.mount.tracking, self.mount.tracking_since + 2 < self.navigator.status['t_solved'], self.mount.tracking_since > last_slew_ts, self.navigator.status['t_solved'] + 10 > time.time(), guider_state))
 				log.info('target_lock t_solved %s %s', self.navigator.status['t_solved'], time.time())
 				if self.mount.tracking and self.mount.tracking_since + 2 < self.navigator.status['t_solved'] and self.mount.tracking_since > last_slew_ts and self.navigator.status['t_solved'] + 10 > time.time() and guider_state != 'Ok':
@@ -4063,9 +4073,11 @@ class Runner(threading.Thread):
 							log.info('target_lock slew')
 							last_slew_ts = time.time()
 							res = self.mount.move_to(target_c[0], target_c[1])
-						elif not self.target_lock_cnt == 0:
+						elif self.target_lock_cnt == 0:
 							log.error('target_lock diff too big')
 							res = False
+						else:
+							log.info('target_lock ok')
 					
 					if not res:
 						self.props['target_lock']['lock'].setValue(False)
@@ -4076,6 +4088,7 @@ class Runner(threading.Thread):
 
 			if self.target_lock_cnt > 0:
 				self.target_lock_cnt -= 1
+			log.info("target_lock cnt %s", self.target_lock_cnt)
 			i += 1
 			#if i == 300:
 			#	cmdQueue.put('exit')
