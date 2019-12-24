@@ -49,7 +49,7 @@ import json
 from focuser_out import FocuserOut
 from focuser_indi import FocuserIndi
 from ext_trigger import ExtTrigger
-from centroid import centroid, sym_center, hfr, fit_ellipse, getRectSubPix
+from centroid import centroid, sym_center, hfr, fit_ellipse, getRectSubPix, get_fwhm
 from polyfit import *
 from quat import Quaternion
 from star_detector import *
@@ -343,6 +343,39 @@ def get_hfr_field(im, pts, hfr_size = 20, sub_bg = False):
 	if len(hfr_list) == 0:
 		hfr_list.append((h / 2, w / 2, hfr_size) )
 	return hfr_list
+
+def get_fwhm_field(im, pts, patch_size = 30):
+	cur_fwhm = patch_size
+	(h, w) = im.shape
+		
+	fwhm_list = []
+		
+	sum_w = 0.0
+	for p in pts:
+			(y, x) = p[:2]
+			ix = int(x + 0.5)
+			iy = int(y + 0.5)
+			if (ix < patch_size / 2):
+				continue
+			if (iy < patch_size / 2):
+				continue
+			if (ix > w - patch_size / 2 - 1):
+				continue
+			if (iy > h - patch_size / 2 - 1):
+				continue
+
+			fwhm = get_fwhm(getRectSubPix(im, (patch_size, patch_size), (x, y), patchType=cv2.CV_32FC1))
+			if fwhm < 2.5:
+				continue
+			
+			if fwhm > patch_size * 0.5:
+				continue
+
+			fwhm_list.append((y, x, fwhm) )
+
+	if len(fwhm_list) == 0:
+		fwhm_list.append((h / 2, w / 2, patch_size) )
+	return fwhm_list
 
 def filter_hfr_list(hfr_list):
 	hfr_list = np.array(hfr_list)
@@ -1178,10 +1211,11 @@ class Navigator:
 				pts_no_over = pts[(pts[:, 2] <= pts_v_thr)]
 				log.info("pts min %f max %f thr %f len %d %d", pts_v_min, pts_v_max, pts_v_thr, len(pts), len(pts_no_over))
 		
-				hfr_list = get_hfr_field(im, pts_no_over, sub_bg = True)
+				#hfr_list = get_hfr_field(im, pts_no_over, sub_bg = True)
+				hfr_list = get_fwhm_field(im, pts_no_over)
 				log.info("full_res get hfr")
 				hfr_list = filter_hfr_list(hfr_list)
-		
+				
 				full_hfr = np.mean(np.array(hfr_list)[:,2])
 			
 				if self.full_res is not None:
@@ -4832,7 +4866,7 @@ def run_test_full_res():
 	dark2 = Median(5)
 
 	fo = FocuserOut()
-	cam1 = Camera_test_kstars(status.path(["navigator", "camera"]), go_ra, go_dec, fo)
+	cam1 = Camera_test_kstars(status.path(["navigator", "camera"]), go_ra, go_dec, fo, mount)
 	nav1 = Navigator(driver, "Navigator", status.path(["navigator"]), dark1, mount, 'navigator', polar_tid = 'polar', full_res = status.path(["full_res"]))
 
 	nav = Navigator(driver, "Guider", status.path(["guider", "navigator"]), dark2, mount, 'guider')
@@ -4844,15 +4878,15 @@ def run_test_full_res():
 
 	focuser = Focuser(driver, "Navigator", 'navigator', status.path(["navigator", "focuser"]), mount, dark = dark1)
 	
-	runner = Runner(driver, "Navigator", 'navigator', cam, navigator = nav, focuser = focuser)
+	runner = Runner(driver, "Navigator", 'navigator', status.path(["navigator", "runner"]), cam, navigator = nav, focuser = focuser)
 #	profiler = LineProfiler()
 #	profiler.add_function(Navigator.proc_full_res)
 #	profiler.enable_by_count()
 		
 	for i in range(0,10000):
-		fn = "../data/IMAGE_%03d.fits" % (i % 31);
+		fn = "../data/IMAGE_%03d.fits" % (1018 + i % 326);
 		nav1.proc_full_res(fn, fn)
-		time.sleep(10)
+		time.sleep(2)
 	
 #	profiler.print_stats()
 					

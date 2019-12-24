@@ -1,6 +1,9 @@
 import cv2
 import numpy as np
-#from scipy.optimize import curve_fit
+from scipy.optimize import curve_fit
+import logging
+
+log = logging.getLogger()
 
 
 
@@ -145,32 +148,37 @@ def getRectSubPix(im, size, p, patchType=cv2.CV_32FC1):
 	#print(r)
 	return r
 
-#def get_fwhm(a):
-#	x0 = np.arange(a.shape[1])
-#	y0 = np.arange(a.shape[0])
-#	y, x = np.meshgrid(y0, x0)
-#	yx = (y.ravel(), x.ravel())
-#	z = a.ravel()
-#	mx = a.shape[1] / 2.0
-#	my = a.shape[0] / 2.0
-#
-#	shift = np.amin(z)
-#	mag = np.amax(z) - shift
-#	#print yx
-#	try:
-#		popt, pcov = curve_fit(gaussian2d, yx, z, p0 = [my, mx, 1, mag, shift], bounds = ([my - 3, mx - 3, 0, 0, 0], [my + 3, mx + 3, np.inf, np.inf, np.inf]))
-#		print popt
-#		return popt[2] * 2.355
-#	except:
-#		return 1.0
+def get_fwhm(a):
+	x0 = np.arange(a.shape[1])
+	y0 = np.arange(a.shape[0])
+	y, x = np.meshgrid(y0, x0)
+	yx = (y.ravel(), x.ravel())
+	z = a.ravel()
+	mx = a.shape[1] / 2.0
+	my = a.shape[0] / 2.0
+
+	shift = np.amin(z)
+	mag = np.amax(z) - shift
+	#print yx
+	
+	def gaussian2d_c(c, sig, mag, shift):
+		return gaussian2d(c, my, mx, sig, mag, shift)
+	log.info("start %s", [3, mag, shift])
+	try:
+		popt, pcov = curve_fit(gaussian2d_c, yx, z, p0 = [3, mag, shift], bounds = ([0, 0, 0], [np.inf, np.inf, np.inf]))
+		log.info("popt %s", popt)
+		return popt[0] * 2.355
+	except:
+		log.exception("fit")
+		return a.shape[0]
 
 if __name__ == "__main__":
 
-	I = np.array([  [ 0,   1,   0,   0,   0  , 0],
-			[ 0,   1,   1,   0,   0  , 0],
-			[ 0,   1,   1,   0,   0  , 0],
+	I = np.array([  [ 0,   0,   0,   0,   0  , 0],
+			[ 0,   0,   0,   0,   0  , 0],
+			[ 0,   0,   0,   0,   0  , 0],
 			[ 0,   0,   1.0, 1.0, 0  , 0],
-			[ 0,   0,   1.0, 0,   0  , 0],
+			[ 0,   0,   1.0, 1,   0  , 0],
 			[ 0,   0,   0,   0,   0  , 0],
 			[ 0,   0,   0,   0,   0  , 0],
 			])
@@ -179,5 +187,5 @@ if __name__ == "__main__":
 	print(sym_center(I))
 	print(centroid(I))
 	print(hfr(I))
-	#print(fwhm(I))
+	print(get_fwhm(I))
 	
