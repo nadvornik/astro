@@ -15,7 +15,7 @@ from time import sleep
 import bisect
 import subprocess
 
-from am import Solver, Plotter, scale_wcs
+from am import Solver, Plotter, scale_wcs, tan_to_euler
 from polar import Polar
 
 import sys
@@ -581,6 +581,7 @@ class Navigator:
 			<defNumberVector device="{0}" name="coord" label="Coord" group="Solver Control" state="Idle" perm="rw">
 				<defNumber name="RA" label="RA" format="%10.6m" min="0" max="0" step="0">0</defNumber>
 				<defNumber name="DEC" label="Dec" format="%10.6m" min="0" max="0" step="0">0</defNumber>
+				<defNumber name="ORIENT" label="Orient" format="%3.1f" min="0" max="0" step="0">0</defNumber>
 			</defNumberVector>
 
 			<defNumberVector device="{0}" name="field" label="Field" group="Solver Control" state="Idle" perm="ro">
@@ -636,6 +637,7 @@ class Navigator:
 		self.status['t_solver'] = 0
 		self.prev_t = 0
 		self.status['ra'], self.status['dec'] = self.mount.polar.zenith()
+		self.status['orient'] = 0
 		self.status['max_radius'] = 100
 		if tid == 'guider':
 			self.status['ra'], self.status['dec'], self.status['max_radius'] = self.mount.get_oag_pos()
@@ -767,6 +769,7 @@ class Navigator:
 				with self.solvedlock:
 					self.status['ra'] = self.solver.ra
 					self.status['dec'] = self.solver.dec
+					self.status['orient'] = self.solver.orient
 					self.status.update(format_coords(self.status['ra'], self.status['dec']))
 					self.status['field_deg'] = self.solver.field_deg
 					self.status['radius'] = self.status['field_deg']
@@ -788,7 +791,7 @@ class Navigator:
 				
 					self.props['solver_time']['i_solved'].setValue(self.status['i_solved'])
 					self.props['solver_time']['t_solved'].setValue(self.status['t_solved'])
-					self.props['coord'].setValue((self.status['ra'] / 15.0, self.status['dec']))
+					self.props['coord'].setValue((self.status['ra'] / 15.0, self.status['dec'], self.status['dec'], self.status['orient']))
 					self.props['field']['current'].setValue(self.status['field_deg'] or 0)
 					self.props['field']['radius'].setValue(self.status['radius'])
 					self.driver.enqueueSetMessage(self.props['solver_time'])
@@ -947,7 +950,7 @@ class Navigator:
 				self.status['radius'] = self.status['max_radius']
 				self.field_corr = None
 				self.field_corr_limit = 10
-				self.props['coord'].setValue((self.status['ra'] / 15.0, self.status['dec']))
+				self.props['coord'].setValue((self.status['ra'] / 15.0, self.status['dec'], self.status['orient']))
 				self.props['field']['current'].setValue(self.status['field_deg'] or 0)
 				self.props['field']['radius'].setValue(self.status['radius'])
 				self.props['field']['max_radius'].setValue(self.status['max_radius'])
@@ -984,7 +987,7 @@ class Navigator:
 				prop.setAttr('state', 'Ok')
 
 			if prop['sync'] == True:
-				ra, dec = self.props['coord'].to_array()
+				ra, dec, orient = self.props['coord'].to_array()
 				ra *= 15.0
 				if self.mount.sync(ra, dec):
 					prop['sync'].setValue(False)
@@ -3254,29 +3257,9 @@ class Mount:
 			else:
 				self.go_dec.out(0)
 		
-	def tan_to_euler(self, tan, off=(0,0)):
-		ra, dec = tan.radec_center()
-		# the field moved by given offset pixels from the position in self.wcs
-		(crpix1, crpix2) = tan.crpix
-		ra, dec = tan.pixelxy2radec(crpix1 - off[1], crpix2 - off[0])
-
-		cd11, cd12, cd21, cd22 = tan.cd
-		
-		det = cd11 * cd22 - cd12 * cd21
-		if det >= 0:
-			parity = 1.
-		else:
-			parity = -1.
-		T = parity * cd11 + cd22
-		A = parity * cd21 - cd12
-		orient = math.degrees(math.atan2(A, T))
-		#orient = math.degrees(math.atan2(cd21, cd11))
-		pixscale = 3600.0 * math.sqrt(abs(det))
-		
-		return ra, dec, orient, pixscale, parity
 
 	def set_pos_tan(self, tan, t, camera):
-		#ra, dec, orient = self.tan_to_euler(tan, off)
+		#ra, dec, orient = tan_to_euler(tan, off)
 		#log.info ra, dec, orient
 		#self.set_pos(ra, dec, orient, t, camera)
 
@@ -3287,7 +3270,7 @@ class Mount:
 		elif camera == 'guider':
 			self.guider_tan = tan
 			self.guider_t = t
-			ra, dec, roll, pixscale, parity = self.tan_to_euler(tan)
+			ra, dec, roll, pixscale, parity = tan_to_euler(tan)
 			self.status['guider_pixscale'] = pixscale
 			self.status['guider_parity'] = parity
 			self.status['guider_roll'] = roll
@@ -3301,7 +3284,7 @@ class Mount:
 			guider_w = self.guider_tan.get_width()
 			guider_h = self.guider_tan.get_height()
 			
-			mra, mdec, mroll, mpixscale, mparity = self.tan_to_euler(self.main_tan)
+			mra, mdec, mroll, mpixscale, mparity = tan_to_euler(self.main_tan)
 			mq = Quaternion([mra, mdec, mroll])
 			
 			res = []
@@ -3317,7 +3300,7 @@ class Mount:
 			main_w = self.main_tan.get_width()
 			main_h = self.main_tan.get_height()
 			
-			gra, gdec, groll, gpixscale, gparity = self.tan_to_euler(self.guider_tan)
+			gra, gdec, groll, gpixscale, gparity = tan_to_euler(self.guider_tan)
 			gq = Quaternion([gra, gdec, groll])
 			
 			res = []
@@ -3334,7 +3317,7 @@ class Mount:
 			res = []
 			for e in self.status['oag_pos'][0:4]:
 				sq = Quaternion(e)
-				mra, mdec, mroll, mpixscale, mparity = self.tan_to_euler(self.main_tan)
+				mra, mdec, mroll, mpixscale, mparity = tan_to_euler(self.main_tan)
 				mq = Quaternion([mra, mdec, mroll])
 				q =  mq * sq
 				ra, dec, roll = q.to_euler()
@@ -3351,7 +3334,7 @@ class Mount:
 			res = []
 			for e in self.status['main_pos'][0:4]:
 				sq = Quaternion(e)
-				gra, gdec, groll, gpixscale, gparity = self.tan_to_euler(self.guider_tan)
+				gra, gdec, groll, gpixscale, gparity = tan_to_euler(self.guider_tan)
 				mq = Quaternion([gra, gdec, groll])
 				q =  mq * sq
 				ra, dec, roll = q.to_euler()
@@ -3366,13 +3349,13 @@ class Mount:
 	def get_oag_pos(self):
 		if self.status['oag_pos'] is not None and self.main_tan is not None:
 			sq = Quaternion(self.status['oag_pos'][4])
-			mra, mdec, mroll, mpixscale, mparity = self.tan_to_euler(self.main_tan)
+			mra, mdec, mroll, mpixscale, mparity = tan_to_euler(self.main_tan)
 			mq = Quaternion([mra, mdec, mroll])
 			q =  mq * sq
 			gra, gdec, groll = q.to_euler()
 			return gra, gdec, 1.0
 		elif self.main_tan is not None and self.status['oag']:
-			mra, mdec, mroll, mpixscale, mparity = self.tan_to_euler(self.main_tan)
+			mra, mdec, mroll, mpixscale, mparity = tan_to_euler(self.main_tan)
 			return mra, mdec, 5.0
 		else:
 			zra, zdec = self.polar.zenith()
@@ -3391,15 +3374,15 @@ class Mount:
 		log.info('callib2 roll %f par %f', self.status['guider_roll'], self.status['guider_parity'])
 		if self.status['guider_pixscale'] is not None:
 			if self.guider_tan is not None and time.time() - self.guider_t < 60:
-				gra, gdec, groll, gpixscale, gparity = self.tan_to_euler(self.guider_tan)
+				gra, gdec, groll, gpixscale, gparity = tan_to_euler(self.guider_tan)
 			elif self.status['oag_pos'] is not None and self.main_tan is not None:
 				sq = Quaternion(self.status['oag_pos'][4])
-				mra, mdec, mroll, mpixscale, mparity = self.tan_to_euler(self.main_tan)
+				mra, mdec, mroll, mpixscale, mparity = tan_to_euler(self.main_tan)
 				mq = Quaternion([mra, mdec, mroll])
 				q =  mq * sq
 				gra, gdec, groll = q.to_euler()
 			elif self.main_tan is not None:
-				gra, gdec, groll, gpixscale, gparity = self.tan_to_euler(self.main_tan)
+				gra, gdec, groll, gpixscale, gparity = tan_to_euler(self.main_tan)
 			elif self.status['mount_dec'] is not None:
 				gdec = self.status['mount_dec']
 			else:
@@ -3420,15 +3403,15 @@ class Mount:
 	def get_guider_calib(self):
 		roll = (self.status['guider_roll'] + 90) * self.status['guider_parity']
 		if self.guider_tan is not None and time.time() - self.guider_t < 60:
-			gra, gdec, groll, gpixscale, gparity = self.tan_to_euler(self.guider_tan)
+			gra, gdec, groll, gpixscale, gparity = tan_to_euler(self.guider_tan)
 		elif self.status['oag_pos'] is not None and self.main_tan is not None:
 			sq = Quaternion(self.status['oag_pos'][4])
-			mra, mdec, mroll, mpixscale, mparity = self.tan_to_euler(self.main_tan)
+			mra, mdec, mroll, mpixscale, mparity = tan_to_euler(self.main_tan)
 			mq = Quaternion([mra, mdec, mroll])
 			q =  mq * sq
 			gra, gdec, groll = q.to_euler()
 		elif self.main_tan is not None:
-			gra, gdec, groll, gpixscale, gparity = self.tan_to_euler(self.main_tan)
+			gra, gdec, groll, gpixscale, gparity = tan_to_euler(self.main_tan)
 		elif self.status['mount_dec'] is not None:
 			gdec = self.status['mount_dec']
 		else:
@@ -3450,7 +3433,7 @@ class Mount:
 				return
 			log.info("move pix %f %f", dx, dy)
 
-			mra, mdec, mroll, mpixscale, mparity = self.tan_to_euler(self.main_tan)
+			mra, mdec, mroll, mpixscale, mparity = tan_to_euler(self.main_tan)
 			
 			mroll = np.deg2rad(mroll)
 			ra = (np.cos(mroll) * dx - np.sin(mroll) * dy) * mpixscale / np.max([np.cos(np.deg2rad(mdec)), 0.2])

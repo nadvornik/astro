@@ -217,12 +217,14 @@ class Solver(threading.Thread):
 		if solved is None or not os.path.exists(solved + ".wcs"):
 			self.ra = None
 			self.dec = None
+			self.orient = None
 			self.field_deg = None
 			shutil.rmtree(tmp_dir)
 			return
 	
 		self.wcs = Tan(solved + ".wcs", 0)
-		self.ra, self.dec = self.wcs.radec_center()
+		self.ra, self.dec, self.orient, self.pixscale, self.parity = tan_to_euler(self.wcs)
+
 		self.field_deg = self.field_w * self.wcs.pixel_scale() / 3600
 		
 		ind = fits.open(solved + '.rdls')
@@ -257,7 +259,29 @@ class Solver(threading.Thread):
 		
 		if wait:
 			self.join()
+	
+def tan_to_euler(tan, off=(0,0)):
+	ra, dec = tan.radec_center()
+	# the field moved by given offset pixels from the position in self.wcs
+	(crpix1, crpix2) = tan.crpix
+	ra, dec = tan.pixelxy2radec(crpix1 - off[1], crpix2 - off[0])
+
+	cd11, cd12, cd21, cd22 = tan.cd
 		
+	det = cd11 * cd22 - cd12 * cd21
+	if det >= 0:
+		parity = 1.
+	else:
+		parity = -1.
+	T = parity * cd11 + cd22
+	A = parity * cd21 - cd12
+	orient = math.degrees(math.atan2(A, T))
+	#orient = math.degrees(math.atan2(cd21, cd11))
+	pixscale = 3600.0 * math.sqrt(abs(det))
+		
+	return ra, dec, orient, pixscale, parity
+
+
 def match_kdtree_catalog(rc, dc, rr, catfn):
     from astrometry.libkd.spherematch import tree_open, tree_close, tree_build_radec, tree_free, trees_match, tree_permute
     from astrometry.libkd import spherematch_c
