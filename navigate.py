@@ -3997,6 +3997,7 @@ class Runner(threading.Thread):
 				self.props['EXPOSURE']['EXP_COUNT'].setValue(ecnt - 1)
 				self.driver.enqueueSetMessage(self.props['EXPOSURE'])
 				self.driver.enqueueSetMessage(self.props['camera_control'])
+				continue
 
 			try:
 				if self.focuser:
