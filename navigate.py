@@ -791,7 +791,7 @@ class Navigator:
 				
 					self.props['solver_time']['i_solved'].setValue(self.status['i_solved'])
 					self.props['solver_time']['t_solved'].setValue(self.status['t_solved'])
-					self.props['coord'].setValue((self.status['ra'] / 15.0, self.status['dec'], self.status['dec'], self.status['orient']))
+					self.props['coord'].setValue((self.status['ra'] / 15.0, self.status['dec'], self.status['orient']))
 					self.props['field']['current'].setValue(self.status['field_deg'] or 0)
 					self.props['field']['radius'].setValue(self.status['radius'])
 					self.driver.enqueueSetMessage(self.props['solver_time'])
@@ -1164,7 +1164,7 @@ class Navigator:
 					im = im_c #cv2.add(im_c, 0, dtype=cv2.CV_8UC1)
 		
 				log.info("full_res bg")
-				pts = find_max(im, 12, 200)
+				pts = find_max(im, 12, 120)
 		
 				w = im.shape[1]
 				h = im.shape[0]
@@ -2259,7 +2259,7 @@ class Guider:
 					log.info("pixpersec %f t_delay1 %f", self.status['pixpersec'], self.status['t_delay1'])
 				
 					bincnt = np.bincount(self.used_cnt, minlength=len(self.pt0))
-					cntlimit = min(5, np.mean(bincnt))
+					cntlimit = min(5, np.amax(bincnt) // 2)
 					self.pt0 = np.array(self.pt0)[(bincnt > cntlimit)]
 					self.pt0base = self.pt0
 				
@@ -2486,6 +2486,8 @@ class Guider:
 				if self.status['alarm_count'] > 5:
 					self.props['guider_phase'].setAttr('state', 'Alert')
 					self.driver.enqueueSetMessage(self.props['guider_phase'])
+				if self.status['alarm_count'] > 10:
+					self.off = (0.0, 0.0)
 
 				
 		if len(self.pt0) > 0:
@@ -4083,10 +4085,10 @@ class Runner(threading.Thread):
 					log.info('target_lock mount %s nav %s target %s sync_dif %s target_dif %s' % (mount_c, nav_c, target_c, sync_diff, target_diff))
 					
 					res = True
-					if sync_diff[0] > 30.0/3600.0 or sync_diff[1] > 30.0/3600.0:
+					if sync_diff[0] > 10.0/3600.0 or sync_diff[1] > 10.0/3600.0:
 						log.info('target_lock sync')
 						res = self.mount.sync(nav_c[0], nav_c[1])
-					elif target_diff[0] > 30.0/3600.0 or target_diff[1] > 30.0/3600.0:
+					elif target_diff[0] > 10.0/3600.0 or target_diff[1] > 10.0/3600.0:
 						if (target_diff[0] < 5 and target_diff[1] < 5) or self.target_lock_cnt > 0:
 							log.info('target_lock slew')
 							last_slew_ts = time.time()
