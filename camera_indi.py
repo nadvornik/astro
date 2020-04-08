@@ -27,6 +27,11 @@ class Camera_indi:
 	def __init__(self, driver, device, status, focuser = None):
 		self.status = status
 		self.focuser = focuser
+
+
+
+		self.status.setdefault('camera_temp', -15)
+
 		self.status['exp-sec'] = 0.1
 		self.status['test-exp-sec'] = 1
 		self.status['exp_in_progress'] = False
@@ -53,6 +58,7 @@ class Camera_indi:
 			self.driver.sendClientMessageWait(self.device, "CONNECTION", {"CONNECT": "On"})
 			self.driver.waitForProp(self.device, "CONFIG_PROCESS")
 			self.driver.sendClientMessageWait(self.device, "CONFIG_PROCESS", {"CONFIG_LOAD": "On"})
+			self.driver.sendClientMessage(self.device, "CCD_TEMPERATURE", {"CCD_TEMPERATURE_VALUE": self.status['camera_temp']})
 			
 		self.driver.waitForProp(self.device, "CCD_INFO")
 		self.max_width = self.driver[self.device]["CCD_INFO"]["CCD_MAX_X"].native()

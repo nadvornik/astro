@@ -86,6 +86,8 @@ class TempModel:
         self.offset = np.dot(self.vals(), self.m) - v
         log.info("tempmodel off %.0f  %.0f", v, self.offset)
 
+    def add_offset(self, v):
+    	self.offset += v
 
 def proc_series(tempname1, tempname2, focusname, valid_from, valid_to):
     with open(tempname1, 'r') as f:

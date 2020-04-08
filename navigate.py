@@ -1835,6 +1835,12 @@ class Guider:
 				<defNumber name="DECstd" label="Dec_stddev" format="%4.2f" min="0" max="0" step="0">0</defNumber>
 			</defNumberVector>
 
+			<defNumberVector device="{0}" name="preprocess" label="Preprocess" group="Guider" state="Idle" perm="rw">
+				<defNumber name="median" label="median" format="%1f" min="0" max="3" step="1">0</defNumber>
+				<defNumber name="erode" label="erode" format="%1f" min="0" max="5" step="1">0</defNumber>
+				<defNumber name="dilate" label="dilate" format="%1f" min="0" max="5" step="1">0</defNumber>
+			</defNumberVector>
+
 		</INDIDriver>
 		""".format(device))
 
@@ -1855,6 +1861,10 @@ class Guider:
 		self.tid = tid
 		self.full_res = full_res
 		self.status['seq'] = 'seq-stop'
+
+		self.status.setdefault("median", 0)
+		self.status.setdefault("erode", 0)
+		self.status.setdefault("dilate", 0)
 		
 		
 		if self.full_res is not None:
@@ -1907,6 +1917,11 @@ class Guider:
 		self.dither = complex(0, 0)
 		self.pos_corr = [0, 0]
 
+		self.props["preprocess"]["median"].setValue(self.status['median'])
+		self.props["preprocess"]["erode"].setValue(self.status['erode'])
+		self.props["preprocess"]["dilate"].setValue(self.status['dilate'])
+		self.driver.enqueueSetMessage(self.props['preprocess'])
+
 	def dark_add_masked(self, im):
 		h, w = im.shape
 		pts = []
@@ -1941,6 +1956,9 @@ class Guider:
 		elif name == 'calibration':
 			self.status['pixpersec'], self.status['pixpersec_dec'], ref_angle = prop.to_array()
 			self.ref_off = np.exp(1j * np.deg2rad(ref_angle))
+			prop.setAttr('state', 'Ok')
+		if name == 'preprocess':
+			self.status['median'], self.status['erode'], self.status['dilate'] = prop.to_array()
 			prop.setAttr('state', 'Ok')
 		else:
 			self.alg_ra.handleNewProp(msg, prop)
@@ -2146,6 +2164,7 @@ class Guider:
 
 	def proc_frame(self, im, i):
 		t = time.time()
+		centroid_img = None
 
 		if im.ndim > 2:
 			im = cv2.min(cv2.min(im[:, :, 0], im[:, :, 1]), im[:, :, 2])
@@ -2409,13 +2428,18 @@ class Guider:
 			
 					pt0, pt, match = match_closest(self.pt0, pt, 5, off)
 
-			if len(self.pt0) == 1 and len(match) > 0 or len(self.pt0) <= 3 and len(match) >= 2 or len(self.pt0) >= 4 and len(match) >= 3:
-				self.off, weights = avg_pt(pt0, pt)
-				log.info("centroid off1 %s", self.off)
-				self.off += centroid_mean(im_sub, pt0, self.off)
-				log.info("centroid off2 %s", self.off)
-				
-				err = complex(*self.off) / self.ref_off
+			if len(match) > 0:
+				off, weights = avg_pt(pt0, pt)
+				log.info("centroid off1 %s", off)
+				off1, centroid_img = centroid_mean(im_sub, self.pt0, off, self.status['median'], self.status['erode'], self.status['dilate'])
+				off += off1
+				log.info("centroid off2 %s", off)
+			
+				err = complex(*off) / self.ref_off
+
+
+			if len(match) > 0 and (len(self.pt0) == 1 or len(self.pt0) <= 3 and len(match) >= 2 or len(self.pt0) >= 4 and len(match) >= 3 or abs(err) < 5):
+				self.off = off
 				self.resp0.append((t - self.t0, err.real, err.imag))
 				t_proc = time.time() - t
 
@@ -2489,11 +2513,23 @@ class Guider:
 				if self.status['alarm_count'] > 10:
 					self.off = (0.0, 0.0)
 
+				self.alg_ra.proc(0.0, t)
+
+				if self.alg_dec is not None:
+					self.alg_dec.proc(0.0, t)
+					status += " err: - - corr:%.1f %.1f t_d:%.1f t_p:%.1f" % (self.alg_ra.corr, self.alg_dec.corr, self.status['t_delay'], t_proc)
+				else:
+					status += " err: - - corr:%.1f t_d:%.1f t_p:%.1f" % (self.alg_ra.corr, self.status['t_delay'], t_proc)
+
 				
 		if len(self.pt0) > 0:
 			for p in self.pt0:
 				cv2.circle(disp, (int(p[1] + 0.5), int(p[0] + 0.5)), 13, (255), 1)
 				cv2.circle(disp, (int(p[1] + self.off[1] + 0.5), int(p[0] + self.off[0] + 0.5)), 5, (255), 1)
+
+		if centroid_img is not None:
+			disp = cv2.copyMakeBorder(disp, 0, centroid_img.shape[0], 0, 0, cv2.BORDER_CONSTANT)
+			disp[disp.shape[0] - centroid_img.shape[0]:disp.shape[0], disp.shape[1] - centroid_img.shape[1]:disp.shape[1]] = normalize(centroid_img)
 
 		cv2.putText(disp, status, (10, disp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255), 2)
 		ui.imshow(self.tid, disp)
@@ -3517,6 +3553,9 @@ class TempFocuser:
 		self.tempmodel = TempModel(status)
 		
 		self.driver = driver
+		self.i = -1
+		self.med1 = None
+		self.med2 = None
 		driver.register_callback("Sensors", 'snoop', self.handle_set_tempmodel_cb)
 
 	def handle_set_tempmodel_cb(self, msg, prop):
@@ -3526,9 +3565,17 @@ class TempFocuser:
 			except:
 				ts = time.time()
 			val1 = float(prop.checkValue('MLX2_TEMP'))
-			self.tempmodel.add(0, val1, ts)
 			val2 = float(prop.checkValue('MLX2_REF'))
-			self.tempmodel.add(1, val2, ts)
+
+			if self.i == -1:
+				self.i = 0
+				self.med1 = [val1, val1, val1]
+				self.med2 = [val2, val2, val2]
+			self.med1[self.i] = val1
+			self.med2[self.i] = val2
+			self.i = (self.i + 1) % 3
+			self.tempmodel.add(0, np.median(self.med1), ts)
+			self.tempmodel.add(1, np.median(self.med2), ts)
 			#log.info("handle_set_tempmodel_cb %f %f %f", val1, val2, time.time() - ts)
 			self.temp_focus = self.tempmodel.res()
 
@@ -3556,7 +3603,9 @@ class TempFocuser:
 	def sync(self):
 		self.tempmodel.set_offset(self.focuser.get_pos())
 		self.temp_focus = self.tempmodel.res()
-		
+	
+	def add_offset(self, val):
+		self.tempmodel.add_offset(val)
 	
 	def enable_tempcomp(self, enable):
 		if not self.running and enable:
@@ -3614,7 +3663,7 @@ class Runner(threading.Thread):
 				<defNumber name="EXP_COUNT" label="Exposure counter" format="%4.0f" min="0" max="1000" step="1">1</defNumber>
 			</defNumberVector>
 
-			<defSwitchVector device="{0}" name="run_control" label="Control" group="Main Control" state="Idle" perm="rw" rule="AtMostOne">
+			<defSwitchVector device="{0}" name="run_control" label="Control" group="Commands" state="Idle" perm="rw" rule="AtMostOne">
 				<defSwitch name="exit">Off</defSwitch>
 				<defSwitch name="shutdown">Off</defSwitch>
 				<defSwitch name="save">Off</defSwitch>
@@ -3698,6 +3747,35 @@ class Runner(threading.Thread):
 				<defBLOBVector device="{0}" name="histogram" label="histogram" group="FullRes" state="Idle" perm="ro">
 					<defBLOB name="histogram"/>
 				</defBLOBVector>
+
+				<defTextVector device="{0}" name="filter_seq" label="Filter Seq" group="Camera Controls" state="Idle" perm="rw">
+					<defText name="seq" label="Filter Seq"></defText>
+				</defTextVector>
+				<defNumberVector device="{0}" name="filter_pos" label="Filter Seq Pos" group="Camera Controls" state="Idle" perm="rw" timeout="60">
+					<defNumber name="pos" label="pos" format="%1f">0</defNumber>
+				</defNumberVector>
+
+				<defNumberVector device="{0}" name="filter_off" label="Filter Offsets" group="Camera Controls" state="Idle" perm="rw" timeout="60">
+					<defNumber name="filter1" format="%1f">0</defNumber>
+					<defNumber name="filter2" format="%1f">0</defNumber>
+					<defNumber name="filter3" format="%1f">0</defNumber>
+					<defNumber name="filter4" format="%1f">0</defNumber>
+					<defNumber name="filter5" format="%1f">0</defNumber>
+					<defNumber name="filter6" format="%1f">0</defNumber>
+					<defNumber name="filter7" format="%1f">0</defNumber>
+					<defNumber name="filter8" format="%1f">0</defNumber>
+				</defNumberVector>
+
+				<defTextVector device="{0}" name="devices" label="Devices" group="Camera Controls" state="Idle" perm="rw">
+					<defText name="camera" label="Camera"></defText>
+					<defText name="focuser" label="Focuser"></defText>
+					<defText name="fwheel" label="Filter Wheel"></defText>
+				</defTextVector>
+
+				<defNumberVector device="{0}" name="camera_temp" label="Camera" group="Camera Controls" state="Idle" perm="rw" timeout="60">
+					<defNumber name="temp" label="Temperature" format="%1.1f">0</defNumber>
+				</defNumberVector>
+
 			</INDIDriver>
 			""".format(device))
 
@@ -3717,6 +3795,33 @@ class Runner(threading.Thread):
 		self.camera_run = False
 		self.target_lock_cnt = 0
 		
+		if focuser:
+			self.status.setdefault('fwheel_dev', 'ASI EFW')
+			self.status.setdefault('focuser_dev', 'MoonLite')
+			self.props["devices"]["focuser"].setValue(self.status['focuser_dev'])
+			self.props["devices"]["fwheel"].setValue(self.status['fwheel_dev'])
+			self.props["devices"]["camera"].setValue(self.camera.device)
+			self.driver.enqueueSetMessage(self.props['devices'])
+			
+			self.status.setdefault('filter_seq', [])
+			self.status.setdefault('filter_pos', 0)
+			self.status.setdefault('filter_off', [0, 0, 0, 0, 0, 0, 0, 0])
+
+			self.props["filter_seq"]["seq"].setValue(''.join([str(f) for f in self.status['filter_seq']]))
+			self.driver.enqueueSetMessage(self.props['filter_seq'])
+			
+			self.props["filter_pos"]["pos"].setValue(self.status['filter_pos'])
+			self.driver.enqueueSetMessage(self.props['filter_pos'])
+			
+			self.props["filter_off"].setValue(self.status['filter_off'])
+			self.driver.enqueueSetMessage(self.props['filter_off'])
+			
+			if 'camera_temp' in self.camera.status:
+				self.props["camera_temp"]["temp"].setValue(self.camera.status['camera_temp'])
+				self.driver.enqueueSetMessage(self.props['camera_temp'])
+			
+			
+
 		
 	def run(self):
 #		profiler = LineProfiler()
@@ -3747,7 +3852,7 @@ class Runner(threading.Thread):
 		
 		if self.focuser:
 			self.status.setdefault('tempmodel', {})
-			temp_focuser = TempFocuser(self.driver, self.camera.focuser, self.status['tempmodel'])
+			self.temp_focuser = TempFocuser(self.driver, self.camera.focuser, self.status['tempmodel'])
 
 		last_slew_ts = 0
 		
@@ -3822,7 +3927,7 @@ class Runner(threading.Thread):
 						if mode == 'zoom_focuser':
 							self.camera.cmd('z0')
 						mode = 'navigator'
-						prop.enforceRule(mode, True)
+					prop.enforceRule(mode, True)
 
 				elif name == 'EXPOSURE':
 					self.camera.cmd('exp-sec-' + str(prop['EXP_TIME']))
@@ -3862,6 +3967,50 @@ class Runner(threading.Thread):
 				elif name == 'target_lock':
 					self.target_lock_cnt = 20
 					prop.setAttr('state', 'Ok')
+
+				elif name == 'devices':
+					self.status['focuser_dev'] = prop["focuser"].getValue()
+					self.status['fwheel_dev'] = prop["fwheel"].getValue()
+					self.camera.device = prop["camera"].getValue()
+					prop.setAttr('state', 'Ok')
+				
+				elif name == 'filter_seq':
+					try:
+						self.status['filter_seq'] = [int(f) for f in prop["seq"].getValue() if int(f) < 9 and int(f) > 0]
+						prop.setAttr('state', 'Ok')
+					except:
+						prop.setAttr('state', 'Alert')
+					
+					if self.status['filter_pos'] >= len(self.status['filter_seq']):
+						self.status['filter_pos'] = 0
+						self.props["filter_pos"]["pos"].setValue(self.status['filter_pos'])
+						self.driver.enqueueSetMessage(self.props['filter_pos'])
+
+				elif name == 'filter_pos':
+					if int(prop["pos"].getValue()) >= len(self.status['filter_seq']):
+						prop["pos"].setValue(self.status['filter_pos'])
+						prop.setAttr('state', 'Alert')
+					else:
+						self.status['filter_pos'] = int(prop["pos"].getValue())
+						prop.setAttr('state', 'Ok')
+				
+				elif name == 'filter_off':
+					self.status['filter_off'] = list(prop.toArray())
+					prop.setAttr('state', 'Ok')
+
+				elif name == 'camera_temp':
+					if 'camera_temp' in self.camera.status:
+						self.camera.status['camera_temp'] = prop["temp"].getValue()
+						prop.setAttr('state', 'Ok')
+					else:
+						prop.setAttr('state', 'Alert')
+
+				elif name == 'run_control':
+					cmd = prop.getActiveSwitch()
+					cmdQueue.put(cmd)
+					prop.setAttr('state', 'Ok')
+					prop[cmd].setValue(False)
+
 				else:
 					if self.navigator:
 						self.navigator.handleNewProp(msg, prop)
@@ -3874,7 +4023,7 @@ class Runner(threading.Thread):
 
 			try:
 				if self.focuser:
-					temp_focuser.enable_tempcomp(not sync_focus and mode != 'focuser' and mode != 'zoom_focuser' and self.camera_run)
+					self.temp_focuser.enable_tempcomp(not sync_focus and mode != 'focuser' and mode != 'zoom_focuser' and self.camera_run)
 			except:
 				log.exception("enable_tempcomp1")
 
@@ -3970,7 +4119,7 @@ class Runner(threading.Thread):
 							self.driver.enqueueSetMessage(self.props['run_mode'])
 						try:
 							if self.focuser:
-								temp_focuser.enable_tempcomp(True)
+								self.temp_focuser.enable_tempcomp(True)
 						except:
 							log.exception("enable_tempcomp2")
 						self.capture(cmd == 'test-capture')
@@ -4004,7 +4153,7 @@ class Runner(threading.Thread):
 			try:
 				if self.focuser:
 					if sync_focus or mode == 'focuser' or mode == 'zoom_focuser':
-						temp_focuser.sync()
+						self.temp_focuser.sync()
 						sync_focus = False
 						temp_focuser.enable_tempcomp(mode != 'focuser' and mode != 'zoom_focuser' and self.camera_run)
 						
@@ -4114,7 +4263,7 @@ class Runner(threading.Thread):
 			#	cmdQueue.put('exit')
 
 		if self.focuser:
-			temp_focuser.enable_tempcomp(false)
+			self.temp_focuser.enable_tempcomp(false)
 		cmdQueue.put('exit')
 		self.camera.shutdown()
 
@@ -4148,6 +4297,19 @@ class Runner(threading.Thread):
 			self.props['camera_control'].setAttr('state', 'Ok')
 			
 			
+			if self.focuser and len(self.status['filter_seq']) > 0:
+				prev_off = self.status['filter_off'][self.status['filter_pos']]
+				self.status['filter_pos'] = (self.status['filter_pos'] + 1) % len(self.status['filter_seq'])
+				f = int(self.status['filter_seq'][self.status['filter_pos']])
+				off = self.status['filter_off'][self.status['filter_pos']] - prev_off
+
+				self.props["filter_pos"]["pos"].setValue(self.status['filter_pos'])
+				self.driver.enqueueSetMessage(self.props['filter_pos'])
+
+				self.driver.sendClientMessage(self.status['fwheel_dev'], "FILTER_SLOT", {"FILTER_SLOT_VALUE": f})
+				self.temp_focuser.add_offset(off)
+
+
 #			snapshot = tracemalloc.take_snapshot()
 #			top_stats = snapshot.statistics('traceback')
 #			log.info("[ Top differences ]")

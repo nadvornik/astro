@@ -129,7 +129,7 @@ def centroid_list(im, pt0, off):
 		match.append([i, i2])
 	return match_take(pt0, pt, match)
 
-def centroid_mean(im, pt0, off):
+def centroid_mean(im, pt0, off, median=0, erode=0, dilate=0):
 	(h, w) = im.shape
 
 	mean = []
@@ -152,10 +152,26 @@ def centroid_mean(im, pt0, off):
 		
 		mean.append(cm)
 	
+	
 	mean = np.mean(mean, axis = 0)
-		
+	
+	try:
+		if median > 0:
+			median = int(median)
+			mean = cv2.medianBlur(mean, median * 2 + 1)
+		if erode > 0:
+			erode = int(erode)
+			mean = cv2.erode(mean, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (erode * 2 + 1,erode * 2 + 1)))
+		if dilate > 0:
+			dilate = int(dilate)
+			mean = cv2.dilate(mean, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (dilate * 2 + 1,dilate * 2 + 1)))
+
+	except:
+		log.exception('Unexpected error')
+	
+	
 	xs, ys = sym_center(mean)
-	return (ys, xs)
+	return (ys, xs), mean
 
 
 
