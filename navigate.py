@@ -1909,6 +1909,7 @@ class Guider:
 		self.capture_in_progress = 0
 		self.capture_proc_in_progress = 0
 		self.capture_init = False
+		self.af_in_progress = 0
 		self.countdown = 5
 		self.parity = 0
 		self.status['alarm_count'] = 0
@@ -2046,7 +2047,7 @@ class Guider:
 			self.capture_proc_in_progress -= 1
 			if self.capture_proc_in_progress < 0:
 				self.capture_proc_in_progress = 0
-				log.info("capture_proc_in_progress negative")
+				log.error("capture_proc_in_progress negative")
 			if self.capture_proc_in_progress == 0 and self.full_res is not None:
 				if self.full_res['diff_thr'] >= 0:
 					self.focus_loop()
@@ -2075,6 +2076,12 @@ class Guider:
 
 		elif cmd.startswith('seq-'):
 			self.status['seq'] = cmd
+
+		elif cmd == "af_start":
+			self.af_in_progress = 1
+
+		elif cmd == "af_finished":
+			self.af_in_progress = 0
 
 	def focus_loop(self):
 		if self.full_res['guider_ts'] is None or self.full_res['full_ts'] is None or abs(self.full_res['guider_ts'] - self.full_res['full_ts']) > 60:
@@ -2474,7 +2481,7 @@ class Guider:
 						self.countdown = 4
 				ready = (self.countdown == 0)
 				
-				if not self.capture_init and self.capture_proc_in_progress == 0 and ready and self.status['seq'] != 'seq-stop':
+				if not self.capture_init and self.capture_proc_in_progress == 0 and ready and self.status['seq'] != 'seq-stop' and self.af_in_progress == 0:
 					cmdQueue.put('capture')
 					self.capture_init = True
 					self.status['curr_hfr_list'] = []
@@ -3054,6 +3061,9 @@ class Focuser:
 				self.status['remaining_steps'] -= 1
 				self.step(1)
 			elif self.status['remaining_steps'] > -10:
+				if self.status['remaining_steps'] == 0:
+					cmdQueue.put('af_finished')
+
 				self.status['remaining_steps'] -= 1
 			else:
 				t = time.time()
@@ -3794,6 +3804,7 @@ class Runner(threading.Thread):
 		self.video_capture = False
 		self.camera_run = False
 		self.target_lock_cnt = 0
+		self.cur_filter = 1
 		
 		if focuser:
 			self.status.setdefault('fwheel_dev', 'ASI EFW')
@@ -3976,10 +3987,11 @@ class Runner(threading.Thread):
 				
 				elif name == 'filter_seq':
 					try:
-						self.status['filter_seq'] = [int(f) for f in prop["seq"].getValue() if int(f) < 9 and int(f) > 0]
+						self.status['filter_seq'] = [f for f in prop["seq"].getValue() if f == 'a' or int(f) < 9 and int(f) > 0]
 						prop.setAttr('state', 'Ok')
 					except:
 						prop.setAttr('state', 'Alert')
+					prop["seq"].setValue(''.join([str(f) for f in self.status['filter_seq']]))
 					
 					if self.status['filter_pos'] >= len(self.status['filter_seq']):
 						self.status['filter_pos'] = 0
@@ -4102,6 +4114,14 @@ class Runner(threading.Thread):
 					self.props['run_mode'].enforceRule(mode, True)
 					self.driver.enqueueSetMessage(self.props['run_mode'])
 					self.focuser.cmd(cmd)
+				elif cmd == 'af_start' and self.focuser is not None:
+					if mode != 'zoom_focuser':
+						mode = 'zoom_focuser'
+						self.focuser.reset()
+						self.camera.cmd('z1')
+						self.props['run_mode'].enforceRule(mode, True)
+						self.driver.enqueueSetMessage(self.props['run_mode'])
+					self.focuser.cmd('af_fast')
 				elif cmd == 'dark':
 					if mode == 'navigator':
 						self.navigator.cmd(cmd)
@@ -4298,16 +4318,10 @@ class Runner(threading.Thread):
 			
 			
 			if self.focuser and len(self.status['filter_seq']) > 0:
-				prev_off = self.status['filter_off'][self.status['filter_pos']]
-				self.status['filter_pos'] = (self.status['filter_pos'] + 1) % len(self.status['filter_seq'])
-				f = int(self.status['filter_seq'][self.status['filter_pos']])
-				off = self.status['filter_off'][self.status['filter_pos']] - prev_off
-
-				self.props["filter_pos"]["pos"].setValue(self.status['filter_pos'])
-				self.driver.enqueueSetMessage(self.props['filter_pos'])
-
-				self.driver.sendClientMessage(self.status['fwheel_dev'], "FILTER_SLOT", {"FILTER_SLOT_VALUE": f})
-				self.temp_focuser.add_offset(off)
+				try:
+					self.handle_filter_seq()
+				except:
+					log.exception('handle_filter_seq')
 
 
 #			snapshot = tracemalloc.take_snapshot()
@@ -4325,7 +4339,30 @@ class Runner(threading.Thread):
 			self.props['camera_control'].setAttr('state', 'Failed')
 			self.driver.message("Camera is paused", self.device)
 
+	def handle_filter_seq(self):
+		prev_off = self.status['filter_off'][self.cur_filter - 1]
+		
+		next_filter = self.status['filter_seq'][self.status['filter_pos']]
+		while next_filter == 'a':
+			self.status['filter_pos'] = (self.status['filter_pos'] + 1) % len(self.status['filter_seq'])
+			next_filter = self.status['filter_seq'][self.status['filter_pos']]
+
+		off = self.status['filter_off'][int(next_filter) - 1] - prev_off
+
+		self.driver.sendClientMessage(self.status['fwheel_dev'], "FILTER_SLOT", {"FILTER_SLOT_VALUE": int(next_filter)})
+		self.temp_focuser.add_offset(off)
+		self.cur_filter = int(next_filter)
 	
+		self.status['filter_pos'] = (self.status['filter_pos'] + 1) % len(self.status['filter_seq'])
+		if self.status['filter_seq'][self.status['filter_pos']] == 'a':
+			self.status['filter_pos'] = (self.status['filter_pos'] + 1) % len(self.status['filter_seq'])
+			cmdQueue.put('af_start')
+
+		self.props["filter_pos"]["pos"].setValue(self.status['filter_pos'])
+		self.driver.enqueueSetMessage(self.props['filter_pos'])
+		
+		
+
 	def capture_start_cb(self):
 		cmdQueue.put('capture-started')
 		log.info("gc.collect %d" % gc.collect())
