@@ -157,6 +157,7 @@ function INDIValue(props) {
         className={`INDIvector_item_new_value ${props.error || false ? 'INDIvector_item_new_value_err' : ''}`}
         value={props.new_value || ''}
         onChange={props.onChange}
+        onPaste={(e) => {e.target.value = ''; return true;}}
       /> }
       {props.submit_show && <button
         className='INDIvector_item_set'
