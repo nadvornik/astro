@@ -104,7 +104,7 @@ class Camera_indi:
 			self.focuser.cmd(cmd)
 		
 		if cmd == "z1":
-			self.driver.sendClientMessageWait(self.device, "CCD_VIDEO_STREAM", {"STREAM_ON": "Off"})
+			self.stop_stream()
 			self.set_mode('z1')
 			self.driver.sendClientMessageWait(self.device, "CCD_VIDEO_STREAM", {"STREAM_ON": "On"})
 			im, t = self.capture()
@@ -114,7 +114,7 @@ class Camera_indi:
 			
 
 		if cmd == "z0":
-			self.driver.sendClientMessageWait(self.device, "CCD_VIDEO_STREAM", {"STREAM_ON": "Off"})
+			self.stop_stream()
 			self.set_mode('z0')
 			
 			self.driver.sendClientMessageWait(self.device, "CCD_VIDEO_STREAM", {"STREAM_ON": "On"})
@@ -216,7 +216,7 @@ class Camera_indi:
 				time.sleep(1)
 				return None, time.time()
 
-	def capture_bulb(self, test = False, callback_start = None, callback_end = None):
+	def stop_stream(self):
 		while self.driver[self.device]["CCD_VIDEO_STREAM"]["STREAM_ON"] == True:
 			self.driver.sendClientMessageWait(self.device, "CCD_VIDEO_STREAM", {"STREAM_ON": "Off"})
 			time.sleep(0.1)
@@ -226,6 +226,10 @@ class Camera_indi:
 			log.error(prop)
 			if prop is None:
 				break
+
+
+	def capture_bulb(self, test = False, callback_start = None, callback_end = None):
+		self.stop_stream()
 
 		#self.driver.sendClientMessageWait(self.device, "Stack", {"Mean": "On"})
 		#self.driver.sendClientMessageWait(self.device, "CCD_COLOR_SPACE", {"CCD_COLOR_RGB": "On"})

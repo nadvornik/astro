@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 import sys
 import time
 import select
@@ -37,16 +37,18 @@ class Camera_test_kstars:
 		self.hyst = 2
 		self.bahtinov = False
 		self.i = 0
+		self.device = ''
 		
-		import gobject
+		#from gi.repository import GLib
 
-		gobject.threads_init()
+		#GObject.threads_init()
 
-		from dbus import glib
-		glib.init_threads()
+		#from dbus import glib
+		#GLib.init_threads()
 
 		# Create a session bus.
 		import dbus
+
 		bus = dbus.SessionBus()
 
 		remote_object = bus.get_object("org.kde.kstars", # Connection name
@@ -75,7 +77,7 @@ class Camera_test_kstars:
 			self.focuser.cmd(cmd)
 		
 		if cmd == 'z1':
-			self.bahtinov = True
+			self.bahtinov = False
 		
 		if cmd == 'z0':
 			self.bahtinov = False
@@ -207,6 +209,6 @@ if __name__ == "__main__":
 	go_ra = GuideOut("./guide_out_ra")
 	go_dec = GuideOut("./guide_out_dec")
         
-	cam = Camera_test_kstars({}, go_ra, go_dec)
+	cam = Camera_test_kstars({}, go_ra, go_dec, None, None)
 	im, t = cam.capture()
         

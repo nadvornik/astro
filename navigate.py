@@ -1954,6 +1954,7 @@ class Guider:
 		if name == 'expose':
 			self.status['seq'] = "seq-" + prop.getActiveSwitch()
 			prop.setAttr('state', 'Ok')
+			self.af_in_progress = 0
 		elif name == 'calibration':
 			self.status['pixpersec'], self.status['pixpersec_dec'], ref_angle = prop.to_array()
 			self.ref_off = np.exp(1j * np.deg2rad(ref_angle))
@@ -2444,11 +2445,11 @@ class Guider:
 			
 				err = complex(*off) / self.ref_off
 
+			t_proc = time.time() - t
 
 			if len(match) > 0 and (len(self.pt0) == 1 or len(self.pt0) <= 3 and len(match) >= 2 or len(self.pt0) >= 4 and len(match) >= 3 or abs(err) < 5):
 				self.off = off
 				self.resp0.append((t - self.t0, err.real, err.imag))
-				t_proc = time.time() - t
 
 				self.props["offset"]["RA"].setValue(err.real)
 				self.props["offset"]["DEC"].setValue(err.imag)
@@ -2944,12 +2945,16 @@ class Focuser:
 			if self.focus_yx is None or len(self.focus_yx) == 0:
 				self.status['phase'] = 'wait' #stop
 			else:
-				self.step(3)
+				self.step(2)
 				self.phase_wait = 3
 				self.changePhase('prep_record_v')
 		elif self.status['phase'] == 'prep_record_v': # record v curve
 			self.hfr = self.get_hfr(im_sub)
-			if self.hfr < Focuser.hfr_size / 2:
+			if self.hfr < Focuser.hfr_size / 3:
+				self.step(2)
+				self.phase_wait = 3
+
+			elif self.hfr < Focuser.hfr_size / 2:
 				self.status['v_curve'] = []
 				self.status['v_curve2'] = []
 				self.status['xmin'] = None
@@ -2967,7 +2972,10 @@ class Focuser:
 				self.hfr = self.get_hfr(im_sub, min_hfr = 5)
 
 				self.changePhase('record_v')
-			self.step(-1)
+				self.step(-1)
+			else:
+				self.step(-1)
+
 		elif self.status['phase'] == 'record_v': # record v curve
 			self.hfr = self.get_hfr(im_sub)
 			self.status['v_curve'].append(self.hfr)
@@ -3005,7 +3013,7 @@ class Focuser:
 					self.status['v_curve_s'] = v_curve_s.tolist()
 					
 					self.status['delay_len'] = 0;
-					self.status['delay_start'] = int(self.status['side_len'] // 2 - 1)
+					self.status['delay_start'] = int(self.status['side_len'] * 3 // 4 - 1)
 					self.status['delay_steps'] = 0;
 					
 					self.status['delay_calibrated'] = False;
@@ -4007,7 +4015,7 @@ class Runner(threading.Thread):
 						prop.setAttr('state', 'Ok')
 				
 				elif name == 'filter_off':
-					self.status['filter_off'] = list(prop.toArray())
+					self.status['filter_off'] = list(prop.to_array())
 					prop.setAttr('state', 'Ok')
 
 				elif name == 'camera_temp':
@@ -4175,7 +4183,7 @@ class Runner(threading.Thread):
 					if sync_focus or mode == 'focuser' or mode == 'zoom_focuser':
 						self.temp_focuser.sync()
 						sync_focus = False
-						temp_focuser.enable_tempcomp(mode != 'focuser' and mode != 'zoom_focuser' and self.camera_run)
+						self.temp_focuser.enable_tempcomp(mode != 'focuser' and mode != 'zoom_focuser' and self.camera_run)
 						
 					if self.props["focus_pos"]["pos"] != self.camera.focuser.get_pos():
 						self.props["focus_pos"]["pos"].setValue(self.camera.focuser.get_pos())
@@ -4340,6 +4348,11 @@ class Runner(threading.Thread):
 			self.driver.message("Camera is paused", self.device)
 
 	def handle_filter_seq(self):
+		try:
+			self.cur_filter = int(self.driver[self.status['fwheel_dev']]["FILTER_SLOT"]["FILTER_SLOT_VALUE"].getValue())
+		except:
+			log_exception("current filter")
+
 		prev_off = self.status['filter_off'][self.cur_filter - 1]
 		
 		next_filter = self.status['filter_seq'][self.status['filter_pos']]
