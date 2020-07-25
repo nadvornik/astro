@@ -134,7 +134,7 @@ def centroid_mean(im, pt0, off, median=0, erode=0, dilate=0):
 
 	mean = []
 
-	centroid_size = 10
+	centroid_size = 15
 	
 	for i, (y, x, v) in enumerate(pt0):
 		x = int(x + off[1] + 0.5)
@@ -159,12 +159,12 @@ def centroid_mean(im, pt0, off, median=0, erode=0, dilate=0):
 		if median > 0:
 			median = int(median)
 			mean = cv2.medianBlur(mean, median * 2 + 1)
-		if erode > 0:
-			erode = int(erode)
-			mean = cv2.erode(mean, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (erode * 2 + 1,erode * 2 + 1)))
 		if dilate > 0:
 			dilate = int(dilate)
 			mean = cv2.dilate(mean, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (dilate * 2 + 1,dilate * 2 + 1)))
+		if erode > 0:
+			erode = int(erode)
+			mean = cv2.erode(mean, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (erode * 2 + 1,erode * 2 + 1)))
 
 	except:
 		log.exception('Unexpected error')

@@ -1463,8 +1463,11 @@ class GuiderAlg(object):
 		self.err_var += err * err
 		l = len(self.err_hist)
 		if l >= self.stddev_n:
+			if self.err_var < 0:
+				self.err_var = 0
 			self.stddev = (self.err_var / self.stddev_n) ** 0.5
 			self.stddev = min(self.stddev, self.pixpersec)
+			self.stddev = max(0.01, self.stddev)
 			prev_e = self.err_hist[-self.stddev_n]
 			self.err_var -= prev_e * prev_e
 		self.time_hist.append(t)
@@ -1484,9 +1487,10 @@ class GuiderAlg(object):
 	def corrInt(self, corr):
 		s = np.sign(corr)
 		corr = np.abs(corr)
-		corr *= self.stddev * 2 / (corr + self.stddev * 2)
-		smooth_c = self.status['smooth_c']
-		self.corr_acc += s * corr * smooth_c
+		if corr:
+			corr *= self.stddev * 2 / (corr + self.stddev * 2)
+			smooth_c = self.status['smooth_c']
+			self.corr_acc += s * corr * smooth_c
 		if np.abs(self.corr_acc) > self.pixpersec:
 			self.corr_acc = self.pixpersec * np.sign(self.corr_acc)
 		return self.corr_acc
@@ -1721,7 +1725,8 @@ class GuiderAlgRa(GuiderAlg):
 
 		s = np.sign(corr)
 		corr = np.abs(corr)
-		corr *= s * self.stddev * 2 / (corr + self.stddev * 2)
+		if corr > 0:
+			corr *= s * self.stddev * 2 / (corr + self.stddev * 2)
 
 		phase = int((t - self.t_start) / self.tres + 0.5) % self.status['period']
 		log.info("prev_phase %d, prev_c %f, phase %d, c %f", self.prev_phase, self.prev_c, phase, corr)
@@ -2303,6 +2308,8 @@ class Guider:
 			self.cnt += 1
 
 			pt1m, pt2m, match = match_triangle(self.pt0, pt, 5, 50, self.off)
+			if len(match) == 0 and self.cnt > 10:
+				pt1m, pt2m, match = match_triangle(self.pt0, pt, 5, 50)
 			if len(match) > 0:
 				off, weights = avg_pt(pt1m, pt2m)
 				#log.info "triangle", off, match
@@ -2568,7 +2575,8 @@ class Focuser:
 				<defSwitch name="dark">Off</defSwitch>
 				<defSwitch name="fast_search">Off</defSwitch>
 				<defSwitch name="search">Off</defSwitch>
-				<defSwitch name="prep_record_v">Off</defSwitch>
+				<defSwitch name="prep_record_v1">Off</defSwitch>
+				<defSwitch name="prep_record_v2">Off</defSwitch>
 				<defSwitch name="record_v">Off</defSwitch>
 				<defSwitch name="focus_v">Off</defSwitch>
 				<defSwitch name="focus_v2">Off</defSwitch>
@@ -2616,7 +2624,7 @@ class Focuser:
 		self.mount = mount
 		self.reset(dark)
 
-	hfr_size = 24
+	hfr_size = 30
 
 	@staticmethod
 	def v_param(v_curve):
@@ -2896,9 +2904,9 @@ class Focuser:
 			self.hfr = self.get_hfr(im_sub)
 			log.info("in-focus hfr %f", self.hfr)
 			if self.hfr < Focuser.hfr_size / 3:
-				self.changePhase('prep_record_v')
+				self.changePhase('prep_record_v1')
+				self.start_hfr = []
 				self.phase_wait = 3
-				self.step(3)
 			else:
 				self.focus_yx = None
 				for i in range (0, 12):
@@ -2923,8 +2931,9 @@ class Focuser:
 		elif self.status['phase'] == 'search': # step far, record max flux
 			flux, hfr, yx = self.get_max_flux(self.stack_im, self.stack.get_xy(), self.stddev)
 			if hfr is not None and (flux < self.max_flux * 0.7 or hfr > self.min_hfr * 2) or self.search_steps > 120:
-				self.changePhase('prep_record_v')
-				self.step(-1)
+				self.changePhase('prep_record_v1')
+				self.start_hfr = []
+				self.phase_wait = 3
 			else:
 				if flux > self.max_flux:
 					#self.focus_yx = yx
@@ -2945,36 +2954,56 @@ class Focuser:
 			if self.focus_yx is None or len(self.focus_yx) == 0:
 				self.status['phase'] = 'wait' #stop
 			else:
-				self.step(2)
 				self.phase_wait = 3
-				self.changePhase('prep_record_v')
-		elif self.status['phase'] == 'prep_record_v': # record v curve
+				self.changePhase('prep_record_v1')
+				self.start_hfr = []
+		elif self.status['phase'] == 'prep_record_v1':
 			self.hfr = self.get_hfr(im_sub)
-			if self.hfr < Focuser.hfr_size / 3:
-				self.step(2)
-				self.phase_wait = 3
-
-			elif self.hfr < Focuser.hfr_size / 2:
-				self.status['v_curve'] = []
-				self.status['v_curve2'] = []
-				self.status['xmin'] = None
-				self.status['side_len'] = None
-				self.status['smooth_size'] = None
-				self.status['c1'] = None
-				self.status['m1'] = None
-				self.status['c2'] = None
-				self.status['m2'] = None
-				self.status['v_curve_s'] = None
-				self.status['v_curve2_s'] = None
-				self.status['hyst'] = None
-				self.status['remaining_steps'] = None
-
-				self.hfr = self.get_hfr(im_sub, min_hfr = 5)
-
-				self.changePhase('record_v')
-				self.step(-1)
+			self.start_hfr.append(self.hfr)
+			if len(self.start_hfr) >= 3:
+				self.step(3)
+				self.end_hfr = []
+				self.changePhase('prep_record_v2')
+		elif self.status['phase'] == 'prep_record_v2':
+			self.hfr = self.get_hfr(im_sub)
+			if len(self.end_hfr) < 10:
+				self.end_hfr.append(self.hfr)
+				if len(self.end_hfr) == 10:
+					hv1 = np.median(self.start_hfr)
+					hv2 = np.median(self.end_hfr[-4:])
+					self.status['delay_steps'] = 0
+					for hv in self.end_hfr:
+						if np.abs(hv - hv1) < np.abs(hv - hv2):
+							self.status['delay_steps'] += 1
+						else:
+							break
+					log.info("delay steps start %s end %s  steps %s", self.start_hfr, self.end_hfr, self.status['delay_steps'])
 			else:
-				self.step(-1)
+				if self.hfr < Focuser.hfr_size / 3:
+					self.step(2)
+					self.phase_wait = 3
+
+				elif self.hfr < Focuser.hfr_size / 2:
+					self.status['v_curve'] = []
+					self.status['v_curve2'] = []
+					self.status['xmin'] = None
+					self.status['side_len'] = None
+					self.status['smooth_size'] = None
+					self.status['c1'] = None
+					self.status['m1'] = None
+					self.status['c2'] = None
+					self.status['m2'] = None
+					self.status['v_curve_s'] = None
+					self.status['v_curve2_s'] = None
+					self.status['hyst'] = None
+					self.status['remaining_steps'] = None
+
+					self.hfr = self.get_hfr(im_sub, min_hfr = 5)
+
+					self.changePhase('record_v')
+					self.step(-1)
+				else:
+					self.step(-1)
 
 		elif self.status['phase'] == 'record_v': # record v curve
 			self.hfr = self.get_hfr(im_sub)
@@ -3012,38 +3041,23 @@ class Focuser:
 					self.status['xmin'], self.status['side_len'], self.status['smooth_size'], self.status['c1'], self.status['m1'], self.status['c2'], self.status['m2'], v_curve_s = Focuser.v_param(self.status['v_curve'])
 					self.status['v_curve_s'] = v_curve_s.tolist()
 					
-					self.status['delay_len'] = 0;
-					self.status['delay_start'] = int(self.status['side_len'] * 3 // 4 - 1)
-					self.status['delay_steps'] = 0;
-					
-					self.status['delay_calibrated'] = False;
-
 					self.props["focuser_calibration"]["m1"].setValue(self.status['m1'])
 					self.props["focuser_calibration"]["m2"].setValue(self.status['m2'])
 					self.driver.enqueueSetMessage(self.props["focuser_calibration"])
 
 					self.status['v_curve2'] = []
+					self.step(-3)
+					self.step(3)
+					self.phase_wait = self.status['delay_steps'] + 1
+
 					if  self.status['side_len'] < 5:
 						self.changePhase('wait')
-
-			self.step(-1)
+			if self.status['phase'] == 'record_v':
+				self.step(-1)
 		elif self.status['phase'] == 'focus_v': # go back, record first part of second v curve
 			self.hfr = self.get_hfr(im_sub)
-			if len(self.status['v_curve2']) > self.status['side_len'] + self.status['delay_len'] or self.hfr <= self.status['min_hfr'] and len(self.status['v_curve2']) > 4:
-				if not self.status['delay_calibrated']:
-					if self.status['delay_len']:
-						stddevlist = []
-						for i in range(self.status['delay_start'], len(self.status['v_curve2']) - self.status['delay_len']):
-							stddevlist.append(np.std(self.status['v_curve2'][i : i + self.status['delay_len']]))
-						log.info('stddevlist %s', stddevlist)
-						self.status['delay_steps'] = int(np.argmin(stddevlist))
-						log.info('v_curve2 pre  %s', self.status['v_curve2'])
-						self.status['v_curve2'] = (self.status['v_curve2'][ : self.status['delay_start'] + self.status['delay_steps']] + 
-						                           self.status['v_curve2'][self.status['delay_start'] + self.status['delay_steps'] + self.status['delay_len'] : ])
-						log.info('v_curve2 post %s', self.status['v_curve2'])
-						self.status['delay_len'] = 0
-					self.status['delay_calibrated'] = True
-			
+			if len(self.status['v_curve2']) > self.status['side_len'] or self.hfr <= self.status['min_hfr'] and len(self.status['v_curve2']) > 4:
+
 				self.status['hyst'], v_curve2_s = Focuser.v_shift(np.array(self.status['v_curve']), np.array(self.status['v_curve2']), self.status['smooth_size'], self.status['c1'], self.status['m1'], self.status['c2'], self.status['m2'])
 				self.status['v_curve2_s'] = v_curve2_s.tolist()
 
@@ -3057,10 +3071,7 @@ class Focuser:
 
 					if self.full_res is not None:
 						self.full_res['hyst'] = max(0, int(round(- self.status['hyst'])))
-			if not self.status['delay_calibrated'] and len(self.status['v_curve2']) >= self.status['delay_start'] and self.status['delay_len'] < 8:
-				self.status['delay_len'] += 1
-			else:
-				self.step(1)
+			self.step(1)
 			self.status['v_curve2'].append(self.hfr)
 		elif self.status['phase'] == 'focus_v2': # go there
 			self.hfr = self.get_hfr(im_sub)
@@ -3574,6 +3585,7 @@ class TempFocuser:
 		self.i = -1
 		self.med1 = None
 		self.med2 = None
+		self.last_ts = 0
 		driver.register_callback("Sensors", 'snoop', self.handle_set_tempmodel_cb)
 
 	def handle_set_tempmodel_cb(self, msg, prop):
@@ -3592,9 +3604,11 @@ class TempFocuser:
 			self.med1[self.i] = val1
 			self.med2[self.i] = val2
 			self.i = (self.i + 1) % 3
-			self.tempmodel.add(0, np.median(self.med1), ts)
-			self.tempmodel.add(1, np.median(self.med2), ts)
-			#log.info("handle_set_tempmodel_cb %f %f %f", val1, val2, time.time() - ts)
+			if ts - self.last_ts > 2:
+				self.tempmodel.add(0, np.median(self.med1), ts)
+				self.tempmodel.add(1, np.median(self.med2), ts)
+				#log.info("handle_set_tempmodel_cb %f %f %f %f", val1, val2, ts, time.time() - ts)
+				self.last_ts = ts
 			self.temp_focus = self.tempmodel.res()
 
 
@@ -3602,14 +3616,21 @@ class TempFocuser:
 		try:
 			log.info("Focus comp start")
 			while self.allow_tempcomp:
+				changed = False
 				try:
 					temp_focus = self.temp_focus
-					if temp_focus < self.focuser.get_pos() - 12:
+					cur_pos = self.focuser.get_pos()
+					if temp_focus < cur_pos - 12:
 						self.focuser.cmd("f-1")
 						log.info("Focus comp %f %f", self.focuser.get_pos(), temp_focus)
-					if temp_focus > self.focuser.get_pos() + 12:
+						changed = True
+					elif temp_focus > cur_pos + 12:
 						self.focuser.cmd("f+1")
+						changed = True
 						log.info("Focus comp %f %f", self.focuser.get_pos(), temp_focus)
+					if changed:
+						while cur_pos == self.focuser.get_pos():
+							time.sleep(1)
 				except:
 					log.exception("Temperature focus")
 				time.sleep(1)
@@ -3769,9 +3790,6 @@ class Runner(threading.Thread):
 				<defTextVector device="{0}" name="filter_seq" label="Filter Seq" group="Camera Controls" state="Idle" perm="rw">
 					<defText name="seq" label="Filter Seq"></defText>
 				</defTextVector>
-				<defNumberVector device="{0}" name="filter_pos" label="Filter Seq Pos" group="Camera Controls" state="Idle" perm="rw" timeout="60">
-					<defNumber name="pos" label="pos" format="%1f">0</defNumber>
-				</defNumberVector>
 
 				<defNumberVector device="{0}" name="filter_off" label="Filter Offsets" group="Camera Controls" state="Idle" perm="rw" timeout="60">
 					<defNumber name="filter1" format="%1f">0</defNumber>
@@ -3826,11 +3844,9 @@ class Runner(threading.Thread):
 			self.status.setdefault('filter_pos', 0)
 			self.status.setdefault('filter_off', [0, 0, 0, 0, 0, 0, 0, 0])
 
-			self.props["filter_seq"]["seq"].setValue(''.join([str(f) for f in self.status['filter_seq']]))
+			self.props["filter_seq"]["seq"].setValue(self.filter_seq_str())
 			self.driver.enqueueSetMessage(self.props['filter_seq'])
-			
-			self.props["filter_pos"]["pos"].setValue(self.status['filter_pos'])
-			self.driver.enqueueSetMessage(self.props['filter_pos'])
+
 			
 			self.props["filter_off"].setValue(self.status['filter_off'])
 			self.driver.enqueueSetMessage(self.props['filter_off'])
@@ -3841,6 +3857,11 @@ class Runner(threading.Thread):
 			
 			
 
+	def filter_seq_str(self):
+		ret = ''.join([str(f) for f in self.status['filter_seq']])
+		ret = ret[:self.status['filter_pos']] + ':' + ret[self.status['filter_pos']:]
+		log.info("filter_seq_str %s %s %s", self.status['filter_seq'], self.status['filter_pos'], ret)
+		return ret
 		
 	def run(self):
 #		profiler = LineProfiler()
@@ -3995,25 +4016,13 @@ class Runner(threading.Thread):
 				
 				elif name == 'filter_seq':
 					try:
-						self.status['filter_seq'] = [f for f in prop["seq"].getValue() if f == 'a' or int(f) < 9 and int(f) > 0]
+						self.status['filter_pos'] = max(prop["seq"].getValue().find(':'), 0)
+						self.status['filter_seq'] = [f for f in prop["seq"].getValue() if f in 'a12345678' ]
 						prop.setAttr('state', 'Ok')
 					except:
 						prop.setAttr('state', 'Alert')
-					prop["seq"].setValue(''.join([str(f) for f in self.status['filter_seq']]))
-					
-					if self.status['filter_pos'] >= len(self.status['filter_seq']):
-						self.status['filter_pos'] = 0
-						self.props["filter_pos"]["pos"].setValue(self.status['filter_pos'])
-						self.driver.enqueueSetMessage(self.props['filter_pos'])
+					prop["seq"].setValue(self.filter_seq_str())
 
-				elif name == 'filter_pos':
-					if int(prop["pos"].getValue()) >= len(self.status['filter_seq']):
-						prop["pos"].setValue(self.status['filter_pos'])
-						prop.setAttr('state', 'Alert')
-					else:
-						self.status['filter_pos'] = int(prop["pos"].getValue())
-						prop.setAttr('state', 'Ok')
-				
 				elif name == 'filter_off':
 					self.status['filter_off'] = list(prop.to_array())
 					prop.setAttr('state', 'Ok')
@@ -4371,9 +4380,9 @@ class Runner(threading.Thread):
 			self.status['filter_pos'] = (self.status['filter_pos'] + 1) % len(self.status['filter_seq'])
 			cmdQueue.put('af_start')
 
-		self.props["filter_pos"]["pos"].setValue(self.status['filter_pos'])
-		self.driver.enqueueSetMessage(self.props['filter_pos'])
-		
+		self.props["filter_seq"]["seq"].setValue(self.filter_seq_str())
+		self.driver.enqueueSetMessage(self.props['filter_seq'])
+
 		
 
 	def capture_start_cb(self):
