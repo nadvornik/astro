@@ -106,7 +106,7 @@ class Camera_indi:
 		if cmd == "z1":
 			self.stop_stream()
 			self.set_mode('z1')
-			self.driver.sendClientMessageWait(self.device, "CCD_VIDEO_STREAM", {"STREAM_ON": "On"})
+			#self.driver.sendClientMessageWait(self.device, "CCD_VIDEO_STREAM", {"STREAM_ON": "On"})
 			im, t = self.capture()
 			while im is not None and (im.shape[0] != self.status['zoom_shape'][0] or im.shape[1] != self.status['zoom_shape'][1]):
 				log.info("zoom shape %s %s", im.shape, self.status['zoom_shape'])
@@ -117,7 +117,7 @@ class Camera_indi:
 			self.stop_stream()
 			self.set_mode('z0')
 			
-			self.driver.sendClientMessageWait(self.device, "CCD_VIDEO_STREAM", {"STREAM_ON": "On"})
+			#self.driver.sendClientMessageWait(self.device, "CCD_VIDEO_STREAM", {"STREAM_ON": "On"})
 			im, t = self.capture()
 
 		if cmd == "zcenter":

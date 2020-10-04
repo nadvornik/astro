@@ -601,6 +601,19 @@ class Navigator:
 		</INDIDriver>
 		""".format(device))
 
+		if polar_tid is not None:
+			driver.defineProperties("""
+			<INDIDriver>
+
+				<defSwitchVector device="{0}" name="polar" label="Polar" group="Solver Control" state="Idle" perm="rw" rule="AtMostOne">
+					<defSwitch name="reset" label="reset">Off</defSwitch>
+					<defSwitch name="align" label="align">Off</defSwitch>
+				</defSwitchVector>
+
+			</INDIDriver>
+			""".format(device))
+
+
 		self.props = driver[device]
 		
 		self.dark = dark
@@ -996,8 +1009,25 @@ class Navigator:
 					prop['sync'].setValue(False)
 					prop.setAttr('state', 'Alert')
 
-		
-		
+		elif name == 'polar':
+			if prop['reset'] == True:
+				prop['reset'].setValue(False)
+				if self.polar_tid is not None:
+					self.mount.polar.reset()
+					log.info("polar reset")
+				prop.setAttr('state', 'Ok')
+			if prop['align'] == True:
+				prop['align'].setValue(False)
+				if self.polar_tid is not None:
+					self.mount.polar.set_mode('adjust')
+					log.info("polar align")
+					if self.mount.polar.mode == 'adjust':
+						prop.setAttr('state', 'Ok')
+					else:
+						prop.setAttr('state', 'Alert')
+				else:
+					prop.setAttr('state', 'Alert')
+
 	
 	def cmd(self, cmd):
 		if cmd == 'solver-reset':
@@ -2953,6 +2983,7 @@ class Focuser:
 			self.set_xy_from_stack(self.stack)
 			if self.focus_yx is None or len(self.focus_yx) == 0:
 				self.status['phase'] = 'wait' #stop
+				cmdQueue.put('af_finished')
 			else:
 				self.phase_wait = 3
 				self.changePhase('prep_record_v1')
@@ -3046,8 +3077,8 @@ class Focuser:
 					self.driver.enqueueSetMessage(self.props["focuser_calibration"])
 
 					self.status['v_curve2'] = []
-					self.step(-3)
-					self.step(3)
+					#self.step(-3)
+					#self.step(3)
 					self.phase_wait = self.status['delay_steps'] + 1
 
 					if  self.status['side_len'] < 5:
@@ -3420,10 +3451,10 @@ class Mount:
 			mq = Quaternion([mra, mdec, mroll])
 			q =  mq * sq
 			gra, gdec, groll = q.to_euler()
-			return gra, gdec, 1.0
+			return gra, gdec, 10.0
 		elif self.main_tan is not None and self.status['oag']:
 			mra, mdec, mroll, mpixscale, mparity = tan_to_euler(self.main_tan)
-			return mra, mdec, 5.0
+			return mra, mdec, 10.0
 		else:
 			zra, zdec = self.polar.zenith()
 			return zra,zdec, 100
@@ -3812,6 +3843,53 @@ class Runner(threading.Thread):
 					<defNumber name="temp" label="Temperature" format="%1.1f">0</defNumber>
 				</defNumberVector>
 
+				<defSwitchVector device="{0}" name="target_sel" label="Select Target" group="Target" state="Idle" perm="rw" rule="AtMostOne">
+					<defSwitch name="target1">Off</defSwitch>
+					<defSwitch name="target2">Off</defSwitch>
+					<defSwitch name="target3">Off</defSwitch>
+					<defSwitch name="target4">Off</defSwitch>
+					<defSwitch name="target5">Off</defSwitch>
+				</defSwitchVector>
+				<defTextVector device="{0}" name="target_name1" label="Target Name 1" group="Target" state="Idle" perm="rw">
+					<defText name="name" label="Name"></defText>
+				</defTextVector>
+				<defNumberVector device="{0}" name="target_coord1" label="Target Coord 1" group="Target" state="Idle" perm="rw">
+					<defNumber name="RA" label="RA" format="%10.6m" min="0" max="0" step="0">0</defNumber>
+					<defNumber name="DEC" label="Dec" format="%10.6m" min="0" max="0" step="0">0</defNumber>
+				</defNumberVector>
+
+				<defTextVector device="{0}" name="target_name2" label="Target Name 2" group="Target" state="Idle" perm="rw">
+					<defText name="name" label="Name"></defText>
+				</defTextVector>
+				<defNumberVector device="{0}" name="target_coord2" label="Target Coord 2" group="Target" state="Idle" perm="rw">
+					<defNumber name="RA" label="RA" format="%10.6m" min="0" max="0" step="0">0</defNumber>
+					<defNumber name="DEC" label="Dec" format="%10.6m" min="0" max="0" step="0">0</defNumber>
+				</defNumberVector>
+
+				<defTextVector device="{0}" name="target_name3" label="Target Name 3" group="Target" state="Idle" perm="rw">
+					<defText name="name" label="Name"></defText>
+				</defTextVector>
+				<defNumberVector device="{0}" name="target_coord3" label="Target Coord 3" group="Target" state="Idle" perm="rw">
+					<defNumber name="RA" label="RA" format="%10.6m" min="0" max="0" step="0">0</defNumber>
+					<defNumber name="DEC" label="Dec" format="%10.6m" min="0" max="0" step="0">0</defNumber>
+				</defNumberVector>
+
+				<defTextVector device="{0}" name="target_name4" label="Target Name 4" group="Target" state="Idle" perm="rw">
+					<defText name="name" label="Name"></defText>
+				</defTextVector>
+				<defNumberVector device="{0}" name="target_coord4" label="Target Coord 4" group="Target" state="Idle" perm="rw">
+					<defNumber name="RA" label="RA" format="%10.6m" min="0" max="0" step="0">0</defNumber>
+					<defNumber name="DEC" label="Dec" format="%10.6m" min="0" max="0" step="0">0</defNumber>
+				</defNumberVector>
+
+				<defTextVector device="{0}" name="target_name5" label="Target Name 5" group="Target" state="Idle" perm="rw">
+					<defText name="name" label="Name"></defText>
+				</defTextVector>
+				<defNumberVector device="{0}" name="target_coord5" label="Target Coord 5" group="Target" state="Idle" perm="rw">
+					<defNumber name="RA" label="RA" format="%10.6m" min="0" max="0" step="0">0</defNumber>
+					<defNumber name="DEC" label="Dec" format="%10.6m" min="0" max="0" step="0">0</defNumber>
+				</defNumberVector>
+
 			</INDIDriver>
 			""".format(device))
 
@@ -3850,11 +3928,27 @@ class Runner(threading.Thread):
 			
 			self.props["filter_off"].setValue(self.status['filter_off'])
 			self.driver.enqueueSetMessage(self.props['filter_off'])
-			
+
+
 			if 'camera_temp' in self.camera.status:
 				self.props["camera_temp"]["temp"].setValue(self.camera.status['camera_temp'])
 				self.driver.enqueueSetMessage(self.props['camera_temp'])
 			
+		if 'target_coord' in self.props:
+			self.status.setdefault('target_coord', [0, 0])
+			self.props["target_coord"].setValue(self.status['target_coord'])
+			self.driver.enqueueSetMessage(self.props['target_coord'])
+
+		for i in range(1, 6):
+			if 'target_coord' + str(i) in self.props:
+				self.status.setdefault('target_coord' + str(i), [0, 0])
+				self.props["target_coord" + str(i)].setValue(self.status['target_coord' + str(i)])
+				self.driver.enqueueSetMessage(self.props['target_coord' + str(i)])
+
+				log.info("target_name" + str(i))
+				self.status.setdefault('target_name' + str(i), [''])
+				self.props["target_name" + str(i)].setValue(self.status['target_name' + str(i)])
+				self.driver.enqueueSetMessage(self.props['target_name' + str(i)])
 			
 
 	def filter_seq_str(self):
@@ -4002,11 +4096,28 @@ class Runner(threading.Thread):
 						log.exception("zoom pos")
 						prop.setAttr('state', 'Alert')
 
-				elif name == 'target_coord':
+				elif name.startswith('target_coord'):
 					prop.setAttr('state', 'Ok')
+					self.status[name] = list(prop.to_array())
+				elif name.startswith('target_name'):
+					prop.setAttr('state', 'Ok')
+					self.status[name] = list(prop.to_array())
 				elif name == 'target_lock':
 					self.target_lock_cnt = 20
 					prop.setAttr('state', 'Ok')
+
+				elif name == 'target_sel':
+					cmd = prop.getActiveSwitch()
+					prop.setAttr('state', 'Ok')
+					prop[cmd].setValue(False)
+					for i in range(1, 6):
+						if cmd == 'target' + str(i):
+							self.status['target_coord'] = self.status['target_coord' + str(i)]
+							self.props["target_coord"].setValue(self.status['target_coord'])
+							self.driver.enqueueSetMessage(self.props['target_coord'])
+							
+
+
 
 				elif name == 'devices':
 					self.status['focuser_dev'] = prop["focuser"].getValue()
@@ -4052,7 +4163,8 @@ class Runner(threading.Thread):
 
 			try:
 				if self.focuser:
-					self.temp_focuser.enable_tempcomp(not sync_focus and mode != 'focuser' and mode != 'zoom_focuser' and self.camera_run)
+					#self.temp_focuser.enable_tempcomp(not sync_focus and mode != 'focuser' and mode != 'zoom_focuser' and self.camera_run)
+					self.temp_focuser.enable_tempcomp(False)
 			except:
 				log.exception("enable_tempcomp1")
 
@@ -4156,7 +4268,8 @@ class Runner(threading.Thread):
 							self.driver.enqueueSetMessage(self.props['run_mode'])
 						try:
 							if self.focuser:
-								self.temp_focuser.enable_tempcomp(True)
+								#self.temp_focuser.enable_tempcomp(True)
+								self.temp_focuser.enable_tempcomp(False)
 						except:
 							log.exception("enable_tempcomp2")
 						self.capture(cmd == 'test-capture')
@@ -4192,8 +4305,8 @@ class Runner(threading.Thread):
 					if sync_focus or mode == 'focuser' or mode == 'zoom_focuser':
 						self.temp_focuser.sync()
 						sync_focus = False
-						self.temp_focuser.enable_tempcomp(mode != 'focuser' and mode != 'zoom_focuser' and self.camera_run)
-						
+						#self.temp_focuser.enable_tempcomp(mode != 'focuser' and mode != 'zoom_focuser' and self.camera_run)
+						self.temp_focuser.enable_tempcomp(False)
 					if self.props["focus_pos"]["pos"] != self.camera.focuser.get_pos():
 						self.props["focus_pos"]["pos"].setValue(self.camera.focuser.get_pos())
 						self.props["focus_pos"].setAttr('state', 'Ok')
@@ -4300,7 +4413,7 @@ class Runner(threading.Thread):
 			#	cmdQueue.put('exit')
 
 		if self.focuser:
-			self.temp_focuser.enable_tempcomp(false)
+			self.temp_focuser.enable_tempcomp(False)
 		cmdQueue.put('exit')
 		self.camera.shutdown()
 
