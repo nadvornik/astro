@@ -416,6 +416,32 @@ def pt_translation_rotate(pt1, pt2, weights):
 	#print m
 	return m
 
+def pt_rotate(pt1, pt2, weights):
+	c1 = np.average(pt1[:, 0:2], axis = 0, weights = weights)
+	c2 = np.average(pt2[:, 0:2], axis = 0, weights = weights)
+
+	centered_pt1 = pt1[:, 0:2] - c1
+	centered_pt2 = pt2[:, 0:2] - c2
+
+
+	c00 = np.array(centered_pt1[:,0]).reshape(-1)
+	c10 = np.array(centered_pt2[:,0]).reshape(-1)
+	c01 = np.array(centered_pt1[:,1]).reshape(-1)
+	c11 = np.array(centered_pt2[:,1]).reshape(-1)
+
+	cov = np.array([
+	  [ np.average(c00 * c10, axis = 0, weights = weights),
+	    np.average(c01 * c10, axis = 0, weights = weights)],
+	  [ np.average(c00 * c11, axis = 0, weights = weights),
+	    np.average(c01 * c11, axis = 0, weights = weights)]])
+	w, u, vt = cv2.SVDecomp(cov)
+
+	r = np.matrix(np.transpose(vt)).dot(np.transpose(u))
+	t = c1 - c1 * r
+	m = np.matrix(np.concatenate((r, t)))
+	#print m
+	return m
+
 def pt_transform_opt(pt1m, pt2m, noise = 2, pt_func = pt_translation):
 	if len(pt1m) == 0:
 		return np.matrix([[1., 0], [0, 1.], [0, 0]]), []

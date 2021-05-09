@@ -87,6 +87,7 @@ def hfr(a, sub_bg = False):
 		(mat, mask) = hfr_mat_cache[key]
 	
 	if sub_bg:
+		a = cv2.blur(a, (3,3))
 		bg = np.median(a[(mask == 0)])
 		a = cv2.subtract(a, bg, dtype=cv2.CV_16UC1)
 	

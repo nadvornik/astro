@@ -30,7 +30,7 @@ import psutil
 import signal
 
 from v4l2_camera import *
-from camera_gphoto import *
+#from camera_gphoto import *
 from camera_indi import *
 
 from guide_out import GuideOut
@@ -64,6 +64,8 @@ from tempmodel import TempModel
 import logging
 from functools import reduce
 logging.basicConfig(format="%(filename)s:%(lineno)d: %(message)s", level=logging.INFO)
+
+import gc
 
 log = logging.getLogger()
 
@@ -1517,8 +1519,8 @@ class GuiderAlg(object):
 	def corrInt(self, corr):
 		s = np.sign(corr)
 		corr = np.abs(corr)
-		if corr:
-			corr *= self.stddev * 2 / (corr + self.stddev * 2)
+		if corr and not self.move:
+			corr *= self.stddev / (corr + self.stddev)
 			smooth_c = self.status['smooth_c']
 			self.corr_acc += s * corr * smooth_c
 		if np.abs(self.corr_acc) > self.pixpersec:
@@ -1528,7 +1530,7 @@ class GuiderAlg(object):
 	def corrProp(self, corr):
 		s = np.sign(corr)
 		corr = np.abs(corr)
-		#corr *= (corr + self.stddev * 0.5) / (corr + self.stddev)
+		corr *= (corr + self.stddev) / (corr + 2 * self.stddev)
 		corr *= self.status['aggressivness']
 		if corr < self.status['min_move']:
 			corr = 0
@@ -1546,10 +1548,10 @@ class GuiderAlgDec(GuiderAlg):
 		<INDIDriver>
 
 			<defNumberVector device="{0}" name="guider_dec" label="Guider Dec" group="Guider" state="Idle" perm="rw">
-				<defNumber name="aggressivness" label="aggressivness" format="%1.1f" min="0" max="1.5" step="0.1">0.5</defNumber>
-				<defNumber name="min_move" label="min_move" format="%1.1f" min="0" max="5" step="0.1">0.1</defNumber>
-				<defNumber name="rev_move" label="rev_move" format="%1.1f" min="0" max="5" step="0.1">2.0</defNumber>
-				<defNumber name="t_delay" label="t_delay" format="%1.1f" min="0" max="10" step="0.1">0.5</defNumber>
+				<defNumber name="aggressivness" label="aggressivness" format="%1.3f" min="0" max="1.5" step="0.1">0.5</defNumber>
+				<defNumber name="min_move" label="min_move" format="%1.3f" min="0" max="5" step="0.1">0.1</defNumber>
+				<defNumber name="rev_move" label="rev_move" format="%1.3f" min="0" max="5" step="0.1">2.0</defNumber>
+				<defNumber name="t_delay" label="t_delay" format="%1.3f" min="0" max="10" step="0.1">0.5</defNumber>
 				<defNumber name="smooth" label="smooth" format="%1.4f" min="0.01" max="1" step="0.01">0.1</defNumber>
 			</defNumberVector>
 
@@ -1649,10 +1651,10 @@ class GuiderAlgRa(GuiderAlg):
 		<INDIDriver>
 
 			<defNumberVector device="{0}" name="guider_ra" label="Guider RA" group="Guider" state="Idle" perm="rw">
-				<defNumber name="aggressivness" label="aggressivness" format="%1.1f" min="0" max="1.5" step="0.1">0.5</defNumber>
-				<defNumber name="p_aggressivness" label="p_aggressivness" format="%1.1f" min="0" max="1.5" step="0.1">0.5</defNumber>
-				<defNumber name="min_move" label="min_move" format="%1.1f" min="0" max="5" step="0.1">0.1</defNumber>
-				<defNumber name="t_delay" label="t_delay" format="%1.1f" min="0" max="10" step="0.1">0.5</defNumber>
+				<defNumber name="aggressivness" label="aggressivness" format="%1.3f" min="0" max="1.5" step="0.1">0.5</defNumber>
+				<defNumber name="p_aggressivness" label="p_aggressivness" format="%1.3f" min="0" max="1.5" step="0.1">0.5</defNumber>
+				<defNumber name="min_move" label="min_move" format="%1.3f" min="0" max="5" step="0.1">0.1</defNumber>
+				<defNumber name="t_delay" label="t_delay" format="%1.3f" min="0" max="10" step="0.1">0.5</defNumber>
 				<defNumber name="smooth" label="smooth" format="%1.4f" min="0.01" max="1" step="0.01">0.1</defNumber>
 				<defNumber name="period" label="period" format="%1.0f" min="0" max="100" step="1">0</defNumber>
 			</defNumberVector>
@@ -1782,10 +1784,10 @@ class GuiderAlgRa(GuiderAlg):
 
 		p = phase
 		res = []
-		for i in range(int(self.status['t_delay'] / self.tres) + 1):
-			res.append(self.pbuf[p])
-			p = (p + 1) % self.status['period']
-		#(phase + int(self.status['t_delay'] / self.tres) ) % self.status['period']
+		#for i in range(int(self.status['t_delay'] / self.tres) + 1):
+		#	res.append(self.pbuf[p])
+		#	p = (p + 1) % self.status['period']
+		res.append(self.pbuf[(phase + int(self.status['t_delay'] / self.tres) ) % self.status['period']])
 		return np.mean(res) * self.status['p_aggressivness']
 
 
@@ -1953,6 +1955,9 @@ class Guider:
 		self.dither = complex(0, 0)
 		self.pos_corr = [0, 0]
 
+		self.rot_mat = None
+		self.rot_mat_limit = 2
+
 		self.props["preprocess"]["median"].setValue(self.status['median'])
 		self.props["preprocess"]["erode"].setValue(self.status['erode'])
 		self.props["preprocess"]["dilate"].setValue(self.status['dilate'])
@@ -1977,6 +1982,10 @@ class Guider:
 	def update_pt0(self):
 		try:
 			dither_off = self.dither * self.ref_off
+			if self.rot_mat is not None:
+				self.pt0base[:, 0:2] = np.insert(self.pt0base[:, 0:2], 2, 1.0, axis=1).dot(self.rot_mat).A
+				self.rot_mat = None
+				self.rot_mat_limit = 2
 			self.pt0 = np.array(self.pt0base, copy=True)
 			self.pt0[:, 0] += dither_off.real + self.pos_corr[0]
 			self.pt0[:, 1] += dither_off.imag + self.pos_corr[1]
@@ -2011,6 +2020,28 @@ class Guider:
 			self.props['guider_phase'].setAttr('state', 'Ok')
 		self.driver.enqueueSetMessage(self.props['guider_phase'])
 
+	def doDither(self):
+		self.alg_ra.setMove(True)
+		self.alg_dec.setMove(True)
+		try:
+			dither_dec = self.dither.imag
+			if self.status['pixpersec_dec'] is not None:
+				if self.status['pixpersec_dec'] * self.status['dec_alg']['last_move'] * self.parity > 0:
+					dither_dec -= 1
+				else:
+					dither_dec += 1
+				if np.abs(dither_dec) > 50:
+					dither_dec = 0
+			self.dither = complex((self.dither.real + 11) % 37, dither_dec)
+			self.update_pt0()
+			self.countdown = 4
+		except:
+			log.exception('dither')
+			pass
+		
+		#self.status['dec_alg']['restart'] = True
+
+
 	def cmd(self, cmd):
 		if cmd == "stop":
 			self.mount.go_ra_out(0)
@@ -2031,26 +2062,7 @@ class Guider:
 				log.info("capture_in_progress negative")
 		
 			if self.capture_in_progress == 0:
-				self.alg_ra.setMove(True)
-				self.alg_dec.setMove(True)
-				try:
-					dither_dec = self.dither.imag
-					if self.status['pixpersec_dec'] is not None:
-						if self.status['pixpersec_dec'] * self.status['dec_alg']['last_move'] * self.parity > 0:
-							dither_dec -= 1
-						else:
-							dither_dec += 1
-						if np.abs(dither_dec) > 50:
-							dither_dec = 0
-					self.dither = complex((self.dither.real + 11) % 37, dither_dec)
-					self.update_pt0()
-					self.countdown = 4
-				except:
-					log.exception('dither')
-					pass
-				
-				#self.status['dec_alg']['restart'] = True
-				
+				#self.doDither()
 				if self.full_res is not None:
 					if len(self.alg_ra.err_hist) > 0:
 						self.full_res['ra_err_list' ].append(np.mean(np.array(self.alg_ra.err_hist) ** 2) ** 0.5)
@@ -2065,7 +2077,7 @@ class Guider:
 					else:
 						self.full_res['guider_hfr'].append(0.0)
 					self.full_res['guider_ts'] = time.time()
-			
+
 		elif cmd == 'guider-up':
 			self.pos_corr[0] -= 5
 			self.update_pt0()
@@ -2114,6 +2126,7 @@ class Guider:
 			self.status['seq'] = cmd
 
 		elif cmd == "af_start":
+			self.doDither()
 			self.af_in_progress = 1
 
 		elif cmd == "af_finished":
@@ -2258,7 +2271,7 @@ class Guider:
 			self.cnt += 1
 			
 			# ignore hotpixels
-			pt1m, pt2m, match = match_closest(self.pt0, pt, 5)
+			pt1m, pt2m, match = match_closest(self.pt0, pt, 2)
 			if len(match) > 0:
 				pt = np.delete(pt, match[:, 1], axis = 0)
 			
@@ -2286,7 +2299,7 @@ class Guider:
 				max_move = 30 * (t - self.t0)
 				if self.off_t is not None:
 					max_move =  self.dist + 30 * (t - self.off_t)
-				if (dist > self.dist and dist < max_move):
+				if (dist > self.dist and dist < max_move and (t - self.t0) > 8):
 					self.dist = dist
 					self.off = off
 					self.off_t = t
@@ -2526,7 +2539,14 @@ class Guider:
 					self.alg_dec.start()
 					self.alg_ra.start()
 					
-				
+				if self.capture_proc_in_progress == 0 and len(match) >= self.rot_mat_limit:
+					rot_mat = pt_rotate(pt0, pt, weights)
+					if rot_mat[0, 0] > 0.999:
+						self.rot_mat = rot_mat
+						self.rot_mat_limit = len(match)
+						log.info("rot_mat %d, %s", self.rot_mat_limit, self.rot_mat)
+					
+
 				if self.capture_in_progress > 0:
 					self.status['curr_hfr_list'].append(get_hfr_list(im_sub, pt, sub_bg=True))
 				
@@ -3176,7 +3196,7 @@ class Focuser:
 						self.mount.move_main_px(-off_x / 15, -off_y / 15, self.tid)
 					else:
 						self.mount.move_main_px(-off_x / 15, -off_y / 15, self.tid, max_t = 0.2)
-			
+
 		else:
 			if self.focus_yx is not None:
 				self.hfr = self.get_hfr(im_sub)
@@ -3585,6 +3605,7 @@ class Mount:
 
 	def sync(self, ra, dec):
 		try:
+			self.driver.sendClientMessageWait(self.device, "ALIGNSYNCMODE", {"ALIGNSTANDARDSYNC": "On"})
 			self.driver.sendClientMessageWait(self.device, "ON_COORD_SET", {"SYNC": "On"})
 			self.driver.sendClientMessageWait(self.device, "EQUATORIAL_EOD_COORD", {"RA": ra / 15.0, "DEC": dec})
 			self.driver.sendClientMessageWait(self.device, "ON_COORD_SET", {"TRACK": "On"})
@@ -3598,6 +3619,7 @@ class Mount:
 	def move_to(self, ra, dec):
 		try:
 			self.driver.sendClientMessageWait(self.device, "ON_COORD_SET", {"TRACK": "On"})
+			self.driver.sendClientMessageWait(self.device, "TELESCOPE_TRACK_STATE", {"TRACK_ON": "Off"})
 			self.driver.sendClientMessageWait(self.device, "EQUATORIAL_EOD_COORD", {"RA": ra / 15.0, "DEC": dec})
 			return True
 		except:
@@ -3794,7 +3816,7 @@ class Runner(threading.Thread):
 				</defNumberVector>
 
 				<defSwitchVector device="{0}" name="full_dispmode" label="FullRes Display mode" group="FullRes" state="Idle" perm="rw" rule="OneOfMany">
-					<defSwitch name="normal" label="normal">On</defSwitch>
+					<defSwitch name="normal" label="normal">Off</defSwitch>
 					<defSwitch name="zoom-2" label="zoom-2">Off</defSwitch>
 					<defSwitch name="zoom-3" label="zoom-3">Off</defSwitch>
 					<defSwitch name="zoom-4" label="zoom-4">Off</defSwitch>
@@ -3805,7 +3827,7 @@ class Runner(threading.Thread):
 					<defSwitch name="zoom-deg180" label="zoom-deg180">Off</defSwitch>
 					<defSwitch name="orig" label="orig">Off</defSwitch>
 					<defSwitch name="df-cor" label="df-cor">Off</defSwitch>
-					<defSwitch name="hfr" label="hfr">Off</defSwitch>
+					<defSwitch name="hfr" label="hfr">On</defSwitch>
 				</defSwitchVector>
 
 				<defNumberVector device="{0}" name="full_res" label="full res stats" group="FullRes" state="Idle" perm="ro" timeout="60">
@@ -3909,6 +3931,8 @@ class Runner(threading.Thread):
 		self.camera_run = False
 		self.target_lock_cnt = 0
 		self.cur_filter = 1
+		self.ba_log_file = None
+
 		
 		if focuser:
 			self.status.setdefault('fwheel_dev', 'ASI EFW')
@@ -3987,6 +4011,9 @@ class Runner(threading.Thread):
 		if self.focuser:
 			self.status.setdefault('tempmodel', {})
 			self.temp_focuser = TempFocuser(self.driver, self.camera.focuser, self.status['tempmodel'])
+
+			self.ba_log_file = open("ba_log_%d" % time.time(), 'w')
+
 
 		last_slew_ts = 0
 		
@@ -4163,8 +4190,8 @@ class Runner(threading.Thread):
 
 			try:
 				if self.focuser:
-					#self.temp_focuser.enable_tempcomp(not sync_focus and mode != 'focuser' and mode != 'zoom_focuser' and self.camera_run)
-					self.temp_focuser.enable_tempcomp(False)
+					self.temp_focuser.enable_tempcomp(not sync_focus and mode != 'focuser' and mode != 'zoom_focuser' and self.camera_run)
+					#self.temp_focuser.enable_tempcomp(False)
 			except:
 				log.exception("enable_tempcomp1")
 
@@ -4181,6 +4208,8 @@ class Runner(threading.Thread):
 					except:
 						pass
 						
+					if self.ba_log_file is not None:
+						self.ba_log_file.close()
 
 					return
 				elif cmd == 'navigator' and self.navigator is not None:
@@ -4268,8 +4297,8 @@ class Runner(threading.Thread):
 							self.driver.enqueueSetMessage(self.props['run_mode'])
 						try:
 							if self.focuser:
-								#self.temp_focuser.enable_tempcomp(True)
-								self.temp_focuser.enable_tempcomp(False)
+								self.temp_focuser.enable_tempcomp(True)
+								#self.temp_focuser.enable_tempcomp(False)
 						except:
 							log.exception("enable_tempcomp2")
 						self.capture(cmd == 'test-capture')
@@ -4305,12 +4334,25 @@ class Runner(threading.Thread):
 					if sync_focus or mode == 'focuser' or mode == 'zoom_focuser':
 						self.temp_focuser.sync()
 						sync_focus = False
-						#self.temp_focuser.enable_tempcomp(mode != 'focuser' and mode != 'zoom_focuser' and self.camera_run)
-						self.temp_focuser.enable_tempcomp(False)
+						self.temp_focuser.enable_tempcomp(mode != 'focuser' and mode != 'zoom_focuser' and self.camera_run)
+						#self.temp_focuser.enable_tempcomp(False)
 					if self.props["focus_pos"]["pos"] != self.camera.focuser.get_pos():
 						self.props["focus_pos"]["pos"].setValue(self.camera.focuser.get_pos())
 						self.props["focus_pos"].setAttr('state', 'Ok')
 						self.driver.enqueueSetMessage(self.props["focus_pos"])
+
+
+					try:
+						print(time.time(),
+							self.driver["Sensors"]["SENSORS"]["MLX2_TEMP"].native() ,
+							self.driver["Sensors"]["SENSORS"]["MLX2_REF"].native(),
+							self.driver["Navigator"]["focus_pos"]["pos"],
+							self.focuser.status['phase'],
+							self.focuser.ba_int,
+							self.focuser.ba_pos,
+							file=self.ba_log_file)
+					except:
+						log.exception("ba_log")
 			except:
 				log.exception("enable_tempcomp2")
 
@@ -4387,7 +4429,7 @@ class Runner(threading.Thread):
 					if sync_diff[0] > 10.0/3600.0 or sync_diff[1] > 10.0/3600.0:
 						log.info('target_lock sync')
 						res = self.mount.sync(nav_c[0], nav_c[1])
-					elif target_diff[0] > 10.0/3600.0 or target_diff[1] > 10.0/3600.0:
+					elif target_diff[0] > 20.0/3600.0 or target_diff[1] > 20.0/3600.0:
 						if (target_diff[0] < 5 and target_diff[1] < 5) or self.target_lock_cnt > 0:
 							log.info('target_lock slew')
 							last_slew_ts = time.time()
@@ -4414,6 +4456,10 @@ class Runner(threading.Thread):
 
 		if self.focuser:
 			self.temp_focuser.enable_tempcomp(False)
+
+		if self.ba_log_file is not None:
+			self.ba_log_file.close()
+
 		cmdQueue.put('exit')
 		self.camera.shutdown()
 
@@ -5006,7 +5052,7 @@ def run_2_indi():
 	go_ra = GuideOut("./guide_out_ra")
 	go_dec = GuideOut("./guide_out_dec")
 
-	fo = FocuserIndi(driver, "MoonLite")
+	fo = FocuserIndi(driver, "Focuser")
 	mount = Mount(driver, status.path(["mount"]), polar, go_ra, go_dec)
 
 	cam2 = Camera(status.path(["guider", "navigator", "camera"]))

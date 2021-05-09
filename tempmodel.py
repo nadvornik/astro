@@ -37,7 +37,9 @@ class TempSeries:
         return self.status['val']
 
 class TempModel:
-    def __init__(self, status = {}):
+    def __init__(self, status = None):
+        if status is None:
+            status = {}
         #self.n_ser = 13
         self.status = status
         self.n_ser = 8
@@ -59,10 +61,10 @@ class TempModel:
                 self.ser[j].append(TempSeries(10 * 2**i, self.status['series'][j][i]))
 
 
-        self.m = np.array([ -123.57791442,   717.21010979, -2192.03585869,  4138.65435635,
-       -4794.79550048,  3735.54426069, -1580.57428245,     8.4432223 ,
-         -36.2846851 ,   140.74966091,  -291.61441297,   270.88375212,
-         362.81955247,   -83.35237838,  -411.68210969,   137.29480672])
+        self.m = np.array([  -411.85594942,   2217.2011034 ,  -6184.16365289,  11450.68024559,
+       -13268.30039248,   8877.1265101 ,  -2976.20681318,    189.24613256,
+          -81.5995854 ,     47.51171379,    691.78160701,  -2864.94795918,
+         3660.18695886,  -2355.46844124,    127.04236913,    923.38084718])
         
     def add(self, i, val, t = None):
         if t is None:
@@ -130,6 +132,43 @@ def proc_series(tempname1, tempname2, focusname, valid_from, valid_to):
             j += 1
     return res, t_temp[0], t_temp[1], t_foc
 
+def proc_series2(fn):
+    with open(fn, 'r') as f:
+       lines = f.readlines()
+
+    res = []
+    t_temp = [[], []]
+    t_foc = []
+
+    tm = TempModel()
+
+    for l in lines:
+        sl = l.split(' ')
+        #1619635930.218231 15.920000000000002 13.370000000000005 1760 ba_run 0.11976221315862048 -1.731914027918022
+        t = float(sl[0])
+        ta = float(sl[1])
+        tb = float(sl[2])
+
+        foc = float(sl[3])
+
+        mode = sl[4]
+        ba_int = float(sl[5])
+        ba_off = float(sl[6])
+
+        valid = (mode == 'ba_run') and (abs(ba_off) < 1.5) and (ba_off != 0.0)
+
+        tm.add(0, ta, t)
+        tm.add(1, tb, t)
+
+        t_temp[0].append((t, ta))
+        t_temp[1].append((t, tb))
+
+        if valid:
+            res.append((t, foc, tm.vals()))
+            t_foc.append((t, foc))
+
+    return res, t_temp[0], t_temp[1], t_foc
+
 def fit_temp_model(series):
     A = []
     b = []
@@ -151,13 +190,16 @@ if __name__ == "__main__":
 #    ser5, t_temp5, t_foc5 = proc_series("temp/temp5", "temp/focus5", 1566500386, 1566528511)
 #    ser6, t_temp6, t_foc6 = proc_series("temp/temp6", "temp/focus6", 1566674266, 1566698551)
 
-    ser1, t_temp1a, t_temp1b, t_foc1 = proc_series("temp/temp1", "temp/tempref1", "temp/focus1",  1568484360, 1568520000)
-    ser2, t_temp2a, t_temp2b, t_foc2 = proc_series("temp/temp2", "temp/tempref2", "temp/focus2",  1568570040, 1568606100)
-    ser3, t_temp3a, t_temp3b, t_foc3 = proc_series("temp/temp3", "temp/tempref3", "temp/focus3",  1568829120, 1568862000)
+#    ser1, t_temp1a, t_temp1b, t_foc1 = proc_series("temp/temp1", "temp/tempref1", "temp/focus1",  1568484360, 1568520000)
+#    ser2, t_temp2a, t_temp2b, t_foc2 = proc_series("temp/temp2", "temp/tempref2", "temp/focus2",  1568570040, 1568606100)
+#    ser3, t_temp3a, t_temp3b, t_foc3 = proc_series("temp/temp3", "temp/tempref3", "temp/focus3",  1568829120, 1568862000)
 
 
+    ser1, t_temp1a, t_temp1b, t_foc1 = proc_series2("ba_log/4/ba_log_1619593214")
+    ser2, t_temp2a, t_temp2b, t_foc2 = proc_series2("ba_log/2/ba_log_1619426865")
+    ser3, t_temp3a, t_temp3b, t_foc3 = proc_series2("ba_log/3_nf/ba_log_1619506815")
 
-    m = fit_temp_model([ser1, ser2, ser3])
+    m = fit_temp_model([ser1, ser2])
     m = TempModel().m
     print(repr(m))
     print(np.sum(m))
@@ -165,18 +207,18 @@ if __name__ == "__main__":
     import matplotlib.pyplot as plt
     import matplotlib.dates as md
     import datetime
-    plots = [ser1, ser2, ser3]
+    plots = [ser1, ser2]
     fig = plt.figure()
     for i,ser in enumerate(plots):
 
         src = np.array(list(map(lambda s: s[1], ser)))
         res = np.dot(list(map(lambda s: s[2], ser)), m)
-        res += src[500] - res[500]
+        res += src[5000] - res[5000]
         ax1 = fig.add_subplot(len(plots), 1, i + 1)
-        ax1.plot(-src)
-        ax1.plot(-res)
+        ax1.plot(src)
+        ax1.plot(res)
 
-    pl_ts = [(t_temp3a, t_temp3b, t_foc3)]
+    pl_ts = [(t_temp1a, t_temp1b, t_foc1)]
     
     fig = plt.figure()
     for i, (t_temp_a, t_temp_b, t_foc) in enumerate(pl_ts): 
@@ -197,7 +239,7 @@ if __name__ == "__main__":
         ax2.yaxis.tick_right()
         x, y = np.array(t_foc).T
         x=[datetime.datetime.fromtimestamp(ts) for ts in x]
-        ax2.plot(x, -y + y[0], color='red')
+        ax2.plot(x, y - y[0], color='red')
 
     #for i in range(9):
     #    plt.plot(list(map(lambda s: s[2][i], ser3)))

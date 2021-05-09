@@ -9,7 +9,7 @@ import signal
 from astropy.io import fits
 from astrometry.util.util import Tan, anwcs_new_tan
 from astrometry.util.fits import fits_table
-from astrometry.blind.plotstuff import *
+from astrometry.plot.plotstuff import *
 import threading
 import math
 import tempfile
@@ -21,6 +21,7 @@ import atexit
 import logging
 
 log = logging.getLogger()
+confdir = os.path.dirname(os.path.abspath(__file__))
 
 class Engine(threading.Thread):
 	def __init__(self, conf, queue):
@@ -46,13 +47,10 @@ class Engine(threading.Thread):
 				#log.close()
 				if self.terminating:
 					return
-				args = ['astrometry-engine', '--config', os.path.join(os.path.dirname(os.path.abspath(__file__)), self.conf), '-f', '-', '-v' ]
+				args = ['astrometry-engine', '--config', os.path.join(confdir, self.conf), '-f', '-', '-v' ]
 				self.cmd = subprocess.Popen(args, close_fds=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, bufsize=1 )
 				if not restart:
 					atexit.register(self.terminate)
-				if not self.ready:
-					self.ready = True
-					self.queue.put(self) # back to free engines queue
 				
 			line = self.cmd.stdout.readline()
 			#log.error(line)
@@ -60,7 +58,6 @@ class Engine(threading.Thread):
 				log.info("%s", line)
 				#log.write(">>>\n")
 				self.ready = True
-				self.queue.put(self) # back to free engines queue
 		
 			
 	
@@ -80,7 +77,10 @@ class Engine(threading.Thread):
 				log.exception('Unexpected error')
 				time.sleep(0.1)
 		
-	
+	def release(self):
+		self.ready = True
+		self.queue.put(self) # back to free engines queue
+
 	def check(self):
 		return self.ready
 	
@@ -203,7 +203,11 @@ class Solver(threading.Thread):
 			for engine in self.engines:
 				if not engine.check():
 					running = True
+
 			if not running:
+				for engine in self.engines:
+					engine.release()
+				self.engines = []
 				break
 			time.sleep(0.1)
 		
@@ -472,5 +476,4 @@ if __name__ == "__main__":
 	
 	plotter=Plotter(solver.wcs)
 	plot = plotter.plot(img, scale = 5)
-	cv2.imshow("plot", plot)
-	cv2.waitKey(0)
+	cv2.imwrite("plot.jpg", plot)
